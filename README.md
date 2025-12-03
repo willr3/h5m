@@ -3,7 +3,7 @@ h5m is H{orreu}m but lighter (thus fewer characters).
 
 This is a proof of concept for a light weight Horreum entity model based on a directed acyclical graph of computations and resulting values.
 The existing Labels with Extractors and Combination Functions are gone. 
-Extractor and Combination Function become node with edges connection the output of one node to the input of another.
+Extractor and Combination Function become nodes with edges connecting the output of one node to the input of another.
 
 Other changes:
 * Replace postgres' jsonpath with `jq`
