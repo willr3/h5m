@@ -91,7 +91,10 @@ public class ListValue implements Callable<Integer> {
                         if(json.isObject()){
                             ObjectNode object = (ObjectNode) json;
                             for(Iterator<String> iter = object.fieldNames(); iter.hasNext();){
-                                keys.add(iter.next());
+                                String key = iter.next();
+                                if(!key.startsWith("_")){
+                                    keys.add(iter.next());
+                                }
                             }
                         }
                     }
