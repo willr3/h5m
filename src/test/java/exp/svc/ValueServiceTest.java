@@ -1,5 +1,8 @@
 package exp.svc;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.TextNode;
 import exp.FreshDb;
 import exp.entity.Node;
 import exp.entity.Value;
@@ -23,6 +26,149 @@ public class ValueServiceTest extends FreshDb {
 
     @Inject
     TransactionManager tm;
+
+    @Test
+    public void findMatchingFingerprint_deep_ancestry_json_value() throws SystemException, NotSupportedException, JsonProcessingException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        tm.begin();
+        Node rootNode = new RootNode();
+        rootNode.persist(rootNode);
+        Node aNode = new JqNode("a");
+        aNode.sources=List.of(rootNode);
+        aNode.persist(aNode);
+        Node abNode = new JqNode("ab");
+        abNode.sources=List.of(aNode);
+        abNode.persist();
+        Node abcNode = new JqNode("abc");
+        abcNode.sources=List.of(abNode);
+        abcNode.persist();
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        Value rootValue01 = new Value(null,rootNode,null,objectMapper.readTree("111"));
+        rootValue01.persist();
+        Value rootValue02 = new Value(null,rootNode,null,objectMapper.readTree("222"));
+        rootValue02.persist();
+
+        Value aValue01 = new Value(null,aNode,null,objectMapper.readTree("11"));
+        aValue01.sources=List.of(rootValue01);
+        aValue01.persist();
+
+        Value aValue02 = new Value(null,aNode,null,objectMapper.readTree("22"));
+        aValue02.sources=List.of(rootValue02);
+        aValue02.persist();
+
+        Value abValue01 = new Value(null,abNode,null,objectMapper.readTree("1"));
+        abValue01.sources=List.of(aValue01);
+        abValue01.persist();
+        Value abValue02 = new Value(null,abNode,null,objectMapper.readTree("2"));
+        abValue02.sources=List.of(aValue02);
+        abValue02.persist();
+
+        Value abcValue01 = new Value(null,abcNode,null,objectMapper.readTree("{\"a\":123,\"b\":456}"));//matching value to find fingerprint
+        abcValue01.sources=List.of(abValue01);
+        abcValue01.persist();
+        Value abcValue02 = new Value(null,abcNode,null,objectMapper.readTree("{\"a\":123,\"b\":456}"));
+        abcValue02.sources=List.of(abValue02);
+        abcValue02.persist();
+        tm.commit();
+
+
+        List<Value> found = valueService.findMatchingFingerprint(aNode,abcValue01);
+
+        assertNotNull(found);
+        assertEquals(2,found.size(),found.toString());
+        assertTrue(found.contains(aValue01),found.toString());
+        assertTrue(found.contains(aValue02),found.toString());
+
+    }
+    @Test
+    public void findMatchingFingerprint_integer_value() throws SystemException, NotSupportedException, JsonProcessingException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        tm.begin();
+        Node rootNode = new RootNode();
+        rootNode.persist(rootNode);
+        Node aNode = new JqNode("a");
+        aNode.sources=List.of(rootNode);
+        aNode.persist(aNode);
+        Node abNode = new JqNode("ab");
+        abNode.sources=List.of(aNode);
+        abNode.persist();
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        Value rootValue01 = new Value(null,rootNode,null,objectMapper.readTree("111"));
+        rootValue01.persist();
+        Value rootValue02 = new Value(null,rootNode,null,objectMapper.readTree("222"));
+        rootValue02.persist();
+
+        Value aValue01 = new Value(null,aNode,null,objectMapper.readTree("11"));
+        aValue01.sources=List.of(rootValue01);
+        aValue01.persist();
+
+        Value aValue02 = new Value(null,aNode,null,objectMapper.readTree("22"));
+        aValue02.sources=List.of(rootValue02);
+        aValue02.persist();
+
+        Value abValue01 = new Value(null,abNode,null,objectMapper.readTree("67"));
+        abValue01.sources=List.of(aValue01);
+        abValue01.persist();
+        Value abValue02 = new Value(null,abNode,null,objectMapper.readTree("67"));
+        abValue02.sources=List.of(aValue02);
+        abValue02.persist();
+        tm.commit();
+
+
+        List<Value> found = valueService.findMatchingFingerprint(aNode,abValue01);
+
+        assertNotNull(found);
+        assertEquals(2,found.size(),found.toString());
+        assertTrue(found.contains(aValue01),found.toString());
+        assertTrue(found.contains(aValue02),found.toString());
+
+    }
+    @Test
+    public void findMatchingFingerprintOrderBy() throws SystemException, NotSupportedException, JsonProcessingException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        tm.begin();
+        Node rootNode = new RootNode();
+        rootNode.persist(rootNode);
+        Node aNode = new JqNode("a");
+        aNode.sources=List.of(rootNode);
+        aNode.persist(aNode);
+        Node bNode = new JqNode("b");
+        bNode.sources=List.of(rootNode);
+        bNode.persist();
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        Value rootValue01 = new Value(null,rootNode,null,new TextNode("root1"));
+        rootValue01.persist();
+        Value rootValue02 = new Value(null,rootNode,null,new TextNode("root2"));
+        rootValue02.persist();
+
+        Value aValue01 = new Value(null,aNode,null,new TextNode("a"));
+        aValue01.sources=List.of(rootValue01);
+        aValue01.persist();
+
+        Value aValue02 = new Value(null,aNode,null,new TextNode("a"));
+        aValue02.sources=List.of(rootValue02);
+        aValue02.persist();
+
+        Value bValue01 = new Value(null,bNode,null,new TextNode("b1"));
+        bValue01.sources=List.of(rootValue01);
+        bValue01.persist();
+        Value bValue02 = new Value(null,bNode,null,new TextNode("b2"));
+        bValue02.sources=List.of(rootValue02);
+        bValue02.persist();
+        tm.commit();
+
+
+        List<Value> found = valueService.findMatchingFingerprintOrderBy(rootNode,aValue01,bNode);
+
+        assertNotNull(found);
+        assertEquals(2,found.size(),found.toString());
+        assertTrue(found.contains(rootValue01),found.toString());
+        assertTrue(found.contains(rootValue02),found.toString());
+
+        assertEquals(rootValue01,found.get(0),found.toString());
+        assertEquals(rootValue02,found.get(1),found.toString());
+
+    }
 
     @Test
     public void persist_fixes_source_order() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {

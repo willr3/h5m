@@ -109,8 +109,60 @@ public class ValueService {
         return rtrn;
     }
 
+    @Transactional
+    public List<Value> findMatchingFingerprint(Node source,Value fingerprint){
+        List<Value> rtrn = new ArrayList<>(em.createNativeQuery(
+            """
+            with recursive ancestor(vid) as (
+                select v.id as vid 
+                    from value v where v.node_id = :nodeId and v.data = :data
+                union 
+                select v.id as vid 
+                    from value v join value_edge ve on v.id = ve.source_id join ancestor a on a.vid = ve.value_id
+            ) 
+            select * from value v join ancestor a on v.id=a.vid where v.node_id=:sourceId
+            """,Value.class)
+                .setParameter("nodeId", fingerprint.node.id)
+                .setParameter("data", fingerprint.data.toString())
+                .setParameter("sourceId", source.id)
+                .getResultList());
+        return rtrn;
+    }
+    //sorting by a value is useful if that value is our timestamp but we also need that value
+    @Transactional
+    public List<Value> findMatchingFingerprintOrderBy(Node source,Value fingerprint,Node sort){
+        List<Value> rtrn = new ArrayList<>(em.createNativeQuery(
+                        """
+                        with recursive ancestor(vid) as (
+                            select v.id as vid 
+                                from value v where v.node_id = :nodeId and v.data = :data
+                            union 
+                            select v.id as vid 
+                                from value v join value_edge ve on v.id = ve.source_id join ancestor a on a.vid = ve.value_id
+                        ),
+                        sorter(vid,sortable) as (
+                            select v.id as vid,v.data as sortable 
+                                from value v where v.node_id = :sortId
+                            union
+                            select v.id as vid, s.sortable as sortable
+                                from value v join value_edge ve on v.id = ve.source_id join sorter s on s.vid = ve.value_id
+                        )
+                        select * from value v join ancestor a on v.id=a.vid join sorter s on v.id=s.vid where v.node_id=:sourceId order by s.sortable desc;
+                        """,Value.class)
+                .setParameter("nodeId", fingerprint.node.id)
+                .setParameter("data", fingerprint.data.toString())
+                .setParameter("sourceId", source.id)
+                .setParameter("sortId",sort.id)
+                .getResultList());
+        return rtrn;
+    }
+
+
+
+
+
     /**
-     * returns
+     * returns a json object with the values created by child nodes of the groupBy node.
      * @param groupBy
      * @return
      */

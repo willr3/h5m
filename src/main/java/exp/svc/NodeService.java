@@ -5,11 +5,13 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.TextNode;
 import exp.entity.Node;
 import exp.entity.Value;
 import exp.entity.node.JqNode;
 import exp.entity.node.JsNode;
 import io.hyperfoil.tools.yaup.StringUtil;
+import io.hyperfoil.tools.yaup.hash.HashFactory;
 import io.hyperfoil.tools.yaup.json.Json;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -262,6 +264,18 @@ public class NodeService {
         newValue.path = valuePath.toString();
         newValue.data = data;
         newValue.sources = node.sources.stream().map(n -> sourceValues.get(n.name)).collect(Collectors.toList());
+        return List.of(newValue);
+    }
+    public List<Value> calculateFpValues(JqNode node,Map<String,Value> sourceValues,int startingOrdinal) throws IOException {
+        HashFactory hashFactory = new HashFactory();
+
+        String glob = node.sources.stream().map(source->sourceValues.containsKey(source.name) ? sourceValues.get(source.name).data.toString() : "").collect(Collectors.joining(""));
+        String hash = hashFactory.getStringHash(glob);
+        Value newValue = new Value();
+        newValue.idx = startingOrdinal+1;
+        newValue.node = node;
+        newValue.data = new TextNode(hash);
+        newValue.sources = node.sources.stream().map(source->sourceValues.get(source.name)).filter(Objects::nonNull).toList();
         return List.of(newValue);
     }
     public List<Value> calculateJqValues(JqNode node,Map<String,Value> sourceValues,int startingOrdinal) throws IOException {
