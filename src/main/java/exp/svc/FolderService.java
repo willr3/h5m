@@ -98,11 +98,7 @@ public class FolderService {
                 valueService.create(newValue);
                 WorkQueue workQueue = workExecutor.getWorkQueue();
                 folder.group.sources.forEach(source -> {
-                    switch (source.type) {
-                        case "jq":
-                            workQueue.addWork(new Work(source,source.sources,List.of(newValue)));
-                        break;
-                    }
+                    workQueue.addWork(new Work(source,source.sources,List.of(newValue)));
                 });
             }else{
                 System.err.println("value "+sourcePath+" already exists");

@@ -97,7 +97,7 @@ public class JsNodeTest {
         assertEquals(4, params.size(),"expected 4 values: "+params);
     }
     @Test
-    public void createFunctionParameters_destructure_() throws JsonProcessingException {
+    public void createFunctionParameters_destructure() throws JsonProcessingException {
         ObjectMapper mapper = new ObjectMapper();
         Map<String, Value> values = Map.of(
                 "a",new Value(null,null,"/a",mapper.readTree("1")),

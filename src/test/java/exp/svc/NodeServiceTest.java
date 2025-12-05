@@ -2,6 +2,7 @@ package exp.svc;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.TextNode;
 import exp.FreshDb;
 import exp.entity.Node;
 import exp.entity.NodeGroup;
@@ -22,6 +23,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -65,6 +67,30 @@ public class NodeServiceTest extends FreshDb {
         JsonNode data = value.data;
         assertNotNull(data);
         assertEquals("123",data.toString());
+    }
+    @Test
+    public void calculateJsValue_arrow_without_parenthesis_text() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException, IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        Node rootNode = new RootNode();
+        rootNode.name="root";
+        rootNode.persist();
+        Value rootValue = new Value(null,rootNode,null,new TextNode("Bright"));
+        rootValue.persist();
+        JsNode jsNode = new JsNode("js","root=>'Hi, '+root");
+        jsNode.persist();
+        tm.commit();
+
+        Map<String,Value> combined = Map.of("root",rootValue);
+        List<Value> result = nodeService.calculateJsValues(jsNode, combined,0);
+
+        assertNotNull(result);
+        assertEquals(1,result.size());
+        Value first = result.get(0);
+        assertNotNull(first);
+        JsonNode data = first.data;
+        assertNotNull(data);
+        assertEquals("Hi, Bright",data.asText());
     }
 
     @Test
