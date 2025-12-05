@@ -5,11 +5,13 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.TextNode;
+import com.fasterxml.jackson.databind.node.*;
 import exp.entity.Node;
 import exp.entity.Value;
 import exp.entity.node.JqNode;
 import exp.entity.node.JsNode;
+import exp.pasted.ProxyJacksonArray;
+import exp.pasted.ProxyJacksonObject;
 import io.hyperfoil.tools.yaup.StringUtil;
 import io.hyperfoil.tools.yaup.hash.HashFactory;
 import io.hyperfoil.tools.yaup.json.Json;
@@ -17,6 +19,11 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
+import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.Engine;
+import org.graalvm.polyglot.PolyglotException;
+import org.graalvm.polyglot.proxy.Proxy;
+import org.graalvm.polyglot.proxy.ProxyExecutable;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -229,20 +236,63 @@ public class NodeService {
         };
     }
     public List<Value> calculateJsValues(JsNode node,Map<String,Value> sourceValues,int startingOrdinal) throws IOException {
+
         List<String> params = JsNode.getParameterNames(node.operation);
         if(params == null){
-            System.err.println("Error occurred reading parameers from js function\n"+node.operation);
+            System.err.println("Error occurred reading parameters from js function\n"+node.operation);
             return Collections.emptyList();
         }
-        List<JsonNode> input = params.stream().map(name->sourceValues.get(name).data).collect(Collectors.toList());
-        Object result = StringUtil.jsEval(node.operation, (Object[]) input.toArray(new JsonNode[0]));
+        List<JsonNode> input = params.stream().map(name->sourceValues.get(name).data).toList();
+        //Object result = StringUtil.jsEval(node.operation, (Object[]) input.toArray(new JsonNode[0]));
+        Object result = null;
+        try(Context context = Context.newBuilder("js").engine(Engine.newBuilder("js").option("engine.WarnInterpreterOnly", "false").build())
+                .allowExperimentalOptions(true)
+                .option("js.foreign-object-prototype", "true")
+                .option("js.global-property", "true")
+//                .out(out)
+//                .err(out)
+                .build()){
+            context.enter();
+            context.getBindings("js").putMember("isInstanceLike", new ProxyJacksonObject.InstanceCheck());
+            context.eval("js",
+                    """
+                    Object.defineProperty(Object,Symbol.hasInstance, {
+                      value: function myinstanceof(obj) {
+                        return isInstanceLike(obj);
+                      }
+                    });
+                    """);
+            StringBuilder jsCode = new StringBuilder();
+            for(int i=0; i<input.size(); i++) {
+                jsCode.append("const __obj").append(i).append(" = ").append(input.get(i)).append(";").append(System.lineSeparator());
+            }
+            jsCode.append("const __func").append(" = ").append(node.operation).append(";").append(System.lineSeparator());
+            jsCode.append("__func(");
+            for(int i=0; i<input.size(); i++) {
+                if(i>0) jsCode.append(", ");
+                jsCode.append("__obj").append(i);
+            }
+            jsCode.append(");");
+            try{
+                org.graalvm.polyglot.Value value = context.eval("js", jsCode);
+                value = resolvePromise(value);
+                result = convert(value);
+
+            }catch(PolyglotException e){
+                System.err.println("exception jsNode "+node.name+"\n"+e.getMessage());
+            } finally {
+                context.leave();
+            }
+        }
+
+
+
         JsonNode data = null;
         if(result==null){
             //data stays null
-        }else if (result instanceof Json){
-            Json asJson = (Json)result;
+        }else if (result instanceof JsonNode){
             //TODO do we support splitting an array into multiple Values?
-            data = Json.toJsonNode(asJson);
+            data = (JsonNode) result;
         }else{//scalar
             ObjectMapper mapper = new ObjectMapper();
             try {
@@ -266,6 +316,139 @@ public class NodeService {
         newValue.sources = node.sources.stream().map(n -> sourceValues.get(n.name)).collect(Collectors.toList());
         return List.of(newValue);
     }
+    //io.hyperfoil.tools.horreum.exp.data.LabelReducerDao#resolvePromise
+    public static org.graalvm.polyglot.Value resolvePromise(org.graalvm.polyglot.Value value) {
+        if (value.getMetaObject().getMetaSimpleName().equals("Promise") && value.hasMember("then")
+                && value.canInvokeMember("then")) {
+            List<org.graalvm.polyglot.Value> resolved = new ArrayList<>();
+            List<org.graalvm.polyglot.Value> rejected = new ArrayList<>();
+            Object invokeRtrn = value.invokeMember("then", new ProxyExecutable() {
+                @Override
+                public Object execute(org.graalvm.polyglot.Value... arguments) {
+                    resolved.addAll(Arrays.asList(arguments));
+                    return arguments;
+                }
+            }, new ProxyExecutable() {
+                @Override
+                public Object execute(org.graalvm.polyglot.Value... arguments) {
+                    rejected.addAll(Arrays.asList(arguments));
+                    return arguments;
+                }
+            });
+            if (!rejected.isEmpty()) {
+                value = rejected.get(0);
+            } else if (resolved.size() == 1) {
+                value = resolved.get(0);
+            } else { //resolve.size() > 1, this doesn't happen
+                //log.message("resolved promise size="+resolved.size()+", expected 1 for promise = "+value);
+            }
+        }
+        return value;
+    }
+    //copied from io.hyperfoil.tools.horreum.exp.pasted.ExpUtil#convert but changed to return JsonNode
+    public static JsonNode convert(org.graalvm.polyglot.Value value) throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        if (value == null) {
+            return null;
+        } else if (value.isNull()) {
+            // Value api cannot differentiate null and undefined from javascript
+            if (value.toString().contains("undefined")) {
+                return TextNode.valueOf(""); //no return is the same as returning a missing key from a ProxyObject?
+            } else {
+                return null;
+            }
+        } else if (value.isProxyObject()) {
+            Proxy p = value.asProxyObject();
+            if (p instanceof ProxyJacksonArray) {
+                return ((ProxyJacksonArray) p).getJsonNode();
+            } else if (p instanceof ProxyJacksonObject) {
+                return ((ProxyJacksonObject) p).getJsonNode();
+            } else {
+                //not sure when this would happend
+                System.err.println("Unexpected proxy object: "+p);
+                return mapper.readTree(p.toString());
+            }
+        } else if (value.isBoolean()) {
+            return BooleanNode.valueOf(value.asBoolean());
+        } else if (value.isNumber()) {
+            double v = value.asDouble();
+            if (v == Math.rint(v)) {
+                return LongNode.valueOf((long) v);
+            } else {
+                return DoubleNode.valueOf(v);
+            }
+        } else if (value.isString()) {
+            return TextNode.valueOf(value.asString());
+        } else if (value.hasArrayElements()) {
+            return convertArray(value);
+        } else if (value.canExecute()) {
+            return TextNode.valueOf(value.toString());
+        } else if (value.hasMembers()) {
+            return convertMapping(value);
+        } else {
+            //TODO log error wtf is Value?
+            return TextNode.valueOf("");
+        }
+    }
+    //io.hyperfoil.tools.horreum.exp.pasted.ExpUtil#convertArray
+    public static ArrayNode convertArray(org.graalvm.polyglot.Value value) {
+        ArrayNode json = JsonNodeFactory.instance.arrayNode();
+        for (int i = 0; i < value.getArraySize(); i++) {
+            org.graalvm.polyglot.Value element = value.getArrayElement(i);
+            if (element == null || element.isNull()) {
+                json.addNull();
+            } else if (element.isBoolean()) {
+                json.add(element.asBoolean());
+            } else if (element.isNumber()) {
+                double v = element.asDouble();
+                if (v == Math.rint(v)) {
+                    json.add(element.asLong());
+                } else {
+                    json.add(v);
+                }
+            } else if (element.isString()) {
+                json.add(element.asString());
+            } else if (element.hasArrayElements()) {
+                json.add(convertArray(element));
+            } else if (element.hasMembers()) {
+                json.add(convertMapping(element));
+            } else {
+                json.add(element.toString());
+            }
+        }
+        return json;
+    }
+    //io.hyperfoil.tools.horreum.exp.pasted.ExpUtil#convertMapping
+    public static ObjectNode convertMapping(org.graalvm.polyglot.Value value) {
+        ObjectNode json = JsonNodeFactory.instance.objectNode();
+        for (String key : value.getMemberKeys()) {
+            org.graalvm.polyglot.Value element = value.getMember(key);
+            if (element == null || element.isNull()) {
+                json.set(key, JsonNodeFactory.instance.nullNode());
+            } else if (element.isBoolean()) {
+                json.set(key, JsonNodeFactory.instance.booleanNode(element.asBoolean()));
+            } else if (element.isNumber()) {
+                double v = element.asDouble();
+                if (v == Math.rint(v)) {
+                    json.set(key, JsonNodeFactory.instance.numberNode(element.asLong()));
+                } else {
+                    json.set(key, JsonNodeFactory.instance.numberNode(v));
+                }
+            } else if (element.isString()) {
+                json.set(key, JsonNodeFactory.instance.textNode(element.asString()));
+            } else if (element.hasArrayElements()) {
+                json.set(key, convertArray(element));
+            } else if (element.hasMembers()) {
+                json.set(key, convertMapping(element));
+            } else {
+                json.set(key, JsonNodeFactory.instance.textNode(element.toString()));
+            }
+        }
+        return json;
+    }
+
+
+
     public List<Value> calculateFpValues(JqNode node,Map<String,Value> sourceValues,int startingOrdinal) throws IOException {
         HashFactory hashFactory = new HashFactory();
 

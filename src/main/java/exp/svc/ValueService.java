@@ -29,6 +29,13 @@ public class ValueService {
 //    AgroalDataSource duckDatasource;
 
 
+
+    @Transactional
+    public void purgeValues(){
+        em.createNativeQuery("delete from Value").executeUpdate();
+
+    }
+
     @Transactional
     public long create(Value value){
         if(!value.isPersistent()){

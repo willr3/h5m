@@ -22,6 +22,7 @@ import picocli.CommandLine;
 import picocli.CommandLine.Command;
 
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.List;
 import java.util.Scanner;
 import java.util.concurrent.CountDownLatch;
@@ -56,6 +57,17 @@ public class H5m implements QuarkusApplication {
         return System.console() != null;
     }
 
+    @CommandLine.Command(name="sleep",description = "keep the process idle for x seconds")
+    public int sleep(int seconds) throws InterruptedException {
+        Thread.sleep(Duration.ofSeconds(seconds).toMillis());
+        return 0;
+    }
+
+    @CommandLine.Command(name="purge-values", description = "remove all values (to re-scan)")
+    public int purgeValues(){
+        valueService.purgeValues();
+        return 0;
+    }
 
     @CommandLine.Command(name="structure",description = "use yaup to compute the structure of a folder",aliases = {"shape"}, mixinStandardHelpOptions = true)
     public int structure(String folderName){
