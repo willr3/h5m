@@ -76,7 +76,6 @@ public class ExecutorConfiguration {
 
         ExecutorServiceMetrics serviceMetrics = new ExecutorServiceMetrics(rtrn,"workExecutor",null);
         serviceMetrics.bindTo(registry);
-
         return rtrn;
     }
 

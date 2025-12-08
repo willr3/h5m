@@ -3,12 +3,16 @@ package exp.queue;
 import exp.entity.Node;
 import exp.entity.Work;
 import exp.entity.node.JqNode;
+import exp.provided.SqliteDatasourceConfiguration;
 import exp.svc.WorkService;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.transaction.*;
+import org.hibernate.Hibernate;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -41,8 +45,8 @@ public class WorkQueueTest {
 
         q.addWork(bWork);
         q.addWork(aWork);
-
         Runnable firstRunnable = q.take();
+
         assertNotNull(firstRunnable);
 
         assertFalse(q.hasWork(aWork),"a should be removed from the q");
@@ -52,7 +56,7 @@ public class WorkQueueTest {
 
         assertNull(polled,"b should remain in q until a completes");
 
-        firstRunnable.run();
+        q.decrement(aWork);//fake call to Runnable.run
 
         polled = q.poll();
         assertNotNull(polled,"b work should return now that a is complete");

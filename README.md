@@ -144,7 +144,9 @@ The existing Horreum entity model (Schemas, Labels, Extractors, Combination Func
 * NodeGroup - a group of nodes that work on the same source data.
 * Value - The output of a Node applied to it's input. A Node can produce multiple values (e.g. Datasets) which will be treated as separate inputs for other nodes.
 
-There will be different types of nodes for the different types of tasks. The PoC currently supports `jq` and `js`
+### Nodes
+
+There will be different types of nodes for the different types of tasks. The PoC currently supports `jq` and `js` The Getting Started used `jq`
 
 ### WorkQueue
 

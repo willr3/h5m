@@ -22,6 +22,7 @@ public class WorkService {
     WorkQueueExecutor workExecutor;
 
     //resumes unfinished work from previous execution
+    @Transactional
     void onStart(@Observes StartupEvent ev) {
         List<Work> all = loadAll();
         workExecutor.getWorkQueue().addWorks(all);

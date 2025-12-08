@@ -2,6 +2,7 @@ package exp.entity;
 
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import jakarta.persistence.*;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.Immutable;
 
 import java.util.*;
@@ -18,6 +19,7 @@ import java.util.*;
 
 public class Work  extends PanacheEntity implements Comparable<Work>{
 
+    @BatchSize(size=10)
     @ManyToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JoinTable(
             name="work_values",
@@ -26,6 +28,7 @@ public class Work  extends PanacheEntity implements Comparable<Work>{
     )
     public List<Value> sourceValues;//multiple values could happen for cross test comparisons and
 
+    @BatchSize(size=10)
     @ManyToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JoinTable(
             name="work_nodes",
@@ -70,13 +73,6 @@ public class Work  extends PanacheEntity implements Comparable<Work>{
         }
         boolean activeNode = this.activeNode !=null && this.activeNode.dependsOn(work.activeNode);
         boolean sameValue = sourceValues.stream().anyMatch(v->work.sourceValues.contains(v));
-        if(sameValue){
-            sourceValues.forEach(v->{
-                if(work.sourceValues.contains(v)){
-                    System.out.println("work contains v"+v);
-                }
-            });
-        }
         boolean dependentValue = sourceValues.stream().anyMatch(sourceValue ->
                 sourceValue.node.dependsOn(work.activeNode) && work.sourceValues.stream().anyMatch(sourceValue::dependsOn)) ;
         boolean foundNode = sourceNodes.stream().anyMatch(sourceNode ->

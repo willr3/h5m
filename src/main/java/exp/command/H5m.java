@@ -88,22 +88,11 @@ public class H5m implements QuarkusApplication {
             System.err.println("could not find folder "+folderName);
             return 1;
         }
-        CountDownLatch latch = new CountDownLatch(1);
-        workExecutor.getWorkQueue().addCallback("h5m",(node)->{
-            long sum = workExecutor.getWorkQueue().counterSum();
-            if(sum == 0){
-                latch.countDown();
-            }
-        });
-
         folderService.scan(folder);
-        if(workExecutor.getWorkQueue().counterSum() > 0) {
-            latch.await();
-        }
+        workExecutor.shutdown();//will wait for idle
+        workExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
         return 0;
     }
-
-
 
     @Inject
     CommandLine.IFactory factory;
