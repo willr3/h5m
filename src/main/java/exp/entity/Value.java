@@ -12,9 +12,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.Type;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 @Entity
 @Table(
@@ -87,13 +85,36 @@ public class Value extends PanacheEntity {
     @Override
     public String toString(){return "Value< id="+id+", path="+path+" node.id="+node.id+" >";}
 
+
+    @Override
+    public int hashCode(){
+        return Objects.hash(id,node,sources,folder);
+    }
+
     @Override
     public boolean equals(Object o){
         if(o instanceof Value v){
-            return Objects.equals(v.id, this.id);
+            if(this.id!=null && v.id!=null) {
+                return Objects.equals(v.id, this.id);
+            }
+            if(Objects.equals(this.node, v.node) && Objects.equals(this.folder, v.folder)  && Objects.equals(this.sources, v.sources)){
+                return true;
+            }
         }
         return false;
     }
 
-
+    public boolean dependsOn(Value source){
+        if(source == null) return false;
+        Queue<Value> queue = new ArrayDeque<>(sources);
+        boolean result = false;
+        while(!queue.isEmpty() && !result){
+            Value value = queue.poll();
+            result = value.equals(source);
+            if(!result){
+                queue.addAll(value.sources);
+            }
+        }
+        return result;
+    }
 }
