@@ -1,6 +1,7 @@
 package exp.entity;
 
 import com.fasterxml.jackson.annotation.*;
+import exp.entity.node.RootNode;
 import exp.queue.KahnDagSort;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import jakarta.persistence.*;
@@ -151,6 +152,34 @@ public abstract class Node extends PanacheEntity implements Comparable<Node> {
             }
         }
         return result;
+    }
+
+    /**
+     * copy a NodeGroup into this node's NodeGroup as though this node is the RootNode for the copied group.
+     * @param group
+     */
+    public void loadGroup(NodeGroup group){
+        //TODO do we track the sourceGroup when loading a group
+        Map<Node,Node> fromGroupToThis = new HashMap<>();
+        List<Node> clones = new  ArrayList<>();
+        for( Node node : group.sources){
+            Node cloned = node.shallowCopy();
+            fromGroupToThis.put(node, cloned);
+            List<Node> clonedSources = node.sources.stream().map(source->{
+                if(source instanceof RootNode){
+                    return this; //current node replaces the root node
+                }else if (fromGroupToThis.containsKey(source)){
+                    return fromGroupToThis.get(source);
+                }else{
+                    //sources should be in dependency order so the node missing is an error
+                    System.err.println(source.name+" was missing from local copy of nodeGroup "+group.name+" under "+this.name);
+                    return source.shallowCopy();
+                }
+            }).filter(Objects::nonNull).toList();
+            node.sources = clonedSources;
+            clones.add(cloned);
+        }
+        this.group.sources.addAll(clones);
     }
 
     @Override

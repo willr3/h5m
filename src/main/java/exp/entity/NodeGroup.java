@@ -1,12 +1,13 @@
 package exp.entity;
 
 import exp.entity.node.RootNode;
+import exp.valid.ValidNode;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import jakarta.persistence.*;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Entity
@@ -18,30 +19,42 @@ public class NodeGroup extends PanacheEntity {
     public String name;
 
     @OneToOne(cascade = {CascadeType.ALL}, fetch = FetchType.LAZY)
+    @NotNull
     public Node root;
 
     @OneToMany(cascade = { CascadeType.PERSIST,
             CascadeType.MERGE }, fetch = FetchType.LAZY, orphanRemoval = false, mappedBy = "group")
-    public List<Node> sources;
+    public List<@NotNull @ValidNode Node> sources;
 
     public NodeGroup(){
         this.sources = new ArrayList<>();
         this.root = new RootNode();
+        this.root.group = this;
 
     }
     public NodeGroup(String name){
+        this();
         this.name = name;
-        this.sources = new ArrayList<>();
-        this.root = new RootNode();
     }
 
+    /**
+     * this would check that the fully qualified names of the group's nodes do not conflict with the current list of nodes.
+     * We do not use this atm becasue unique names is not a strict requirement. The UI would have to get users to pick the correct node
+     * if a name conflict exists.
+     * @param group
+     * @return
+     */
     public boolean canLoad(NodeGroup group){
         Set<String> fqdn = sources.stream().map(n->n.getFqdn()).collect(Collectors.toSet());
         return group.sources.stream().noneMatch(n->fqdn.contains(n.getFqdn()));
     }
-    public void loadGroup(NodeGroup group){
-        //TODO do we track the sourceGroup when loading a group
 
+    /**
+     * Loads the node group into the current group using this groups root as the replacement for the root in the copied group
+     * @param group
+     */
+    public void loadGroup(NodeGroup group){
+        root.loadGroup(group);
     }
 
     @PreUpdate
