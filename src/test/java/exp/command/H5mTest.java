@@ -213,7 +213,6 @@ public class H5mTest {
                 new String[]{"add","jq","to","demo","foo",".foo[]"},
                 new String[]{"add","jq","to","demo","cpu","{foo}:.cpu"},
                 new String[]{"add","jq","to","demo","mem","{foo}:.mem"},
-                //new String[]{"add","js","to","demo","fingerprint","({mem,cpu})=>({'mem':mem,'cpu':cpu})"},
                 new String[]{"add","jq","to","demo","fingerprint","{mem,cpu}:."},
                 new String[]{"list","demo","nodes"},
                 new String[]{"scan","demo"},
@@ -226,6 +225,33 @@ public class H5mTest {
         LaunchResult result = results.getLast();
         assertTrue(result.getOutput().contains("Count: 8"));
     }
-
-
+    @Test
+    public void scan_js_multi_input(QuarkusMainLauncher launcher) throws IOException {
+        Path folder = Files.createTempDirectory("h5m");
+        Path filePath = Files.writeString(Files.createTempFile(folder,"h5m",".json").toAbsolutePath(),
+                """
+                {
+                  "foo":[
+                   { "mem": "1gb", "cpu": 2},
+                   { "mem": "2gb", "cpu": 4}
+                  ]
+                }
+                """
+        );
+        List<LaunchResult> results = run(launcher,
+                new String[]{"add","folder","demo",folder.toString()},
+                new String[]{"add","jq","to","demo","foo",".foo[]"},
+                new String[]{"add","jq","to","demo","cpu","{foo}:.cpu"},
+                new String[]{"add","jq","to","demo","mem","{foo}:.mem"},
+                new String[]{"add","js","to","demo","fingerprint","({mem,cpu})=>({'fromMem':mem,'fromCpu':cpu})"},
+                new String[]{"list","demo","nodes"},
+                new String[]{"scan","demo"},
+                new String[]{"list","value","from","demo"}
+        );
+        results.forEach(result->{
+            assertEquals(0,result.exitCode(),result.getOutput());
+        });
+        LaunchResult result = results.getLast();
+        assertTrue(result.getOutput().contains("Count: 8"));
+    }
 }
