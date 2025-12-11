@@ -80,7 +80,18 @@ public class H5m implements QuarkusApplication {
         System.out.println(structure.toString(2));
         return 0;
     }
-
+    @CommandLine.Command(name="recalculate",description = "recalculate values for all entries in folder")
+    public int recalculate(String folderName) throws InterruptedException {
+        Folder folder = folderService.byName(folderName);
+        if(folder == null){
+            System.err.println("could not find folder "+folderName);
+            return 1;
+        }
+        folderService.recalculate(folder);
+        workExecutor.shutdown();//will wait for idle
+        workExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+        return 0;
+    }
     @CommandLine.Command(name="scan",description = "scan folder for new files and compute values")
     public int scan(String folderName) throws InterruptedException {
         Folder folder = folderService.byName(folderName);
@@ -112,6 +123,7 @@ public class H5m implements QuarkusApplication {
         gen.getCommandSpec().usageMessage().hidden(true);
         int returnCode = cmd.execute(args);
         workExecutor.shutdown();
+        workExecutor.awaitTermination(1,TimeUnit.HOURS);
         return returnCode;
     }
 

@@ -1,9 +1,12 @@
 package exp.svc;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import exp.entity.Folder;
 import exp.entity.Node;
 import exp.entity.Value;
 import exp.entity.Work;
+import exp.pasted.JsonBinaryType;
 import exp.queue.WorkQueue;
 import exp.queue.WorkQueueExecutor;
 import io.hyperfoil.tools.yaup.json.Json;
@@ -12,9 +15,13 @@ import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
+import org.hibernate.query.NativeQuery;
 
 import java.io.File;
+import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @ApplicationScoped
 public class FolderService {
@@ -56,6 +63,30 @@ public class FolderService {
     }
 
     @Transactional
+    public Map<String,Integer> getFolderUploadCount(){
+        Map<String,Integer> rtrn = new HashMap<>();
+
+        NativeQuery query = (NativeQuery) em.createNativeQuery(
+            """
+            select f.name as name, count(v.id) as count
+            from folder f join nodegroup g on f.group_id = g.id join node r on r.id = g.root_id left join value v on v.node_id = r.id 
+            group by f.name 
+            """
+        );
+        List<Object[]> found = query
+                .unwrap(NativeQuery.class)
+                .addScalar("name", String.class)
+                .addScalar("count", Integer.class)
+                .getResultList();
+        for( Object[] obj : found ){
+            rtrn.put((String) obj[0], (Integer) obj[1]);
+        }
+
+        return rtrn;
+    }
+
+
+    @Transactional
     public long update(Folder folder){
         Folder.persist(folder);
         return folder.id;
@@ -83,6 +114,21 @@ public class FolderService {
         return fullStructure;
     }
 
+
+    @Transactional
+    public void recalculate(Folder folder){
+        folder = Folder.findById(folder.id); // deal with detached entity
+        Node root = folder.group.root;
+        List<Value> rootValues = valueService.getValues(root);
+        for(Value rootValue: rootValues){
+            folder.group.sources.forEach(source -> {
+                workExecutor.getWorkQueue().addWork(
+                        new Work(source,source.sources,List.of(rootValue))
+                );
+            });
+        }
+    }
+
     @Transactional
     public void scan(Folder folder){
         folder = Folder.findById(folder.id); // deal with detached entity
@@ -94,7 +140,13 @@ public class FolderService {
             String sourcePath = t.getPath();
             Value existing = valueService.byPath(sourcePath);
             if(existing == null){
+                ObjectMapper objectMapper = new ObjectMapper();
                 Value newValue = new Value(folder, folder.group.root, sourcePath);
+                try {
+                    newValue.data = objectMapper.readTree(t);
+                } catch (IOException e) {
+                    System.err.println(e.getMessage());
+                }
                 valueService.create(newValue);
                 WorkQueue workQueue = workExecutor.getWorkQueue();
                 folder.group.sources.forEach(source -> {
