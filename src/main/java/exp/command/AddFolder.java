@@ -22,9 +22,6 @@ public class AddFolder implements Callable<Integer> {
 
     @CommandLine.Parameters(index="0",arity="0..1")
     public String name;
-    @CommandLine.Parameters(index="1",arity="0..1")
-    public String folder;
-
 
     @Override
     public Integer call() throws Exception {
@@ -33,30 +30,12 @@ public class AddFolder implements Callable<Integer> {
             System.out.printf("Enter name: ");
             name = sc.nextLine();
         }
-        if(folder == null && H5m.consoleAttached()){
-            Scanner sc = new Scanner(System.in);
-            System.out.printf("Enter path: ");
-            folder = sc.nextLine();
-        }
-        if(".".equals(folder) || "./".equals(folder)){
-            folder = Paths.get(".").toAbsolutePath().normalize().toString();
-        }
-        Folder existing = folderService.byName(folder);
-        if(existing != null){
-            System.err.println(name+" already exists");
-            return 1;
-        }
-        existing = folderService.byPath(folder);
-        if(existing != null){
-            System.err.println(existing.name+" already exists for "+folder);
-            return 1;
-        }
-        NodeGroup existingGroup =  nodeGroupService.byName(folder);
+        NodeGroup existingGroup =  nodeGroupService.byName(name);
         if(existingGroup != null){
             System.err.println(name+" conflicts with an existing node group");
             return 1;
         }
-        Folder newFolder = new Folder(name,folder);
+        Folder newFolder = new Folder(name);
         folderService.create(newFolder);
         return 0;
     }

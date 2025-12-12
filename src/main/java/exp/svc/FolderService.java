@@ -20,6 +20,7 @@ import org.hibernate.query.NativeQuery;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -98,19 +99,19 @@ public class FolderService {
         folder.delete();
     }
 
-    @Transactional
-    public int uploadCount(Folder folder){
-        File f = new File(folder.path);
-        return f.list((dir, name) -> name.startsWith("upload.")).length;
-    }
 
-    public Json structure(Folder folder){
-        File f = new File(folder.path);
-        List<File> todo = List.of(f.listFiles(s -> s.toPath().endsWith(".json") && !s.getName().startsWith(".")));
+    public Json structure(Folder folder) {
         Json fullStructure = Json.typeStructure(new Json(false));
-        for(File t: todo){
-            fullStructure.add(Json.fromFile(t.getPath()));
-
+        List<Value> uploads = valueService.getValues(folder.group.root);
+        for(Value upload : uploads){
+            try {
+                File f = Files.createTempFile("h5m", "json").toFile();
+                valueService.writeToFile(upload.id, f.getPath());
+                fullStructure.add(Json.fromFile(f.getPath()));
+                f.delete();
+            }catch (IOException e) {
+                System.err.println("error trying to create temporary file for value="+upload.id+"\n"+e.getMessage());
+            }
         }
         return fullStructure;
     }
@@ -144,33 +145,4 @@ public class FolderService {
             workQueue.addWork(new Work(source,source.sources,List.of(newValue)));
         });
     }
-    @Transactional
-    public void scan(Folder folder){
-        folder = Folder.findById(folder.id); // deal with detached entity
-        File folderPath = new File(folder.path);
-        List<File> todo = List.of(folderPath.listFiles(s -> s.toString().endsWith(".json") && !s.getName().startsWith(".")));
-
-        List<Node> sources = folder.group.sources;
-        for (File t : todo){
-            String sourcePath = t.getPath();
-            Value existing = valueService.byPath(sourcePath);
-            if(existing == null){
-                ObjectMapper objectMapper = new ObjectMapper();
-                Value newValue = new Value(folder, folder.group.root, sourcePath);
-                try {
-                    newValue.data = objectMapper.readTree(t);
-                } catch (IOException e) {
-                    System.err.println(e.getMessage());
-                }
-                valueService.create(newValue);
-                WorkQueue workQueue = workExecutor.getWorkQueue();
-                folder.group.sources.forEach(source -> {
-                    workQueue.addWork(new Work(source,source.sources,List.of(newValue)));
-                });
-            }else{
-                System.err.println("value "+sourcePath+" already exists");
-            }
-        }
-    }
-
 }

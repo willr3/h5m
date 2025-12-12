@@ -131,25 +131,12 @@ public class H5m implements QuarkusApplication {
         return 0;
     }
 
-    @CommandLine.Command(name="scan",description = "scan folder for new files and compute values")
-    public int scan(String folderName) throws InterruptedException {
-        Folder folder = folderService.byName(folderName);
-        if(folder == null){
-            System.err.println("could not find folder "+folderName);
-            return 1;
-        }
-        folderService.scan(folder);
-        workExecutor.shutdown();//will wait for idle
-        workExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
-        return 0;
-    }
-
     @Inject
     CommandLine.IFactory factory;
 
     @Override
     public int run(String... args) throws Exception {
-        //becuase no @Inject if we implement QuarkusApplication :(
+        //because no @Inject if we implement QuarkusApplication :(
         this.folderService = CDI.current().select(FolderService.class).get();
         this.nodeGroupService = CDI.current().select(NodeGroupService.class).get();
         this.nodeService = CDI.current().select(NodeService.class).get();

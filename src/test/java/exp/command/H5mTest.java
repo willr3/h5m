@@ -52,7 +52,7 @@ public class H5mTest {
     @Test
     public void add_folder(QuarkusMainLauncher launcher) {
         List<LaunchResult> results = run(launcher,
-                new String[]{"add","folder","foo","/tmp/foo"},
+                new String[]{"add","folder","foo"},
                 new String[]{"list","folders"}
         );
         results.forEach(result->{
@@ -65,8 +65,8 @@ public class H5mTest {
     @Test
     public void list_folder(QuarkusMainLauncher launcher) {
         List<LaunchResult> results = run(launcher,
-            new String[]{"add","folder","foo","/tmp/foo"},
-            new String[]{"add","folder","bar","/tmp/bar"}
+            new String[]{"add","folder","foo"},
+            new String[]{"add","folder","bar"}
         );
         results.forEach(result->{
            assertEquals(0,result.exitCode(),result.getOutput());
@@ -82,7 +82,7 @@ public class H5mTest {
     @Test
     public void remove_folder(QuarkusMainLauncher launcher) {
         List<LaunchResult> results = run(launcher,
-                new String[]{"add","folder","foo","/tmp/foo"},
+                new String[]{"add","folder","foo"},
                 new String[]{"remove","folder","foo"},
                 new String[]{"list","folders"}
         );
@@ -96,7 +96,7 @@ public class H5mTest {
     @Test
     public void add_jq_list_node(QuarkusMainLauncher launcher) {
         List<LaunchResult> results = run(launcher,
-                new String[]{"add","folder","foo","/tmp/foo"},
+                new String[]{"add","folder","foo"},
                 new String[]{"add","jq","to","foo","buz",".buz"},
                 new String[]{"add","jq","to","foo","bizzing","{buz}:.biz"},
                 new String[]{"list","foo","nodes"},
@@ -111,7 +111,7 @@ public class H5mTest {
     @Test
     public void remove_node(QuarkusMainLauncher launcher) {
         List<LaunchResult> results = run(launcher,
-                new String[]{"add","folder","foo","/tmp/foo"},
+                new String[]{"add","folder","foo"},
                 new String[]{"add","jq","to","foo","biz",".biz"},
                 new String[]{"list","foo","nodes"},
                 new String[]{"remove","node","biz","from","foo"},
@@ -140,7 +140,7 @@ public class H5mTest {
         );
         //filePath.toFile().deleteOnExit();
         List<LaunchResult> results = run(launcher,
-                new String[]{"add","folder","test",folder.toString()},
+                new String[]{"add","folder","test"},
                 new String[]{"add","jq","to","test","foo",".foo"},
                 new String[]{"add","jq","to","test","bar","{foo}:.bar"},
                 new String[]{"add","jq","to","test","biz","{bar}:.biz"},
@@ -182,7 +182,7 @@ public class H5mTest {
         );
         //filePath.toFile().deleteOnExit();
         List<LaunchResult> results = run(launcher,
-                new String[]{"add","folder","test",folder.toString()},
+                new String[]{"add","folder","test"},
                 new String[]{"add","jq","to","test","foo",".foo[]"},//this should act like a dataset
                 new String[]{"add","jq","to","test","name","{foo}:.name"},
                 new String[]{"add","jq","to","test","bar","{foo}:.bar"},
@@ -209,7 +209,7 @@ public class H5mTest {
                 """
         );
         List<LaunchResult> results = run(launcher,
-                new String[]{"add","folder","demo",folder.toString()},
+                new String[]{"add","folder","demo"},
                 new String[]{"add","jq","to","demo","foo",".foo[]"},
                 new String[]{"add","jq","to","demo","cpu","{foo}:.cpu"},
                 new String[]{"add","jq","to","demo","mem","{foo}:.mem"},
@@ -239,7 +239,7 @@ public class H5mTest {
                 """
         );
         List<LaunchResult> results = run(launcher,
-                new String[]{"add","folder","demo",folder.toString()},
+                new String[]{"add","folder","demo"},
                 new String[]{"add","jq","to","demo","foo",".foo[]"},
                 new String[]{"add","jq","to","demo","cpu","{foo}:.cpu"},
                 new String[]{"add","jq","to","demo","mem","{foo}:.mem"},
@@ -269,7 +269,7 @@ public class H5mTest {
                 """
         );
         List<LaunchResult> results = run(launcher,
-                new String[]{"add","folder","demo",folder.toString()},
+                new String[]{"add","folder","demo"},
                 new String[]{"add","jq","to","demo","foo",".foo[]"},
                 new String[]{"add","jq","to","demo","cpu","{foo}:.cpu"},
                 new String[]{"add","jq","to","demo","mem","{foo}:.mem"},
@@ -303,7 +303,7 @@ public class H5mTest {
                 """
         );
         List<LaunchResult> results = run(launcher,
-                new String[]{"add","folder","demo",folder.toString()},
+                new String[]{"add","folder","demo"},
                 new String[]{"add","jq","to","demo","str",".string"},
                 new String[]{"add","jq","to","demo","version",".version"},
                 new String[]{"add","jq","to","demo","double",".double"},
@@ -340,7 +340,7 @@ public class H5mTest {
                 """
         );
         List<LaunchResult> results = run(launcher,
-                new String[]{"add","folder","demo",folder.toString()},
+                new String[]{"add","folder","demo"},
                 new String[]{"add","jq","to","demo","foo",".foo[]"},
                 new String[]{"add","jq","to","demo","str","{foo}:.string"},
                 new String[]{"add","jq","to","demo","version","{foo}:.version"},

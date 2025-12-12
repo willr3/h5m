@@ -32,7 +32,7 @@ and substitute `java -jar /target/h5m.jar` wherever you see `target/h5m` in the 
 ### 3. Create a Folder
 ```shell
 TEMP_DIR=$(mktemp -d)
-target/h5m add folder test $TEMP_DIR
+target/h5m add folder test
 ```
 
 ### 4. create jq nodes for the test
@@ -62,10 +62,10 @@ The `encoding` is similar to the original `operation` we defined in the `h5m add
 fully qualified name of the source node(s). Node names need to be uniquely identifiable but copying nodes from another group
 can cause duplicates so we are considering a "fully qualified name" as a way to resolve the ambiguity.
 
-### 6. Create and scan sample run
+### 6. Create and upload sample run
 ```shell
 echo '{"foo":[{"name":"primero","bar":{"biz":["one","first"]}},{"name":"segundo","bar":{"biz":["two","second"]}}]}' > $TEMP_DIR/first.json
-target/h5m scan test
+target/h5m upload $TEMP_DIR to test
 ```
 ### 7. List the values
 ```shell
