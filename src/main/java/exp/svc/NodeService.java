@@ -557,7 +557,11 @@ public class NodeService {
         }
         String split[] = name.split(Node.FQDN_SEPARATOR);
         if(split.length==1){
-            rtrn.addAll(Node.find("from Node n where n.group.id=?1 and n.name=?2",groupId,split[0]).list());
+            if(split[0].matches("[0-9]+")){
+                rtrn.add(Node.findById(Long.parseLong(split[0])));
+            } else {
+                rtrn.addAll(Node.find("from Node n where n.group.id=?1 and n.name=?2", groupId, split[0]).list());
+            }
         }else if (split.length==2){
             rtrn.addAll(Node.find("from Node n where n.group.id=?1 and n.originalGroup.name = ?2 n.name=?3",groupId,split[0],split[1]).list());
         }
@@ -573,12 +577,12 @@ public class NodeService {
         if(fqdn.contains(Node.FQDN_SEPARATOR)){
             String split[] = fqdn.split(Node.FQDN_SEPARATOR);
             if(split.length==1){
-                //not supported
-
+                if(split[0].matches("[0-9]+")){
+                    rtrn.add(Node.findById(Long.parseLong(split[0])));
+                }
             }else if(split.length==2){
                 String groupName = split[0];
                 String nodeName = split[1];
-
                 rtrn.addAll(Node.find("from Node n where n.group.name=?1 and n.name=?2",groupName,nodeName).list());
             }else if (split.length==3){
                 String groupName = split[0];
