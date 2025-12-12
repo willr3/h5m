@@ -287,14 +287,13 @@ public class NodeService {
             }
         }
 
-        File valuePath = JqNode.outputPath().resolve(node.name + "." + (startingOrdinal+1)+".jq").toFile();
+        //File valuePath = JqNode.outputPath().resolve(node.name + "." + (startingOrdinal+1)+".jq").toFile();
         //TODO create base directory if needed
         if(data!=null) {
-            Files.writeString(valuePath.toPath(), data.toString());
+            //Files.writeString(valuePath.toPath(), data.toString());
             Value newValue = new Value();
             newValue.idx = startingOrdinal+1;
             newValue.node = node;
-            newValue.path = valuePath.toString();
             newValue.data = data;
             newValue.sources = node.sources.stream().map(n -> sourceValues.get(n.name)).collect(Collectors.toList());
             return List.of(newValue);
@@ -451,6 +450,7 @@ public class NodeService {
     public List<Value> calculateJqValues(JqNode node,Map<String,Value> sourceValues,int startingOrdinal) throws IOException {
         List<Value> rtrn = new ArrayList<>();
         List<String> args = new ArrayList<>();
+        List<File> paths = new ArrayList<>();
         File tmpFilter = Files.createTempFile("h5m.jq." + node.name,".txt").toFile();
         tmpFilter.deleteOnExit();
         Files.write(tmpFilter.toPath(),node.operation.getBytes());
@@ -471,12 +471,31 @@ public class NodeService {
         //iterate sources to preserve order
         node.sources.forEach(sourceNode -> {
             if(sourceValues.containsKey(sourceNode.name)){
-                args.add(sourceValues.get(sourceNode.name).path);
+                try {
+                    Value sourceValue = sourceValues.get(sourceNode.name);
+                    File f = Files.createTempFile("h5m."+sourceNode.name,".json").toFile();
+                    valueService.writeToFile(sourceValue.id,f.getAbsolutePath());
+                    paths.add(f);
+                    args.add(f.getAbsolutePath());
+                }catch(IOException e){
+                    System.err.println("failed to create temporary file for "+sourceNode.name+"\n"+e.getMessage());
+                }
+
             }
         });
         //if there are no sources we just add all the inputs together
         if(node.sources.isEmpty()){
-            sourceValues.values().forEach(v->args.add(v.path));
+            sourceValues.values().forEach(sourceValue -> {
+                try {
+                    File f = Files.createTempFile("h5m.", ".json").toFile();
+                    valueService.writeToFile(sourceValue.id, f.getAbsolutePath());
+                    paths.add(f);
+                    args.add(f.getAbsolutePath());
+                }catch(IOException e){
+                    System.err.println("failed to create temporary file\n"+e.getMessage());
+                }
+            });
+
         }
         Path destinationPath = Files.createTempFile(".bjq." + node.name+".",".out");//getOutPath().resolve(name + "." + startingOrdinal);
         destinationPath.toFile().deleteOnExit();
@@ -523,13 +542,9 @@ public class NodeService {
                 jp.nextToken();
                 while (jp.hasCurrentToken()) {
                     JsonNode jsNode = jp.readValueAsTree();
-                    File valuePath = JqNode.outputPath().resolve(node.name + "." + (startingOrdinal+rtrn.size())+".jq").toFile();
-                    //TODO create base directory if needed
-                    Files.writeString(valuePath.toPath(), jsNode.toString());
                     Value newValue = new Value();
                     newValue.idx = order++;
                     newValue.node = node;
-                    newValue.path = valuePath.toString();
                     newValue.data = jsNode;
                     newValue.sources = node.sources.stream().map(n -> sourceValues.get(n.name)).collect(Collectors.toList());
                     rtrn.add(newValue);
@@ -539,6 +554,9 @@ public class NodeService {
                 throw new RuntimeException(e);
             }
         }
+
+        //remove temporary files
+        paths.forEach(File::delete);
 
         return rtrn;
     }

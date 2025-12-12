@@ -138,7 +138,7 @@ public class FolderService {
     @Transactional
     public void upload(Folder folder,String path,JsonNode data){
         folder = Folder.findById(folder.id); // deal with detached entity
-        Value newValue = new Value(folder,folder.group.root, path,data);
+        Value newValue = new Value(folder,folder.group.root,data);
         valueService.create(newValue);
         WorkQueue workQueue = workExecutor.getWorkQueue();
         folder.group.sources.forEach(source -> {

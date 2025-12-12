@@ -20,9 +20,6 @@ import java.util.*;
 )
 public class Value extends PanacheEntity {
 
-    @Column(name = "path")
-    public String path;
-
     @Column(name = "data", columnDefinition = "JSON")
     @Type(JsonBinaryType.class)
     @Basic(fetch = FetchType.LAZY)
@@ -61,17 +58,15 @@ public class Value extends PanacheEntity {
     public Value(){
         this.sources = new ArrayList<>();
     }
-    public Value(Folder folder, Node node, String path){
+    public Value(Folder folder, Node node){
         this();
         this.folder = folder;
         this.node = node;
-        this.path = path;
     }
-    public Value(Folder folder, Node node,String path,JsonNode data){
+    public Value(Folder folder, Node node,JsonNode data){
         this();
         this.folder = folder;
         this.node = node;
-        this.path = path;
         this.data = data;
     }
 
@@ -85,7 +80,7 @@ public class Value extends PanacheEntity {
     public List<Value> getSources() {return this.sources;}
 
     @Override
-    public String toString(){return "Value< id="+id+", path="+path+" node.id="+node.id+" >";}
+    public String toString(){return "Value< id="+id+" node.id="+node.id+" idx="+idx+" >";}
 
 
     @Override

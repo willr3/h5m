@@ -31,7 +31,7 @@ public class WorkTest {
         Node two = new JqNode("two");
         two.sources = List.of(one);
 
-        Value value = new Value(null,root,"root");
+        Value value = new Value(null,root);
 
         Work wOne = new Work(one,null, List.of(value));
         Work wTwo = new Work(two,null, List.of(value));
@@ -45,8 +45,8 @@ public class WorkTest {
         Node two = new JqNode("two");
         two.sources = List.of(one);
 
-        Value value1 = new Value(null,root,"root");
-        Value value2 = new Value(null,one,"two");
+        Value value1 = new Value(null,root);
+        Value value2 = new Value(null,one);
 
         Work wOne = new Work(one,null, List.of(value1));
         Work wTwo = new Work(two,null, List.of(value2));

@@ -37,7 +37,7 @@ public class ValueServiceTest extends FreshDb {
         tm.begin();
         Node rootNode = new RootNode();
         rootNode.persist();
-        Value rootValue = new Value(null,rootNode,"./root",new TextNode("a"));
+        Value rootValue = new Value(null,rootNode,new TextNode("a"));
         rootValue.persist();
         tm.commit();
 
@@ -61,9 +61,9 @@ public class ValueServiceTest extends FreshDb {
         Node aNode = new JqNode("a",".a");
         aNode.sources=List.of(rootNode);
         aNode.persist();
-        Value rootValue = new Value(null,rootNode,"./root",new TextNode("a"));
+        Value rootValue = new Value(null,rootNode,new TextNode("a"));
         rootValue.persist();
-        Value aValue = new Value(null,aNode,".a",new TextNode("a"));
+        Value aValue = new Value(null,aNode,new TextNode("a"));
         aValue.sources=List.of(rootValue);
         aValue.persist();
         tm.commit();
@@ -83,7 +83,7 @@ public class ValueServiceTest extends FreshDb {
         ObjectMapper objectMapper = new ObjectMapper();
         Node rootNode = new RootNode();
         rootNode.persist();
-        Value rootValue01 = new Value(null,rootNode,null,objectMapper.readTree("{\"this\":{ \"is\":{\"silly\":\"yes\"}}}"));
+        Value rootValue01 = new Value(null,rootNode,objectMapper.readTree("{\"this\":{ \"is\":{\"silly\":\"yes\"}}}"));
         rootValue01.persist();
         tm.commit();
 
@@ -118,30 +118,30 @@ public class ValueServiceTest extends FreshDb {
         abcNode.persist();
         ObjectMapper objectMapper = new ObjectMapper();
 
-        Value rootValue01 = new Value(null,rootNode,null,objectMapper.readTree("111"));
+        Value rootValue01 = new Value(null,rootNode,objectMapper.readTree("111"));
         rootValue01.persist();
-        Value rootValue02 = new Value(null,rootNode,null,objectMapper.readTree("222"));
+        Value rootValue02 = new Value(null,rootNode,objectMapper.readTree("222"));
         rootValue02.persist();
 
-        Value aValue01 = new Value(null,aNode,null,objectMapper.readTree("11"));
+        Value aValue01 = new Value(null,aNode,objectMapper.readTree("11"));
         aValue01.sources=List.of(rootValue01);
         aValue01.persist();
 
-        Value aValue02 = new Value(null,aNode,null,objectMapper.readTree("22"));
+        Value aValue02 = new Value(null,aNode,objectMapper.readTree("22"));
         aValue02.sources=List.of(rootValue02);
         aValue02.persist();
 
-        Value abValue01 = new Value(null,abNode,null,objectMapper.readTree("1"));
+        Value abValue01 = new Value(null,abNode,objectMapper.readTree("1"));
         abValue01.sources=List.of(aValue01);
         abValue01.persist();
-        Value abValue02 = new Value(null,abNode,null,objectMapper.readTree("2"));
+        Value abValue02 = new Value(null,abNode,objectMapper.readTree("2"));
         abValue02.sources=List.of(aValue02);
         abValue02.persist();
 
-        Value abcValue01 = new Value(null,abcNode,null,objectMapper.readTree("{\"a\":123,\"b\":456}"));//matching value to find fingerprint
+        Value abcValue01 = new Value(null,abcNode,objectMapper.readTree("{\"a\":123,\"b\":456}"));//matching value to find fingerprint
         abcValue01.sources=List.of(abValue01);
         abcValue01.persist();
-        Value abcValue02 = new Value(null,abcNode,null,objectMapper.readTree("{\"a\":123,\"b\":456}"));
+        Value abcValue02 = new Value(null,abcNode,objectMapper.readTree("{\"a\":123,\"b\":456}"));
         abcValue02.sources=List.of(abValue02);
         abcValue02.persist();
         tm.commit();
@@ -168,23 +168,23 @@ public class ValueServiceTest extends FreshDb {
         abNode.persist();
         ObjectMapper objectMapper = new ObjectMapper();
 
-        Value rootValue01 = new Value(null,rootNode,null,objectMapper.readTree("111"));
+        Value rootValue01 = new Value(null,rootNode,objectMapper.readTree("111"));
         rootValue01.persist();
-        Value rootValue02 = new Value(null,rootNode,null,objectMapper.readTree("222"));
+        Value rootValue02 = new Value(null,rootNode,objectMapper.readTree("222"));
         rootValue02.persist();
 
-        Value aValue01 = new Value(null,aNode,null,objectMapper.readTree("11"));
+        Value aValue01 = new Value(null,aNode,objectMapper.readTree("11"));
         aValue01.sources=List.of(rootValue01);
         aValue01.persist();
 
-        Value aValue02 = new Value(null,aNode,null,objectMapper.readTree("22"));
+        Value aValue02 = new Value(null,aNode,objectMapper.readTree("22"));
         aValue02.sources=List.of(rootValue02);
         aValue02.persist();
 
-        Value abValue01 = new Value(null,abNode,null,objectMapper.readTree("67"));
+        Value abValue01 = new Value(null,abNode,objectMapper.readTree("67"));
         abValue01.sources=List.of(aValue01);
         abValue01.persist();
-        Value abValue02 = new Value(null,abNode,null,objectMapper.readTree("67"));
+        Value abValue02 = new Value(null,abNode,objectMapper.readTree("67"));
         abValue02.sources=List.of(aValue02);
         abValue02.persist();
         tm.commit();
@@ -211,23 +211,23 @@ public class ValueServiceTest extends FreshDb {
         bNode.persist();
         ObjectMapper objectMapper = new ObjectMapper();
 
-        Value rootValue01 = new Value(null,rootNode,null,new TextNode("root1"));
+        Value rootValue01 = new Value(null,rootNode,new TextNode("root1"));
         rootValue01.persist();
-        Value rootValue02 = new Value(null,rootNode,null,new TextNode("root2"));
+        Value rootValue02 = new Value(null,rootNode,new TextNode("root2"));
         rootValue02.persist();
 
-        Value aValue01 = new Value(null,aNode,null,new TextNode("a"));
+        Value aValue01 = new Value(null,aNode,new TextNode("a"));
         aValue01.sources=List.of(rootValue01);
         aValue01.persist();
 
-        Value aValue02 = new Value(null,aNode,null,new TextNode("a"));
+        Value aValue02 = new Value(null,aNode,new TextNode("a"));
         aValue02.sources=List.of(rootValue02);
         aValue02.persist();
 
-        Value bValue01 = new Value(null,bNode,null,new TextNode("b1"));
+        Value bValue01 = new Value(null,bNode,new TextNode("b1"));
         bValue01.sources=List.of(rootValue01);
         bValue01.persist();
-        Value bValue02 = new Value(null,bNode,null,new TextNode("b2"));
+        Value bValue02 = new Value(null,bNode,new TextNode("b2"));
         bValue02.sources=List.of(rootValue02);
         bValue02.persist();
         tm.commit();
@@ -262,22 +262,17 @@ public class ValueServiceTest extends FreshDb {
         abc.persist();
 
         Value vr = new Value();
-        vr.path="vr";
         vr.persist();
         Value va = new Value();
-        va.path="va";
         va.sources=List.of(vr);
         va.persist();
         Value vab = new Value();
-        vab.path="vab";
         vab.sources=List.of(va);
         vab.persist();
         Value vac = new Value();
-        vac.path="vac";
         vac.sources=List.of(va);
         vac.persist();
         Value vabc =  new Value();
-        vabc.path="vabc";
         vabc.sources=List.of(vab,vac,va,vr);
         vabc.persist();
         tm.commit();
@@ -315,7 +310,6 @@ public class ValueServiceTest extends FreshDb {
 
         Value rootValue = new Value();
         rootValue.node = root;
-        rootValue.path="./";
         rootValue.persist();
 
         Value alphaValue = new Value();
@@ -357,25 +351,21 @@ public class ValueServiceTest extends FreshDb {
 
         Value rootValue = new Value();
         rootValue.node = root;
-        rootValue.path="./root";
         rootValue.persist();
 
         Value alphaValue = new Value();
         alphaValue.node = alpha;
         alphaValue.sources = List.of(rootValue);
-        alphaValue.path="./alpha";
         alphaValue.persist();
 
         Value bravoValue = new Value();
         bravoValue.node = bravo;
         bravoValue.sources = List.of(rootValue);
-        bravoValue.path="./bravo";
         bravoValue.persist();
 
         Value bravobravoValue = new Value();
         bravobravoValue.node = bravobravo;
         bravobravoValue.sources = List.of(bravoValue);
-        bravobravoValue.path="./bravobravo";
         bravobravoValue.persist();
 
         tm.commit();
@@ -403,25 +393,21 @@ public class ValueServiceTest extends FreshDb {
 
         Value rootValue = new Value();
         rootValue.node = root;
-        rootValue.path="./root";
         rootValue.persist();
 
         Value alphaValue = new Value();
         alphaValue.node = alpha;
         alphaValue.sources = List.of(rootValue);
-        alphaValue.path="./alpha";
         alphaValue.persist();
 
         Value bravoValue = new Value();
         bravoValue.node = bravo;
         bravoValue.sources = List.of(rootValue);
-        bravoValue.path="./bravo";
         bravoValue.persist();
 
         Value bravobravoValue = new Value();
         bravobravoValue.node = bravobravo;
         bravobravoValue.sources = List.of(bravoValue);
-        bravobravoValue.path="./bravobravo";
         bravobravoValue.persist();
 
         tm.commit();
@@ -449,7 +435,6 @@ public class ValueServiceTest extends FreshDb {
 
         Value rootValue = new Value();
         rootValue.node = root;
-        rootValue.path="./";
         rootValue.persist();
 
         Value alphaValue = new Value();
@@ -488,7 +473,6 @@ public class ValueServiceTest extends FreshDb {
 
         Value rootValue = new Value();
         rootValue.node = root;
-        rootValue.path="./";
         rootValue.persist();
 
         Value alphaValue = new Value();

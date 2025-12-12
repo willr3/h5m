@@ -274,9 +274,10 @@ public class ValueService {
     //TODO getHash(Value value) to see if a new value is different than the persisted one
     public String getHash(Value value) throws NoSuchAlgorithmException {
         MessageDigest md = MessageDigest.getInstance("MD5");
-        try(BufferedInputStream in = new BufferedInputStream((new FileInputStream(value.path)));
-            DigestOutputStream out = new DigestOutputStream(OutputStream.nullOutputStream(), md)) {
-            in.transferTo(out);
+        try(
+            DigestOutputStream out = new DigestOutputStream(OutputStream.nullOutputStream(), md);
+            ObjectOutputStream oo = new ObjectOutputStream(out);) {
+            oo.writeObject(value.data);
         } catch (FileNotFoundException e) {
             return null;//TODO handle error for missing value
         } catch (IOException e) {

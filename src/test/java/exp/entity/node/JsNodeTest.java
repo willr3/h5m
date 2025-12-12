@@ -100,9 +100,9 @@ public class JsNodeTest {
     public void createFunctionParameters_destructure() throws JsonProcessingException {
         ObjectMapper mapper = new ObjectMapper();
         Map<String, Value> values = Map.of(
-                "a",new Value(null,null,"/a",mapper.readTree("1")),
-                "b",new Value(null,null,"/b",mapper.readTree("2")),
-                "c",new Value(null,null,"/c",mapper.readTree("3"))
+                "a",new Value(null,null,mapper.readTree("1")),
+                "b",new Value(null,null,mapper.readTree("2")),
+                "c",new Value(null,null,mapper.readTree("3"))
         );
         List<JsonNode> params = JsNode.createParameters("function({a,b},c){}",values);
         assertNotNull(params,"return should not be null");

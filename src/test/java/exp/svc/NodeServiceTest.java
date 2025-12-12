@@ -96,7 +96,7 @@ public class NodeServiceTest extends FreshDb {
         Node rootNode = new RootNode();
         rootNode.name="root";
         rootNode.persist();
-        Value rootValue = new Value(null,rootNode,null,new TextNode("Bright"));
+        Value rootValue = new Value(null,rootNode,new TextNode("Bright"));
         rootValue.persist();
         JsNode jsNode = new JsNode("js","root=>'Hi, '+root");
         jsNode.persist();
@@ -115,23 +115,24 @@ public class NodeServiceTest extends FreshDb {
     }
 
     @Test
-    public void calculateJqValues_single_key_sourceValue() throws IOException {
-        File v1File = Files.createTempFile(new Exception().getStackTrace()[0].getMethodName()+".",".json").toFile();
-        v1File.deleteOnExit();
-        Files.write(v1File.toPath(),
-                """
+    public void calculateJqValues_single_key_sourceValue() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        Node upload = new JqNode();//should be a different type of node?
+        upload.name="upload";
+        upload.persist();
+        Value v1 = new Value();
+        v1.data = mapper.readTree("""
                 {
                   "foo": [ { "key": "one"}, { "key" : "two" } ],
                   "bar": [ { "k": "uno" }, { "k": "dos"}, { "k" : "tres"} ],
                   "biz": "cat",
                   "buz": "dog"
                 }
-                """.getBytes());
-        Node upload = new JqNode();//should be a different type of node?
-        upload.name="upload";
+                """);
+        v1.persist();
+        tm.commit();
 
-        Value v1 = new Value();
-        v1.path = v1File.getPath();
         Map<String,Value> sourceValueMap = new HashMap<>();
         sourceValueMap.put("upload",v1);
 
@@ -140,95 +141,84 @@ public class NodeServiceTest extends FreshDb {
         assertEquals(1,calculated.size(),"expect to create a single value from key");
     }
     @Test
-    public void calculateJqValues_single_key_iterating() throws IOException {
-        File v1File = Files.createTempFile(new Exception().getStackTrace()[0].getMethodName()+".",".json").toFile();
-        v1File.deleteOnExit();
-        Files.write(v1File.toPath(),
-                """
+    public void calculateJqValues_single_key_iterating() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        Node upload = new JqNode();//should be a different type of node?
+        upload.name="upload";
+        upload.persist();
+        Value v1 = new Value();
+        v1.data= mapper.readTree("""
                 {
                   "foo": [ { "key": "one"}, { "key" : "two" } ],
                   "bar": [ { "k": "uno" }, { "k": "dos"}, { "k" : "tres"} ],
                   "biz": "cat",
                   "buz": "dog"
                 }
-                """.getBytes());
-        Node upload = new JqNode();//should be a different type of node?
-        upload.name="upload";
+                """);
+        v1.persist();
+        tm.commit();
 
-        Value v1 = new Value();
-        v1.path = v1File.getPath();
         Map<String,Value> sourceValueMap = new HashMap<>();
         sourceValueMap.put("upload",v1);
 
         JqNode node = new JqNode("foo",".foo[]");
         List<Value> calculated = nodeService.calculateJqValues(node,sourceValueMap,0);
         assertEquals(2,calculated.size(),"expect to create a multiple values from an output file with multiple roots");
-        assertNotEquals(calculated.get(0).path,calculated.get(1).path,"calculated values from iterating jq should have different path");
 
-        String first = Files.readString(Path.of(calculated.getFirst().path));
-        String second = Files.readString(Path.of(calculated.getLast().path));
+        String first = calculated.getFirst().data.toString();
+        String second = calculated.getLast().data.toString();
 
         assertTrue(first.contains("one"),"first returned value should have first match from jq: "+first);
         assertTrue(second.contains("two"),"second returned value should have second match from jq: "+second);
     }
 
     @Test
-    public void calculateJqValues_multiple_sourceValues() throws IOException {
-        File v1File = Files.createTempFile(new Exception().getStackTrace()[0].getMethodName()+".",".json").toFile();
-        v1File.deleteOnExit();
-        Files.write(v1File.toPath(),
-                """
-                "cat"
-                """.getBytes());
-        File v2File = Files.createTempFile(new Exception().getStackTrace()[0].getMethodName()+".",".json").toFile();
-        v2File.deleteOnExit();
-        Files.write(v2File.toPath(),
-                """
-                "dog"
-                """.getBytes());
-
+    public void calculateJqValues_multiple_sourceValues() throws IOException, HeuristicRollbackException, SystemException, HeuristicMixedException, RollbackException, NotSupportedException {
+        tm.begin();
         Value v1 = new Value();
-        v1.path = v1File.getPath();
+        v1.data=new TextNode("cat");
+        v1.persist();
         Value v2 = new Value();
-        v2.path = v2File.getPath();
+        v2.data=new TextNode("dog");
+        v2.persist();
+
+        JqNode node = new JqNode("foo",".");
+        node.persist();
+
+        tm.commit();
+
         Map<String,Value> sourceValueMap = new HashMap<>();
         sourceValueMap.put("v1",v1);
         sourceValueMap.put("v2",v2);
 
-        JqNode node = new JqNode("foo",".");
         List<Value> calculated = nodeService.calculateJqValues(node,sourceValueMap,0);
         assertEquals(1,calculated.size(),"expect to create a single value from two sources");
-        String read = Files.readString(Path.of(calculated.getFirst().path));
+        String read = calculated.getFirst().data.toString();
         assertTrue(read.contains("cat"),"first file should be in result: "+read);
         assertTrue(read.contains("dog"),"second file should be in result: "+read);
         assertTrue(read.startsWith("["),"value should be an array: "+read);
         assertTrue(read.endsWith("]"),"value should be an array: "+read);
     }
     @Test
-    public void calculateJqValues_multiple_source_order() throws IOException {
-        File v1File = Files.createTempFile(new Exception().getStackTrace()[0].getMethodName()+".",".json").toFile();
-        v1File.deleteOnExit();
-        Files.write(v1File.toPath(),
-                """
-                "cat"
-                """.getBytes());
-        File v2File = Files.createTempFile(new Exception().getStackTrace()[0].getMethodName()+".",".json").toFile();
-        v2File.deleteOnExit();
-        Files.write(v2File.toPath(),
-                """
-                "dog"
-                """.getBytes());
-
+    public void calculateJqValues_multiple_source_order() throws IOException, HeuristicRollbackException, SystemException, HeuristicMixedException, RollbackException, NotSupportedException {
+        tm.begin();
         Node node1 = new JqNode();
         node1.name="v1";
+        node1.persist();
         Value v1 = new Value();
-        v1.path = v1File.getPath();
+        v1.data=new TextNode("cat");
         v1.node = node1;
+        v1.persist();
         Node node2 = new JqNode();
         node2.name="v2";
+        node2.persist();
         Value v2 = new Value();
-        v2.path = v2File.getPath();
+        v2.data=new TextNode("dog");
         v2.node = node2;
+        v2.persist();
+        tm.commit();
+
         Map<String,Value> sourceValueMap = new HashMap<>();
         sourceValueMap.put("v1",v1);
         sourceValueMap.put("v2",v2);
@@ -239,7 +229,7 @@ public class NodeServiceTest extends FreshDb {
 
         List<Value> calculated = nodeService.calculateJqValues(node,sourceValueMap,0);
         assertEquals(1,calculated.size(),"expect to create a single value from two sources");
-        String read = Files.readString(Path.of(calculated.getFirst().path));
+        String read = calculated.getFirst().data.toString();
         assertTrue(read.contains("cat"),"first file should be in result: "+read);
         assertTrue(read.contains("dog"),"second file should be in result: "+read);
         assertTrue(read.startsWith("["),"value should be an array: "+read);
@@ -278,20 +268,16 @@ public class NodeServiceTest extends FreshDb {
 
     @Test
     public void calculateValues_single_key() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException, IOException {
+        ObjectMapper mapper = new ObjectMapper();
         tm.begin();
-        File v1File = Files.createTempFile(new Exception().getStackTrace()[0].getMethodName()+".",".json").toFile();
-        v1File.deleteOnExit();
-        Files.write(v1File.toPath(),
-            """
-            {"foo":{"uno":"one","dos":"two"}}
-            """.getBytes());
-
         Node upload = new RootNode();
         upload.name="upload";
         upload.persist();
 
         Value v1 = new Value();
-        v1.path = v1File.getPath();
+        v1.data= mapper.readTree("""
+            {"foo":{"uno":"one","dos":"two"}}
+            """);
         v1.node = upload;
         v1.data = new ObjectMapper().readTree(
             """
@@ -313,8 +299,7 @@ public class NodeServiceTest extends FreshDb {
 
         Value calculatedFoo = calculated.get(0);
         assertNotNull(calculatedFoo,"calculated value for foo should not be null");
-        assertTrue(new File(calculatedFoo.path).exists(),"file path for foo should exist");
-        String content = Files.readString(Path.of(calculatedFoo.path));
+        String content = calculatedFoo.data.toString();
         assertTrue(content.contains("uno"),"content missing first key:\n"+content);
         assertTrue(content.contains("dos"),"content missing second key:\n"+content);
         tm.commit();
@@ -322,6 +307,7 @@ public class NodeServiceTest extends FreshDb {
 
     @Test
     public void calculateValues_scalarType_by_length() throws SystemException, NotSupportedException, IOException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
         tm.begin();
         File v1File = Files.createTempFile(new Exception().getStackTrace()[0].getMethodName()+".",".json").toFile();
         v1File.deleteOnExit();
@@ -338,7 +324,14 @@ public class NodeServiceTest extends FreshDb {
         upload.persist();
 
         Value v1 = new Value();
-        v1.path = v1File.getPath();
+        v1.data = mapper.readTree(            """
+            {
+              "foo": [ { "key": "one"}, { "key" : "two" } ],
+              "bar": [ { "k": "uno" }, { "k": "dos"} ],
+              "biz": "cat",
+              "buz": "dog"
+            }
+            """);
         v1.node = upload;
         v1.persist();
 
@@ -364,8 +357,8 @@ public class NodeServiceTest extends FreshDb {
         List<Value> calculated = nodeService.calculateValues(combined,List.of(v1));
 
         assertEquals(2,calculated.size(),"expect 2 values due to foo");
-        String first = Files.readString(Path.of(calculated.getFirst().path));
-        String second = Files.readString(Path.of(calculated.get(1).path));
+        String first = calculated.getFirst().data.toString();
+        String second = calculated.get(1).data.toString();
 
         assertTrue(first.contains("one"),"first value not found");
         assertFalse(first.contains("two"),"first value not found");
@@ -380,23 +373,20 @@ public class NodeServiceTest extends FreshDb {
 
     @Test
     public void calculateValues_scalarType_NxN() throws SystemException, NotSupportedException, IOException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
         tm.begin();
-        File v1File = Files.createTempFile(new Exception().getStackTrace()[0].getMethodName()+".",".json").toFile();
-        v1File.deleteOnExit();
-        Files.write(v1File.toPath(),
-                """
+        Node upload = new JqNode("upload");//should be a different type of node?
+        upload.persist();
+
+        Value v1 = new Value();
+        v1.data=mapper.readTree(                """
                 {
                   "foo": [ { "key": "one"}, { "key" : "two" } ],
                   "bar": [ { "k": "uno" }, { "k": "dos"} ],
                   "biz": "cat",
                   "buz": "dog"
                 }
-                """.getBytes());
-        Node upload = new JqNode("upload");//should be a different type of node?
-        upload.persist();
-
-        Value v1 = new Value();
-        v1.path = v1File.getPath();
+                """);
         v1.node = upload;
         v1.persist();
 
@@ -426,10 +416,10 @@ public class NodeServiceTest extends FreshDb {
         List<Value> calculated = nodeService.calculateValues(combined,List.of(v1));
 
         assertEquals(4,calculated.size(),"expect 4 values due to foo");
-        String first = Files.readString(Path.of(calculated.getFirst().path));
-        String second = Files.readString(Path.of(calculated.get(1).path));
-        String third = Files.readString(Path.of(calculated.get(2).path));
-        String fourth = Files.readString(Path.of(calculated.get(3).path));
+        String first = calculated.getFirst().data.toString();
+        String second = calculated.get(1).data.toString();
+        String third = calculated.get(2).data.toString();
+        String fourth = calculated.get(3).data.toString();
 
         //check the scalars
         assertTrue(first.contains("cat"),"first should have cat: "+first);
@@ -451,6 +441,7 @@ public class NodeServiceTest extends FreshDb {
 
     @Test
     public void calculateValues_NxN_complicated() throws SystemException, NotSupportedException, IOException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
         tm.begin();
         File v1File = Files.createTempFile(new Exception().getStackTrace()[0].getMethodName()+".", ".json").toFile();
         v1File.deleteOnExit();
@@ -466,7 +457,13 @@ public class NodeServiceTest extends FreshDb {
         upload.persist();
 
         Value v1 = new Value();
-        v1.path = v1File.getPath();
+        v1.data = mapper.readTree("""
+                {
+                  "foo": [ { "key": "one"}, { "key" : "two" } ],
+                  "bar": [ { "k": "uno" }, { "k": "dos"}, { "k": "tres"} ],
+                  "biz": [ { "j": "ant" }, { "j": "bee"}, { "j": "cat"} ]
+                }
+                """);
         v1.node = upload;
         v1.persist();
 
@@ -492,11 +489,7 @@ public class NodeServiceTest extends FreshDb {
         List<Value> calculated = nodeService.calculateValues(combined,List.of(v1));
         assertEquals(18,calculated.size());
         List<String> content = calculated.stream().map(n-> {
-            try {
-                return Files.readString(Path.of(n.path));
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
+            return n.data.toString();
         }).toList();
         List.of("one","two").forEach(key->{
             assertEquals(9,content.stream().filter(v->v.contains(key)).count(),"unexpected number of value with "+key);
