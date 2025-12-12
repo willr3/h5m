@@ -47,8 +47,10 @@ public class ValueServiceTest extends FreshDb {
 
         String content = Files.readString(f.toPath());
 
-        System.out.println(f.getAbsolutePath());
-        System.out.println("content: "+content);
+        assertNotNull(content);
+        assertTrue(content.contains("a"));
+        assertEquals("\"a\"", content);
+        //TODO should string content include the quotes?
     }
 
     @Test
