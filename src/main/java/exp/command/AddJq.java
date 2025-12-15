@@ -9,6 +9,8 @@ import io.hyperfoil.tools.yaup.AsciiArt;
 import jakarta.inject.Inject;
 import picocli.CommandLine;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.util.Scanner;
 import java.util.concurrent.Callable;
 
@@ -45,6 +47,22 @@ public class AddJq implements Callable<Integer> {
             }
         }while(groupName == null && H5m.consoleAttached());
 
+        if("-".equals(jq)){
+            StringBuilder sb = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(System.in))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    sb.append(line);
+                    sb.append(System.lineSeparator());
+                }
+            }
+            if(sb.length()>0){
+                jq = sb.toString().trim();
+            }else{
+                System.err.println("unable to read function from input");
+                return 1;
+            }
+        }
         if(jq == null && H5m.consoleAttached()){
             System.out.printf("Enter jq filter: ");
             jq = sc.nextLine();
