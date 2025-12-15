@@ -311,7 +311,7 @@ public class ListCmd implements Callable<Integer> {
                 }else if (c instanceof Double || c instanceof Float){
                     if(columnFormats[a]==null || columnFormats[a].equals("d")){
                         columnFormats[a] = "f";
-                    }else{
+                    }else if (columnFormats[a].equals("s")){
                         //mixed value type colunn, convert to fixed width?
                         c = String.format("%.2f", c);
                     }
