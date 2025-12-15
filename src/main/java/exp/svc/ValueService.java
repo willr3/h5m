@@ -98,6 +98,9 @@ public class ValueService {
         return rtrn;
     }
 
+    /*
+     * Finds the values for an ancestor node Source where a descendant created the expected fingerprint value, does not look for sibling or cousin values
+     */
     @Transactional
     public List<Value> findMatchingFingerprint(Node source,Value fingerprint){
         List<Value> rtrn = new ArrayList<>(em.createNativeQuery(
@@ -117,7 +120,11 @@ public class ValueService {
                 .getResultList());
         return rtrn;
     }
-    //sorting by a value is useful if that value is our timestamp but we also need that value
+    /*
+     * Finds the values for a relative node Source where a descendant created the expected fingerprint value, now it works on siblings and cousins
+     * we want this to also find sibling and cousin values but that probably requires another traversal
+     * sorting by a value is useful if that value is our timestamp but we also need that value
+     */
     @Transactional
     public List<Value> findMatchingFingerprintOrderBy(Node source,Value fingerprint,Node sort){
         List<Value> rtrn = new ArrayList<>(em.createNativeQuery(
@@ -135,8 +142,15 @@ public class ValueService {
                             union
                             select v.id as vid, s.sortable as sortable
                                 from value v join value_edge ve on v.id = ve.source_id join sorter s on s.vid = ve.value_id
-                        )
-                        select * from value v join ancestor a on v.id=a.vid join sorter s on v.id=s.vid where v.node_id=:sourceId order by s.sortable asc;
+                        ),
+                        descendant(vid,sortable) as (
+                           select v.id as vid, s.sortable as sortable
+                             from value v join sorter s on v.id = s.vid join ancestor a on v.id = a.vid join node n on n.id = v.node_id where n.type = 'root' --only the root values from ancestor with sorter
+                           union
+                           select v.id as vid, d.sortable as sortable
+                                 from value v join value_edge ve on v.id = ve.value_id join descendant d on d.vid = ve.source_id
+                        )                        
+                        select * from value v join descendant d on v.id=d.vid where v.node_id=:sourceId order by sortable asc;
                         """,Value.class)
                 .setParameter("nodeId", fingerprint.node.id)
                 .setParameter("data", fingerprint.data.toString())
