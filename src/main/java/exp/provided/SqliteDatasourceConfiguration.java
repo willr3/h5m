@@ -10,6 +10,7 @@ import jakarta.enterprise.inject.Alternative;
 import jakarta.enterprise.inject.Default;
 import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Inject;
+import jakarta.inject.Named;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import picocli.CommandLine;
 
@@ -75,6 +76,7 @@ public class SqliteDatasourceConfiguration {
     @ApplicationScoped
     @Priority(9999)
     @Default
+    @Named("default")
     public AgroalDataSource initDatasource(/*CommandLine.ParseResult parseResult*/) throws SQLException {
         Map<String, String> props = new HashMap<>();
         props.put(AgroalPropertiesReader.MAX_SIZE, "10");

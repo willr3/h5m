@@ -19,12 +19,13 @@ import java.util.Map;
 
 public class DuckDbDatasourceConfiguration {
 
+    
     @Alternative
     @Produces
     @ApplicationScoped
     //@Priority(9999)
     //@Default
-    @Priority(9998)
+    @Priority(8888)
     @Named("duckdb")
     public AgroalDataSource initDatasource(/*CommandLine.ParseResult parseResult*/) throws SQLException {
         Map<String, String> props = new HashMap<>();
