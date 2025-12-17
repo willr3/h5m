@@ -44,15 +44,17 @@ public class ValueService {
     }
 
     @Transactional
-    public long create(Value value){
+    public Value create(Value value){
         if(!value.isPersistent()){
             value.id = null;
             Value merged = em.merge(value);
             em.flush();
             value.id = merged.id;
-            return merged.id;
+            return merged;
+        }else{
+            value.persist();
         }
-        return value.id;
+        return value;
     }
 
     @Transactional

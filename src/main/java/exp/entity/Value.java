@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import exp.pasted.JsonBinaryType;
 import exp.queue.KahnDagSort;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
+import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.Type;
@@ -30,7 +31,7 @@ public class Value extends PanacheEntity {
     public int idx;
 
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY   )
     @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "node_id")
     @JsonIdentityReference(alwaysAsId = true)
     public Node node;
@@ -44,6 +45,7 @@ public class Value extends PanacheEntity {
     @Column(name = "created_at", updatable = false) // updatable = false ensures it's set only once
     private LocalDateTime createdAt;
 
+    public Long getId(){return id;}
 
     //cannot cascade delete becasue this entity "owns" the reference to the parent values
     @ManyToMany(cascade = { CascadeType.PERSIST, CascadeType.MERGE }, fetch = FetchType.LAZY )

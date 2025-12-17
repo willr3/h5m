@@ -42,7 +42,7 @@ public class AddJq implements Callable<Integer> {
             }
             foundGroup =  nodeGroupService.byName(groupName);
             if(foundGroup == null){
-                System.out.println("could not find "+groupName);
+                System.err.println("could not find "+groupName);
                 groupName = null;
             }
         }while(groupName == null && H5m.consoleAttached());

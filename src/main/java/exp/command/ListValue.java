@@ -139,7 +139,7 @@ public class ListValue implements Callable<Integer> {
                             return found.toString();
                         }
 
-                    }, v -> v.node.id)));
+                    }, v -> v.node.getId())));
         }
         return 0;
     }

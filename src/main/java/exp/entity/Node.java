@@ -117,6 +117,8 @@ public abstract class Node extends PanacheEntity implements Comparable<Node> {
         this.operation = operation;
     }
 
+    public Long getId(){return this.id;}
+
     public String getFqdn(){
         return (group!=null?group.name+FQDN_SEPARATOR:"")+(originalGroup!=null?originalGroup.name+FQDN_SEPARATOR:"")+name;
     }

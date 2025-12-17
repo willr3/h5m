@@ -103,18 +103,15 @@ public class FolderService {
     }
 
 
+    @Transactional
     public Json structure(Folder folder) {
         Json fullStructure = Json.typeStructure(new Json(false));
-        List<Value> uploads = valueService.getValues(folder.group.root);
+        folder = Folder.findById(folder.id); // deal with detached entity
+        Node root = folder.group.root;
+        List<Value> uploads = valueService.getValues(root);
         for(Value upload : uploads){
-            try {
-                File f = Files.createTempFile("h5m", "json").toFile();
-                valueService.writeToFile(upload.id, f.getPath());
-                fullStructure.add(Json.fromFile(f.getPath()));
-                f.delete();
-            }catch (IOException e) {
-                System.err.println("error trying to create temporary file for value="+upload.id+"\n"+e.getMessage());
-            }
+            Json json = Json.fromJsonNode(upload.data);
+            fullStructure.add(json);
         }
         return fullStructure;
     }
@@ -133,7 +130,7 @@ public class FolderService {
         for(Value rootValue: rootValues){
             folder.group.sources.forEach(source -> {
                 workExecutor.getWorkQueue().addWork(
-                        new Work(source,source.sources,List.of(rootValue))
+                        new Work(source,new ArrayList<>(source.sources),List.of(rootValue))
                 );
             });
         }
@@ -141,10 +138,12 @@ public class FolderService {
     @Transactional
     public void upload(Folder folder,String path,JsonNode data){
         folder = Folder.findById(folder.id); // deal with detached entity
+        folder.group.sources.size();//deal with lazy init
         Value newValue = new Value(folder,folder.group.root,data);
         valueService.create(newValue);
         WorkQueue workQueue = workExecutor.getWorkQueue();
         //List.copyOf is a hack to get around ConcurrentModificationException that is likely due to using entity list and panache setSources
+
         List.copyOf(folder.group.sources).forEach(source -> {
             Work newWork = new Work(source,new ArrayList<>(source.sources),List.of(newValue));
             workService.create(newWork);
