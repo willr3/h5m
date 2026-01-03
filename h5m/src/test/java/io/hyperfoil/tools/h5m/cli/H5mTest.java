@@ -34,6 +34,46 @@ public class H5mTest {
             } else{ }
         });
     }
+
+
+    @Test
+    public void qsb_jq(QuarkusMainLauncher launcher){
+        String testName = StackWalker.getInstance()
+                .walk(s -> s.skip(0).findFirst())
+                .get()
+                .getMethodName();
+        List<LaunchResult> results = run(launcher,
+                new String[]{"add","folder",testName},
+                new String[]{"add","jq","to",testName,"runtimeName","[.results | to_entries[] | .key]"},
+                new String[]{"add","jq","to",testName,"rssStartup","[.results | to_entries[] | .key]"},
+                new String[]{"add","jq","to",testName,"maxRss","[.results[].load.avMaxRss]"},
+                new String[]{"add","jq","to",testName,"avBuildTime","[.results[].build.avBuildTime]"},
+                new String[]{"add","jq","to",testName,"avTimeToFirstRequest","[.results[].startup.avStartTime]"},
+                new String[]{"add","jq","to",testName,"avThroughput","[.results[].load.avThroughput]"},
+                new String[]{"add","jq","to",testName,"rssFirstRequest","[.results[].rss.avFirstRequestRss]"},
+                new String[]{"add","jq","to",testName,"maxThroughputDensity","[.results[].load.maxThroughputDensity]"},
+                new String[]{"add","jq","to",testName,"buildId",".env.BUILD_ID"},
+                new String[]{"add","jq","to",testName,"buildUrl",".env.BUILD_URL"},
+                new String[]{"add","jq","to",testName,"quarkusVersion",".config.QUARKUS_VERSION"},
+                new String[]{"add","jq","to",testName,"springVersion",".config.SPRING_BOOT_VERSION"},
+                new String[]{"add","js","to",testName,"dataset","function* dataset({runtimeName, rssStartup, maxRss, avBuildTime, avTimeToFirstRequest, avThroughput, rssFirstRequest, maxThroughputDensity, buildId, buildUrl, quarkusVersion, springVersion}){ var map = runtimeName.map((name, i) => ({ runtime: name.split('-')[0], buildType: name.split('-')[1], rssStartup: rssStartup[i], maxRss: maxRss[i], avBuildTime: avBuildTime[i], avTimeToFirstRequest: avTimeToFirstRequest[i], avThroughput: avThroughput[i], rssFirstRequest: rssFirstRequest[i], maxThroughputDensity: maxThroughputDensity[i], buildId: buildId, buildUrl: buildUrl, version: ((name.split('-')[0].substring(0, 6) == 'spring' ) ? springVersion: quarkusVersion ) })) for (var item of map){ yield item; } }"},
+                new String[]{"add","jq","to",testName,"avBuildTime","{dataset}:.avBuildTime"},
+                new String[]{"add","jq","to",testName,"avThroughput","{dataset}:.avThroughput"},
+                new String[]{"add","jq","to",testName,"avTimeToFirstRequest","{dataset}:.avTimeToFirstRequest"},
+                new String[]{"add","jq","to",testName,"build","{dataset}:.buildId"},
+                new String[]{"add","jq","to",testName,"buildType","{dataset}:.buildType"},
+                new String[]{"add","jq","to",testName,"maxRss","{dataset}:.maxRss"},
+                new String[]{"add","jq","to",testName,"maxThroughputDensity","{dataset}:.maxThroughputDensity"},
+                new String[]{"add","jq","to",testName,"rssFirstRequest","{dataset}:.rssFirstRequest"},
+                new String[]{"add","jq","to",testName,"rssStartup","{dataset}:.rssStartup"},
+                new String[]{"add","jq","to",testName,"runtime","{dataset}:.runtime"},
+                new String[]{"add","jq","to",testName,"version","{dataset}:.version"}
+        );
+        results.forEach(result->{
+            assertEquals(0,result.exitCode(),result.getOutput());
+        });
+    }
+
     @Test
     public void list(QuarkusMainLauncher launcher) {
         LaunchResult result = launcher.launch("list");
@@ -290,6 +330,26 @@ public class H5mTest {
     }
 
     @Test
+    public void closure_path(QuarkusMainLauncher launcher) throws IOException {
+        String testName = StackWalker.getInstance()
+                .walk(s -> s.skip(0).findFirst())
+                .get()
+                .getMethodName();
+        List<LaunchResult> results = run(launcher,
+                new String[]{"add","folder",testName},
+                new String[]{"add","jq","to",testName,"foo",".foo"},
+                new String[]{"add","jq","to",testName,"bar","{foo}:.bar"},
+                new String[]{"add","jq","to",testName,"biz","{bar}:.biz"},
+                new String[]{"list",testName,"nodes"}
+        );
+
+        results.forEach(result->{
+            assertEquals(0,result.exitCode(),result.getOutput());
+        });
+
+    }
+
+    @Test
     public void upload_list_values(QuarkusMainLauncher launcher) throws IOException {
         String testName = StackWalker.getInstance()
                 .walk(s -> s.skip(0).findFirst())
@@ -455,6 +515,47 @@ public class H5mTest {
         assertTrue(result.getOutput().contains(" {\"biz\":\"buz\"} "),"result should contain .bar:" +result.getOutput());
         assertTrue(result.getOutput().contains(" buz "),"result should contain .bar:" +result.getOutput());
     }
+
+    @Test
+    public void upload_split(QuarkusMainLauncher launcher) throws IOException {
+        String testName = StackWalker.getInstance()
+                .walk(s -> s.skip(0).findFirst())
+                .get()
+                .getMethodName();
+        Path folder = Files.createTempDirectory("h5m");
+        Path filePath = Files.writeString(Files.createTempFile(folder,"h5m",".json").toAbsolutePath(),
+                """
+                {
+                  "foo":[
+                    {
+                      "name": "primero",
+                      "bar": {
+                        "biz": ["one","first"]
+                      }
+                    },{
+                      "name": "segundo",
+                      "bar": {
+                        "biz": ["two","second"]
+                      }
+                    }
+                  ]
+                }
+                """
+        );
+        //filePath.toFile().deleteOnExit();
+        List<LaunchResult> results = run(launcher,
+                new String[]{"add","folder",testName},
+                new String[]{"add","jq","to",testName,"foo",".foo[]"},//this should act like a dataset
+                new String[]{"add","jq","to",testName,"name","{foo}:.name"},
+                new String[]{"upload",folder.toString(),"to",testName},
+                new String[]{"list","value","from",testName}
+        );
+        results.forEach(result->{
+            assertEquals(0,result.exitCode(),result.getOutput());
+        });
+    }
+
+
     @Test
     public void upload_list_values_by_node(QuarkusMainLauncher launcher) throws IOException {
         String testName = StackWalker.getInstance()

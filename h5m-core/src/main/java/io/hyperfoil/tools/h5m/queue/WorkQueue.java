@@ -93,11 +93,15 @@ public class WorkQueue implements BlockingQueue<Runnable> {
         Runnable runnable = runnables.get(index);
         if(runnable instanceof WorkRunner){
             WorkRunner workRunner = (WorkRunner) runnable;
-            boolean blockedByActiveWork = activeWork.stream().anyMatch(w->workRunner.work.dependsOn(w));
+            boolean blockedByActiveWork = activeWork.stream()
+                    .anyMatch(w->workRunner.work.dependsOn(w));
+                    //.anyMatch(w->workService.dependsOn(workRunner.work,w));
+            //TODO is workService better performant than work.dependsOn?
             boolean blockedByPending = runnables.stream()
                     .filter(v->v instanceof WorkRunner)
                     .map(w->((WorkRunner) w).work)
                     .anyMatch(w->workRunner.work.dependsOn(w));
+                    //.anyMatch(w->workService.dependsOn(workRunner.work,w));
             if(blockedByActiveWork || blockedByPending){
                 return 1;
             }
@@ -157,16 +161,17 @@ public class WorkQueue implements BlockingQueue<Runnable> {
      */
     public List<Runnable> getRequiredPrecedingRunnables(Runnable runnable){
         int index = runnables.indexOf(runnable);
-        if(runnable instanceof WorkRunner){
-            WorkRunner workRunner = (WorkRunner) runnable;
-            return runnables.stream().filter(v->
-                    v instanceof WorkRunner && workRunner.work.dependsOn(((WorkRunner) v).work)
+        List<Runnable> rtrn;
+        if(runnable instanceof WorkRunner workRunner){
+            rtrn = runnables.stream().filter(v->
+                    v instanceof WorkRunner bRunner && /*workService.dependsOn(workRunner.work,bRunner.work)*/ workRunner.work.dependsOn(bRunner.work)
             ).toList();
         }else if(index > 0){
-                return List.of(runnables.get(index-1));
+                rtrn = List.of(runnables.get(index-1));
         }else{
-            return Collections.emptyList();
+            rtrn = Collections.emptyList();
         }
+        return rtrn;
     }
     private void sort(){
         runnables = KahnDagSort.sort(runnables,this::getRequiredPrecedingRunnables);
@@ -178,6 +183,9 @@ public class WorkQueue implements BlockingQueue<Runnable> {
             int c = runnables.size();
             works.forEach(w->{
                 if(!isPending(w)){
+                    if(w.id == null){
+                        workService.create(w);
+                    }
                     pendingWork.add(w);
                     runnables.add(new WorkRunner(w, this, nodeService, valueService, workService));
                     assert isPending(w);
@@ -223,6 +231,9 @@ public class WorkQueue implements BlockingQueue<Runnable> {
             if(isPending(workRunner.work)){
                 return false;//reject new work that is already pending
             }else {
+                if(workRunner.work.id==null){
+                    workService.create(workRunner.work);
+                }
                 pendingWork.add(workRunner.work);
             }
         }
@@ -430,6 +441,9 @@ public class WorkQueue implements BlockingQueue<Runnable> {
                     //do not add something already in queue
                 }else{
                     if( r instanceof WorkRunner workRunner){
+                        if(workRunner.work.id == null){
+                            workService.create(workRunner.work);
+                        }
                         pendingWork.add(workRunner.work);
                     }
                     runnables.add(r);

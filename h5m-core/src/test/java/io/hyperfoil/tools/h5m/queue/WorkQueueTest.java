@@ -40,7 +40,7 @@ public class WorkQueueTest extends FreshDb {
 
         assertEquals(work1.hashCode(),work2.hashCode(),"both worth should have the same hashcode despite different values");
 
-        WorkQueue q = new WorkQueue(null,null,null);
+        WorkQueue q = new WorkQueue(null,null,workService);
 
         boolean added = q.addWork(work1);
         assertTrue(added,"first work should be added");
@@ -51,7 +51,7 @@ public class WorkQueueTest extends FreshDb {
 
     @Test
     public void reject_duplicates() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
-        WorkQueue q = new WorkQueue(null,null,null);
+        WorkQueue q = new WorkQueue(null,null,workService);
         tm.begin();
         RootNode root = new RootNode();
         root.persist();
@@ -76,7 +76,7 @@ public class WorkQueueTest extends FreshDb {
 
     @Test
     public void poll_null_until_source_completes() throws InterruptedException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
-        WorkQueue q = new WorkQueue(null,null,null);
+        WorkQueue q = new WorkQueue(null,null,workService);
 
         tm.begin();
         Node aNode = new JqNode("a");
@@ -112,7 +112,7 @@ public class WorkQueueTest extends FreshDb {
 
     @Test
     public void poll_return_first_non_blocked() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
-        WorkQueue q = new WorkQueue(null,null,null);
+        WorkQueue q = new WorkQueue(null,null,workService);
 
         tm.begin();
         Node aNode = new JqNode("a");
@@ -136,6 +136,7 @@ public class WorkQueueTest extends FreshDb {
         q.addWork(cWork);
 
         Runnable firstRunnable = q.poll();
+        assertNotNull(firstRunnable);
         assertFalse(q.isPending(aWork),"a should be removed from the q");
 
         Runnable polled = q.poll();

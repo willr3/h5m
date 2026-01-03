@@ -73,6 +73,37 @@ public class NodeService {
     }
 
     @Transactional
+    public boolean dependsOnCte(Node a,Node b){
+        int count = em.createNativeQuery("""
+            with recursive ancestor(vid) as (
+                select ne.child_id as nid 
+                    from node_edge ne where ne.child_id = :nodeAId
+                union
+                select ne.parent_id as nid
+                    from node_edge ne join ancestor a on a.vid = ne.child_id
+                    where ne.depth = 1 --adding depth check becasue of closure use in node_edge table
+            )
+            select 1 from ancestor where vid = :nodeBId
+        """).setParameter("nodeAId",a.getId())
+            .setParameter("nodeBId",b.getId())
+            .getResultList().size();
+
+        return  count > 0;
+    }
+
+    @Transactional
+    public boolean dependsOn(Node a,Node b){
+        int count = em.createNativeQuery(
+            """
+            select 1 from node_edge where child_id=:nodeAId and parent_id=:nodeBId and child_id != parent_id
+            """)
+                .setParameter("nodeAId",a.getId())
+                .setParameter("nodeBId",b.getId())
+                .getResultList().size();
+        return count > 0;
+    }
+
+    @Transactional
     public Node read(long id){
         return Node.findById(id);
     }
@@ -85,7 +116,7 @@ public class NodeService {
             Node existing = Node.findById(node.id);
             if(!existing.name.equals(node.name)){
                 List<Node> toChange = em.createNativeQuery(
-                        "select n.* from node n join node_edge ne on n.id = ne.child_id where ne.parent_id=? and n.type='ecma'"
+                        "select n.* from node n join node_edge ne on n.id = ne.child_id where ne.parent_id=? and n.type='ecma' and ne.depth = 1"
                 ,Node.class).setParameter(1,node.id).getResultList();
                 Map<String,String> changes = Map.of(existing.name,node.name);
                 for(Node n : toChange){
@@ -102,8 +133,10 @@ public class NodeService {
 
 
     @Transactional
-    public List<Node> getDependentNodes(Node n){
-        List<Node> rtrn = Node.list("SELECT DISTINCT n FROM Node n JOIN n.sources s WHERE s.id = ?1",n.id);
+    public List<Node> getDirectDependents(Node n){
+        List<Node> rtrn = em.createNativeQuery("""
+            select * from node where id in (select child_id from node_edge where parent_id = :parentId and depth = 1)
+        """,Node.class).setParameter("parentId",n.getId()).getResultList();
         rtrn.forEach(r->r.hashCode());//lazy hack
         return rtrn;
     }
@@ -113,7 +146,7 @@ public class NodeService {
     public void delete(Node node){
         if(node.id!=null) {
             //remove nodes that depend on this or just remove the reference?
-            getDependentNodes(node).forEach(this::delete);
+            getDirectDependents(node).forEach(this::delete);
             Node.deleteById(node.id);
         }
     }
@@ -140,7 +173,6 @@ public class NodeService {
                 ));
 
         int maxNodeValuesLength = nodeValues.values().stream().map(Collection::size).max(Integer::compareTo).orElse(0);
-
         //the two cases where we do not need to worry about MultiIterationType
         if(maxNodeValuesLength == 1 || node.sources.size() == 1){//if we don't need to worry about NxN or byLength
             //to ensure sequence

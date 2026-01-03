@@ -5,6 +5,8 @@ import io.hyperfoil.tools.h5m.entity.node.RootNode;
 import io.hyperfoil.tools.h5m.queue.KahnDagSort;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import jakarta.persistence.*;
+import jakarta.persistence.CascadeType;
+import org.hibernate.annotations.*;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -16,6 +18,7 @@ import java.util.stream.Collectors;
 
 )
 @Inheritance(strategy = InheritanceType.SINGLE_TABLE)
+@EntityListeners( H5mEntityListener.class )
 @DiscriminatorColumn(name = "type", discriminatorType =  DiscriminatorType.STRING)
 public abstract class Node extends PanacheEntity implements Comparable<Node> {
 
@@ -51,6 +54,18 @@ public abstract class Node extends PanacheEntity implements Comparable<Node> {
             inverseJoinColumns = @JoinColumn(name = "parent_id")
     )
     @OrderColumn(name = "idx")
+    @SQLInsert(sql="""
+        with cte (child_id, idx, parent_id) as ( values (?, ?, ?) ) 
+        insert into node_edge (parent_id,child_id,idx,depth)
+        select p.parent_id, c.child_id, cte.idx, p.depth+c.depth+1
+        from node_edge p, node_edge c, cte
+        where c.parent_id = cte.child_id and p.child_id = cte.parent_id
+        and not exists (select 1 from node_edge ex where ex.child_id = c.child_id and ex.parent_id = p.parent_id and ex.depth = p.depth+c.depth+1)
+        """)
+    @SQLJoinTableRestriction("depth = 1")
+    @SQLDeleteAll(sql = """
+        delete from node_edge where child_id = ? and child_id != parent_id
+        """)
     public List<Node> sources;
 
     public List<Node> getSources() {return sources;}
@@ -179,27 +194,17 @@ public abstract class Node extends PanacheEntity implements Comparable<Node> {
         return result;
     }*/
 
-    // Optimization: Zero Heap Allocation (Uses Stack instead of ArrayDeque)
     public boolean dependsOn(Node source) {
-        // 1. Safety check
         if (source == null || this.sources == null) return false;
 
-        // 2. Iterate through parents (Enhanced For-Loop allocates 0 or 1 tiny iterator)
         for (Node parent : this.sources) {
-
-            // Step A: Check the immediate parent (Fast ID match)
-            if (Objects.equals(parent.id, source.id)) {
+            if (Objects.equals(parent.getId(), source.getId())) {
                 return true;
             }
-
-            // Step B: Dig deeper (Recursion)
-            // This replaces "queue.add". The CPU pauses here and dives down.
             if (parent.dependsOn(source)) {
                 return true;
             }
         }
-
-        // 3. If we checked everyone and found nothing
         return false;
     }
 

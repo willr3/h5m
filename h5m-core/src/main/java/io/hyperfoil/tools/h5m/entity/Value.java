@@ -7,8 +7,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.persistence.*;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.JdbcTypeCode;
+import jakarta.persistence.CascadeType;
+import org.hibernate.annotations.*;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
 @Table(
         name = "value"
 )
+@EntityListeners( H5mEntityListener.class )
 public class Value extends PanacheEntity {
 
     @Column(name = "data", columnDefinition = "JSONB")
@@ -63,6 +64,17 @@ public class Value extends PanacheEntity {
             inverseJoinColumns = @JoinColumn(name = "parent_id")
     )
     @OrderColumn(name = "idx")
+    @SQLInsert(sql="""
+        with cte (child_id, idx, parent_id) as ( values (?, ?, ?) ) 
+        insert into value_edge (parent_id,child_id,idx,depth)
+        select distinct p.parent_id, c.child_id, cte.idx, p.depth+c.depth+1
+        from value_edge p, value_edge c, cte
+        where c.parent_id = cte.child_id and p.child_id = cte.parent_id
+        """)
+    @SQLDeleteAll(sql = """
+        delete from value_edge where child_id = ? and parent_id != child_id
+        """)
+    @SQLJoinTableRestriction("depth = 1")
     public List<Value> sources;
 
     public Value(){

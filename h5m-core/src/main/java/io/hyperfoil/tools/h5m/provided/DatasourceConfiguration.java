@@ -2,6 +2,7 @@ package io.hyperfoil.tools.h5m.provided;
 
 import io.agroal.api.AgroalDataSource;
 import io.agroal.api.configuration.supplier.AgroalPropertiesReader;
+import io.quarkus.agroal.runtime.OpenTelemetryAgroalDataSource;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Alternative;
@@ -14,9 +15,8 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -24,9 +24,6 @@ import java.util.Map;
 
 @ApplicationScoped
 public class DatasourceConfiguration {
-
-    @ConfigProperty(name = "h5m.foo",defaultValue = "1")
-    int foo;
 
     @ConfigProperty(name = "quarkus.datasource.db-kind",defaultValue = "sqlite")
     String dbKind;
@@ -68,7 +65,56 @@ public class DatasourceConfiguration {
         return rtrn;
     }
 
-    public void initDb(Connection connection){
+    public void initDb(Connection connection) {
+        switch(dbKind){
+            case "sqlite":
+                initSqlite(connection);
+                break;
+            case "postgresql":
+                initPostgresql(connection);
+                break;
+        }
+        try(Statement statement = connection.createStatement()){
+            //create node_edge before Hibernate so we have the extra column(s)
+            statement.executeUpdate(
+                """
+                CREATE TABLE IF NOT EXISTS node_edge (
+                    child_id bigint not null,
+                    parent_id bigint not null,
+                    idx integer not null, 
+                    depth int not null default 0,
+                    primary key (child_id, parent_id, idx, depth), -- added idx,depth to pk due to duplication with multiple parents
+                    FOREIGN KEY (child_id) REFERENCES node(id),
+                    FOREIGN KEY (parent_id) REFERENCES node(id)
+                );
+                CREATE TABLE IF NOT EXISTS value_edge (
+                    child_id bigint not null,
+                    parent_id bigint not null,
+                    idx integer not null,
+                    depth int not null default 0,
+                    primary key (child_id,parent_id, idx, depth),
+                    FOREIGN KEY (child_id) REFERENCES value(id),
+                    FOREIGN KEY (parent_id) REFERENCES value(id)
+                );
+                """
+            );
+        }catch (SQLException e){
+            e.printStackTrace();
+            //org.sqlite.SQLiteException: [SQLITE_ERROR] SQL error or missing database (no such table: node_edge)
+            //org.sqlite.SQLiteException: [SQLITE_ERROR] SQL error or missing database (duplicate column name: depth)
+        }
+//        try(Statement statement = connection.createStatement()){
+//            statement.executeUpdate(
+//                    """
+//                    alter table value_edge add column depth int not null default 0;
+//                    """
+//            );
+//        }catch (SQLException e){
+//            //likely due to the column already existing
+//        }
+
+    }
+    public void initSqlite(Connection connection){
         try (Statement statement = connection.createStatement()) {
             //tuning from https://phiresky.github.io/blog/2020/sqlite-performance-tuning/
             statement.executeUpdate(
@@ -76,6 +122,8 @@ public class DatasourceConfiguration {
             pragma journal_mode = WAL;
             pragma synchronous = normal;
             pragma temp_store = memory;
+            pragma foreign_keys = on;
+            
             """);
 /*            try(ResultSet rs = statement.executeQuery("SELECT name FROM sqlite_master")){
                 while(rs.next()){
@@ -86,6 +134,7 @@ public class DatasourceConfiguration {
             throw new RuntimeException(e);
         }
     }
+    public void initPostgresql(Connection connection){}
 
     public void closeAgroalDataSource(@Disposes AgroalDataSource dataSource){
         if(dbKind.equals("postgresql")){
@@ -124,13 +173,10 @@ public class DatasourceConfiguration {
         AgroalDataSource ds  = AgroalDataSource.from(new AgroalPropertiesReader()
                 .readProperties(props)
                 .get());
-        if("sqlite".equalsIgnoreCase(dbKind)){
-            try(Connection connection = ds.getConnection()){
-                initDb(connection);
-            }
+        try(Connection connection = ds.getConnection()){
+            initDb(connection);
         }
         return ds;
     }
-
 
 }

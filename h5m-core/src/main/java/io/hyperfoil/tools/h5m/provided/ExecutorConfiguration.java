@@ -37,7 +37,7 @@ public class ExecutorConfiguration {
     @Inject
     ValueService valueService;
 
-    @Inject @ConfigProperty(name = "h5m.work.maximumPoolSize",defaultValue = "10")
+    @Inject @ConfigProperty(name = "h5m.work.maximumPoolSize",defaultValue = "1")
     int maximumPoolSize;
     @Inject @ConfigProperty(name = "h5m.work.keepAlive",defaultValue = "10")
     int keepAlive;

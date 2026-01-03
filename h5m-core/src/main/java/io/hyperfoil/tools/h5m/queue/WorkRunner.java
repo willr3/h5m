@@ -76,7 +76,7 @@ public class WorkRunner implements Runnable {
             List<Value> calculated = nodeService.calculateValues(work.activeNode,work.sourceValues);
 
             //if the activeNode is a sqlpath then the entity is already persisted
-            boolean allPersisted = calculated.stream().allMatch(v->v.getId()!=null);
+            //boolean allPersisted = calculated.stream().allMatch(v->v.getId()!=null);
             List<Value> newOrUpdated = new ArrayList<>();
             for(Value v : work.sourceValues) {
                 Map<String, Value> descendants = valueService.getDescendantValueByPath(v, work.activeNode);
@@ -116,12 +116,14 @@ public class WorkRunner implements Runnable {
             //we need to trigger more calculations? perhaps for a recalculation we do?
             if(!newOrUpdated.isEmpty()){
                 if(work.activeNode!=null){
-                    List<Node> dependentNodes = nodeService.getDependentNodes(work.activeNode);
-
+                    List<Node> dependentNodes = nodeService.getDirectDependents(work.activeNode);
                     dependentNodes.forEach(node->{
                         Work newWork = new Work(node,node.sources,work.sourceValues);
                         //workService.create(newWork);
                         boolean added = workQueue.addWork(newWork);
+                        if(added){
+                            System.out.println("!!!!!!!!!!!!!!!!\n!!  added work "+newWork+"\n!!!!!!!!!!!!!!!!");
+                        }
                     });
                 }
             }

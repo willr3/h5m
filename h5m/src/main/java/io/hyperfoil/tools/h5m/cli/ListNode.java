@@ -36,11 +36,12 @@ public class ListNode implements Callable<Integer> {
             return 1;
         }
         System.out.println(
-            ListCmd.table(80,nodeGroup.sources,List.of("name","type","fqdn","operation"),
+            ListCmd.table(80,nodeGroup.sources,List.of("name","type","fqdn","operation","encoding"),
                 List.of(n->n.name,
                 n->n.type,
                 Node::getFqdn,
-                n->n.operation
+                n->n.operation,
+                n->n.getOperationEncoding()
                 )
             )
         );

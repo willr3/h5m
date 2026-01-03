@@ -1,9 +1,12 @@
 package io.hyperfoil.tools.h5m.entity;
 
+import io.hyperfoil.tools.h5m.FreshDb;
 import io.hyperfoil.tools.h5m.entity.node.JqNode;
+import io.hyperfoil.tools.h5m.entity.node.RootNode;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.*;
 import org.junit.jupiter.api.Test;
 
 import java.util.*;
@@ -11,10 +14,13 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 @QuarkusTest
-public class NodeTest {
+public class NodeTest extends FreshDb {
 
     @Inject
     EntityManager em;
+
+    @Inject
+    TransactionManager tm;
 
     @Test
     public void compareTo(){
@@ -101,6 +107,48 @@ public class NodeTest {
         Node n1 = new JqNode("n1");
         n1.sources=List.of(n1);
         assertTrue(n1.isCircular(),"n1 should be circular");
+    }
+
+    @Test
+    public void create_node() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        tm.begin();
+        Node root = new JqNode("root");
+        root.persist();
+        tm.commit();
+    }
+
+    @Test
+    public void multi_generation_dependency() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        try {
+            tm.begin();
+            Node root = new RootNode();
+            root.persist();
+            Node a = new JqNode("a");
+            a.sources = List.of(root);
+            a.persist();
+            Node ab = new JqNode("ab");
+            ab.sources = List.of(a);
+            ab.persist();
+            Node ac = new JqNode("ac");
+            ac.sources = List.of(a);
+            ac.persist();
+            Node abc = new JqNode("abc");
+            abc.sources = List.of(ab, ac );
+            abc.persist();
+            tm.commit();
+
+            Node found = Node.findById(abc.getId());
+            assertNotNull(found);
+
+            System.out.println(found.sources);
+
+            assertEquals(2,found.sources.size(),"expect to find 2 sources: "+found.sources);
+
+        }catch(Exception e){
+            fail(e.getMessage(),e);
+        }
+
+
     }
 
 

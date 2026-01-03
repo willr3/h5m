@@ -46,7 +46,7 @@ public class Work  extends PanacheEntity implements Comparable<Work>{
     @JoinColumn(name = "active_node_id")
     public Node activeNode;
 
-    boolean cumulative = false;
+    public boolean cumulative = false;
 
 
     public Work(){

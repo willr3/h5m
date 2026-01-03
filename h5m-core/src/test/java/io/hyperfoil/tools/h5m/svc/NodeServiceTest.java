@@ -135,6 +135,46 @@ public class NodeServiceTest extends FreshDb {
         assertEquals(new TextNode("foo"),data);
         System.out.println(data);
     }
+    @Test
+    public void dependsOnCte() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        Node rootNode = new RootNode();
+        rootNode.name="root";
+        rootNode.persist();
+        JqNode first = new JqNode("first",".first",rootNode);
+        first.persist();
+        JqNode second = new JqNode("second",".second",first);
+        second.persist();
+        JqNode third = new JqNode("third",".third",second);
+        third.persist();
+        tm.commit();
+
+        assertTrue(nodeService.dependsOnCte(third,first),"third should depend on first");
+        assertTrue(nodeService.dependsOnCte(second,first),"second depends on first");
+        assertFalse(nodeService.dependsOnCte(first,second),"first should not depend on second");
+        assertFalse(nodeService.dependsOnCte(first,third),"first should not depend on third");
+    }
+    @Test
+    public void dependsOn() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        Node rootNode = new RootNode();
+        rootNode.name="root";
+        rootNode.persist();
+        JqNode first = new JqNode("first",".first",rootNode);
+        first.persist();
+        JqNode second = new JqNode("second",".second",first);
+        second.persist();
+        JqNode third = new JqNode("third",".third",second);
+        third.persist();
+        tm.commit();
+
+        assertTrue(nodeService.dependsOn(third,first),"third should depend on first");
+        assertTrue(nodeService.dependsOn(second,first),"second depends on first");
+        assertFalse(nodeService.dependsOn(first,second),"first should not depend on second");
+        assertFalse(nodeService.dependsOn(first,third),"first should not depend on third");
+    }
 
 
     @Test
@@ -305,16 +345,21 @@ public class NodeServiceTest extends FreshDb {
     }
 
     @Test
-    public void getDependentNodes() throws HeuristicRollbackException, SystemException, HeuristicMixedException, RollbackException, NotSupportedException {
+    public void getDirectDependents() throws HeuristicRollbackException, SystemException, HeuristicMixedException, RollbackException, NotSupportedException {
         tm.begin();
         RootNode root = new RootNode();
+        root.persist();
         Node n1 = nodeService.create(new JqNode("n1","n1",root));
+        n1.persist();
         Node n11 = nodeService.create(new JqNode("n11","n11",n1));
+        n11.persist();
         Node n12 = nodeService.create(new JqNode("n12","n12",n1));
+        n12.persist();
         Node n121 = nodeService.create(new JqNode("n121","n121",n12));
+        n121.persist();
         tm.commit();
 
-        List<Node> found = nodeService.getDependentNodes(n1);
+        List<Node> found = nodeService.getDirectDependents(n1);
         assertNotNull(found);
         assertEquals(2,found.size(),"should find two nodes: "+found);
         assertTrue(found.contains(n11),"should find node11 "+n11+" : "+found);
@@ -512,11 +557,6 @@ public class NodeServiceTest extends FreshDb {
             {"foo":{"uno":"one","dos":"two"}}
             """);
         v1.node = upload;
-        v1.data = new ObjectMapper().readTree(
-            """
-            {"foo":{"uno":"one","dos":"two"}}
-            """
-        );
         v1.persist();
 
         Node foo = new JqNode();
@@ -611,16 +651,14 @@ public class NodeServiceTest extends FreshDb {
         Node upload = new JqNode("upload");//should be a different type of node?
         upload.persist();
 
-        Value v1 = new Value();
-        v1.data=mapper.readTree(                """
+        Value v1 = new Value(null,upload,mapper.readTree(                """
                 {
                   "foo": [ { "key": "one"}, { "key" : "two" } ],
                   "bar": [ { "k": "uno" }, { "k": "dos"} ],
                   "biz": "cat",
                   "buz": "dog"
                 }
-                """);
-        v1.node = upload;
+                """));
         v1.persist();
 
         Node foo = new JqNode("foo",".foo[]",upload);

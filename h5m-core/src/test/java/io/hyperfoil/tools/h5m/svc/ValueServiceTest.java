@@ -79,6 +79,38 @@ public class ValueServiceTest extends FreshDb {
         assertNotNull(found);
     }
 
+    @Test
+    public void dependsOn() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        Node rootNode = new RootNode();
+        rootNode.name="root";
+        rootNode.persist();
+        Value rootValue = new Value(null,rootNode,new TextNode("root"));
+        rootValue.persist();
+        JqNode first = new JqNode("first",".first",rootNode);
+        first.persist();
+        Value firstValue = new Value(null,first,new TextNode("first"));
+        firstValue.sources=List.of(rootValue);
+        firstValue.persist();
+        JqNode second = new JqNode("second",".second",first);
+        second.persist();
+        Value secondValue = new Value(null,second,new TextNode("second"));
+        secondValue.sources=List.of(firstValue);
+        secondValue.persist();
+        JqNode third = new JqNode("third",".third",second);
+        third.persist();
+        Value thirdValue = new Value(null,third,new TextNode("third"));
+        thirdValue.sources=List.of(secondValue);
+        thirdValue.persist();
+        tm.commit();
+
+        assertTrue(valueService.dependsOn(firstValue,firstValue),"a value should depend on itself");
+        assertTrue(valueService.dependsOn(thirdValue,firstValue),"third should depend on first");
+        assertTrue(valueService.dependsOn(secondValue,firstValue),"second should depend on first");
+        assertFalse(valueService.dependsOn(firstValue,thirdValue),"first should not depend on third");
+
+    }
 
     @Test
     public void lazy_data() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException, JsonProcessingException {
@@ -147,6 +179,8 @@ public class ValueServiceTest extends FreshDb {
         abcValue02.persist();
         tm.commit();
 
+        System.out.println("abValue01.id="+abValue01.id);
+        System.out.println("aNode.id="+aNode.getId());
         List<Value> found =  valueService.getAncestor(abValue01,aNode);
 
         assertNotNull(found);
@@ -662,16 +696,18 @@ public class ValueServiceTest extends FreshDb {
         root.persist();
         Node a = new JqNode("a");
         a.sources=List.of(root);
+        a.persist();
         Node ab = new JqNode("ab");
         ab.sources=List.of(a);
         ab.persist();
         Node ac = new JqNode("ac");
         ac.sources=List.of(a);
+        ac.persist();
         Node abc = new JqNode("abc");
         abc.sources=List.of(ab,ac,a,root);
         abc.persist();
 
-        Value vr = new Value();
+        Value vr = new Value(null,root);
         vr.persist();
         Value va = new Value();
         va.sources=List.of(vr);
@@ -687,18 +723,21 @@ public class ValueServiceTest extends FreshDb {
         vabc.persist();
         tm.commit();
 
-        tm.begin();
+
         try{
+            tm.begin();
             Value found = valueService.byId(vabc.id);
             List<Value> sources = found.sources;
+            int size = sources.size();
+            tm.commit();
             assertNotNull(sources);
-            assertEquals(4, sources.size());
+            assertEquals(4, size);
 
             assertTrue(sources.indexOf(va) < sources.indexOf(vab),"va should come before vab");
             assertTrue(sources.indexOf(va) < sources.indexOf(vac),"va should come before vac");
             assertTrue(sources.indexOf(vr) < sources.indexOf(va),"vr should come before va");
         }finally {
-            tm.commit();
+
         }
 
     }

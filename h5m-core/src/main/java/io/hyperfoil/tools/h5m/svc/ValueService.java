@@ -39,11 +39,9 @@ public class ValueService {
     @Inject
     NodeService nodeService;
 
-
     @Transactional
     public void purgeValues(){
         em.createNativeQuery("delete from Value").executeUpdate();
-
     }
 
     @Transactional
@@ -61,7 +59,10 @@ public class ValueService {
 
     @Transactional
     public List<Value> getDependentNodes(Value v){
-        return Node.list("SELECT DISTINCT v FROM Value v JOIN v.sources s WHERE s.id = ?1",v.id);
+        List<Value> rtrn = em.createNativeQuery("""
+            select * from value where id in (select child_id from value_edge where parent_id = :parentId and depth = 1)
+        """,Value.class).setParameter("parentId", v.id).getResultList();
+        return rtrn;
     }
 
 
@@ -89,7 +90,8 @@ public class ValueService {
      * @param root
      * @return
      */
-    public List<Value> getDescendantValues(Value root){
+    //does not work in closure table impl.
+    public List<Value> getDescendantValuesCte(Value root){
         List<Value> rtrn = new ArrayList<>();
         //noinspection unchecked
         rtrn.addAll(em.createNativeQuery(
@@ -105,13 +107,22 @@ public class ValueService {
         ).setParameter("rootId", root.id).getResultList());
         return rtrn;
     }
+    public List<Value> getDescendantValues(Value root){
+        List<Value> rtrn = new ArrayList<>();
+        rtrn.addAll(em.createNativeQuery(
+            """
+            select v.* from value v JOIN value_edge ve ON v.id = ve.child_id where ve.parent_id = :rootId and ve.depth > 0
+            """,Value.class
+        ).setParameter("rootId",root.id).getResultList());
+        return rtrn;
+    }
 
 
     public List<Value> getDirectDescendantValues(Value root, Node node){
         List<Value> rtrn = new ArrayList<>();
         rtrn.addAll(em.createNativeQuery(
         """
-           SELECT * from Value v RIGHT JOIN value_edge ve ON ve.child_id = v.id WHERE v.node_id = :nodeId AND ve.parent_id = :rootId
+           SELECT v.* from Value v RIGHT JOIN value_edge ve ON ve.child_id = v.id WHERE v.node_id = :nodeId AND ve.parent_id = :rootId AND ve.depth = 1
            """
         ).setParameter("rootId", root.id).setParameter("nodeId",node.id).getResultList());
         return rtrn;
@@ -125,6 +136,7 @@ public class ValueService {
         source = Node.findById(source.id);
         return findMatchingFingerprint(source,source.group.root,fingerprint,null,null,-1,-1,true);
     }
+
     /*
      * Finds the values for a relative node Source where a descendant created the expected fingerprint value, now it works on siblings and cousins
      * we want this to also find sibling and cousin values but that probably requires another traversal
@@ -205,6 +217,19 @@ public class ValueService {
         return findMatchingFingerprint(source,groupBy,fingerprint,sort,null,-1,-1,true);
     }
 
+    @Transactional
+    public boolean dependsOn(Value a, Value b){
+        int count = em.createNativeQuery(
+            """
+            select 1 from value_edge where child_id=:valueAId and parent_id=:valueBId
+            """
+        ).setParameter("valueAId",a.getId())
+                .setParameter("valueBId",b.getId())
+                .getResultList().size();
+        return count > 0;
+    }
+
+
     //TODO I want a way to specify a required ancestor value for the resulting values
     @Transactional
     public List<Value> findMatchingFingerprint(Node rangeNode,Node groupBy,Value fingerprint,Node domainNode, Value domainValue,int limit,int offset,boolean preceedingValues){
@@ -219,10 +244,8 @@ public class ValueService {
         if(ancestorValue!=null){
             sql +=
                 """
-                with recursive valueDescendants(vid) as (
-                    select ve.child_id as vid from value_edge ve where ve.parent_id = :ancestorValueId
-                    union
-                    select ve.child_id as vid from value_edge ve join valueDescendants vd on vd.vid = ve.parent_id
+                with valueDescendants(vid) as (
+                    select ve.child_id as vid from value_edge ve where ve.parent_id = :ancestorValueId and ve.parent_id != ve.child_id
                 ),
                 """;
         }
@@ -230,11 +253,8 @@ public class ValueService {
             case "sqlite"->
                     """
                         ANCESTOR_PREFIX ancestor(vid) as (
-                            select v.id as vid
-                                from value v where v.node_id = :nodeId and v.data = :fingerprint VALUE_ANCESTOR_CRITERIA
-                            union
-                            select v.id as vid
-                                from value v join value_edge ve on v.id = ve.parent_id join ancestor a on a.vid = ve.child_id
+                            select ve.parent_id from value_edge ve join value vc on vc.id = ve.child_id 
+                                    where vc.node_id = :nodeId and ve.depth > 0 and vc.data = :fingerprint VALUE_ANCESTOR_CRITERIA
                         ),
                     """;
             case "postgresql"->
@@ -259,6 +279,11 @@ public class ValueService {
                 case "postgresql"-> "and v.data GTLT cast( :domain as jsonb)";
                 default -> "";
             };
+            //sorter is ancestor_id,sortable value
+            //descendant is child of ancestor_id where node_id = groupBy with sortable
+            //selecting v.node_id = sourceId that is in descendant
+            //sorter = child_id and sourceId = childOf of edge where parent_id = goupBy
+            //select v.* from value v join value_edge ev on v.id = ev.child_id join
             sql += switch (dbKind) {
                 case "sqlite" -> """
                         sorter(vid,sortable) as (
@@ -371,22 +396,14 @@ public class ValueService {
         return rtrn.reversed();
     }
 
+    /* get all ancestors of value that were created by node */
     public List<Value> getAncestor(Value value,Node node){
         List<Value> rtrn = new ArrayList<>();
         rtrn.addAll(em.createNativeQuery("""
-            with recursive ancestor(vid) as (
-                select v.id as vid 
-                    from value v where v.id = :valueId
-                union 
-                select v.id as vid 
-                    from value v join value_edge ve on v.id = ve.parent_id join ancestor a on a.vid = ve.child_id
-            )
-            select v.* from Value v join ancestor a on v.id = a.vid where v.node_id = :nodeId
+        select distinct v.* from Value v join value_edge ve on v.id = ve.parent_id where ve.child_id = :valueId and v.node_id = :nodeId
         """,Value.class).setParameter("nodeId", node.id).setParameter("valueId",value.id).getResultList());
         return rtrn;
     }
-
-
 
     /**
      * returns a json object with the values created by child nodes of the groupBy node.
@@ -400,19 +417,15 @@ public class ValueService {
             switch(dbKind) {
                 case "sqlite" ->
                     """
-                    with recursive tree(id,node_id,root_id,idx,data) as (
-                        select v.id,v.node_id,ve.parent_id as root_id,v.idx,v.data 
-                            from value_edge ve left join value v on ve.child_id = v.id 
-                            where ve.parent_id in (select id from value where node_id = :nodeId)
-                        union
-                        select v.id,v.node_id,t.root_id,v.idx,v.data 
-                            from value v join value_edge ve on v.id = ve.child_id join tree t on ve.parent_id = t.id
-                    ), bynode as (
-                        select node_id,root_id,json_group_array(json(data)) as data 
-                            from tree group by node_id,root_id order by idx
+                    with roots(root_id) as ( select v.id as rootId from value v where v.node_id = :nodeId),
+                    bynode(node_id,root_id,data) as ( 
+                        select node_id,root_id,json_group_array(json(v.data)) as data
+                            from roots r left join value_edge ve on r.root_id = ve.parent_id join value v on v.id = ve.child_id
+                            where ve.depth > 0
+                            group by node_id,root_id order by v.idx
                     )
-                    select json_group_object(n.name,json( ( case when json_array_length(b.data) > 1 then b.data else b.data->0 end))) as data 
-                        from bynode b join node n on b.node_id = n.id group by root_id; 
+                    select json_group_object(n.name,json( ( case when json_array_length(b.data) > 1 then b.data else b.data->0 end))) as data
+                    from bynode b join node n on b.node_id = n.id group by root_id;
                     """;
                 case "postgresql" ->
                     """
@@ -443,6 +456,22 @@ public class ValueService {
     public List<Value> getDescendantValues(Node node){
         List<Value> rtrn = new ArrayList<>();
         rtrn.addAll(em.createNativeQuery(
+            """
+            select distinct v.* 
+            from value v 
+                left join value_edge ve on v.id = ve.child_id 
+                left join value vn on vn.id = ve.parent_id 
+            where vn.node_id = :nodeId and ve.depth > 0
+            """,Value.class
+        ).setParameter("nodeId",node.id).getResultList());
+        return rtrn;
+    }
+
+    @Transactional
+    //not working with closure
+    public List<Value> getDescendantValuesCte(Node node){
+        List<Value> rtrn = new ArrayList<>();
+        rtrn.addAll(em.createNativeQuery(
                 """
                 WITH RECURSIVE sourceRecursive (v_id) AS (
                      SELECT ve.child_id from value_edge ve where ve.parent_id in (select v.id from value v where v.node_id = :nodeId)
@@ -461,7 +490,7 @@ public class ValueService {
      * @return
      */
     @Transactional
-    public List<Value> getDescendantValues(Value root, Node node){
+    public List<Value> getDescendantValuesCte(Value root, Node node){
 
         List<Value> rtrn = new ArrayList<>();
         //noinspection unchecked
@@ -476,6 +505,17 @@ public class ValueService {
                 SELECT distinct * FROM value v JOIN sourceRecursive sr ON v.id = sr.v_id WHERE v.node_id = :nodeId
                 """, Value.class
         ).setParameter("rootId", root.id).setParameter("nodeId",node.id).getResultList());
+        return rtrn;
+    }
+    @Transactional
+    public List<Value> getDescendantValues(Value root, Node node){
+        List<Value> rtrn = new ArrayList<>();
+        rtrn.addAll(em.createNativeQuery(
+            """
+            select distinct v.* from value v JOIN value_edge ve on ve.child_id = v.id where ve.parent_id = :rootId and v.node_id = :nodeId and ve.depth > 0
+            """
+                ,Value.class)
+                .setParameter("rootId",root.id).setParameter("nodeId",node.id).getResultList());
         return rtrn;
     }
 
