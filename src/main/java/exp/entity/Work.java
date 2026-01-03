@@ -6,6 +6,7 @@ import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.Immutable;
 
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 @Entity
@@ -97,10 +98,11 @@ public class Work  extends PanacheEntity implements Comparable<Work>{
     public boolean equals(Object o){
         if(o instanceof Work){
             Work work = (Work)o;
-            boolean sameId = Objects.equals(this.id, work.id);
-            if(!sameId){
-                return false;
-            }
+//          ID could be different for the same scope of work
+//            boolean sameId = Objects.equals(this.id, work.id);
+//            if(!sameId){
+//                return false;
+//            }
             boolean sameNode = Objects.equals(this.activeNode, work.activeNode);
             if(!sameNode){
                 return false;
@@ -141,6 +143,6 @@ public class Work  extends PanacheEntity implements Comparable<Work>{
 
     @Override
     public String toString() {
-        return "Work<"+id+" activeNode="+activeNode+" retry="+retryCount+">";
+        return "Work<"+id+" activeNode=["+activeNode+"] values=["+sourceValues.stream().map(v->""+v.getId()).collect(Collectors.joining(","))+"] retry=["+retryCount+"]>";
     }
 }

@@ -15,10 +15,7 @@ import jakarta.transaction.TransactionScoped;
 import jakarta.transaction.Transactional;
 import org.hibernate.Session;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class WorkRunner implements Runnable {
@@ -116,7 +113,9 @@ public class WorkRunner implements Runnable {
                     List<Node> dependentNodes = nodeService.getDependentNodes(work.activeNode);
                     dependentNodes.forEach(node->{
                         Work newWork = new Work(node,node.sources,work.sourceValues);
+                        workService.create(newWork);
                         workQueue.addWork(newWork);
+
                     });
 
                 }

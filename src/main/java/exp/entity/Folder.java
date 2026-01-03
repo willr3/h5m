@@ -5,7 +5,7 @@ import jakarta.persistence.*;
 
 @Entity
 @Table(
-        name="folder"
+    name="folder"
 )
 public class Folder extends PanacheEntity {
 
@@ -15,9 +15,7 @@ public class Folder extends PanacheEntity {
     @OneToOne(cascade = {CascadeType.ALL})
     public NodeGroup group;
 
-    public Folder(){
-
-    }
+    public Folder(){}
     public Folder(String name){
         this.name = name;
         //TODO do we auto-create a nodeGroup?

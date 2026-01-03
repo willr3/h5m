@@ -10,6 +10,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.*;
+import exp.entity.Folder;
 import exp.entity.Node;
 import exp.entity.Value;
 import exp.entity.node.*;
@@ -20,6 +21,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
+import org.apache.commons.math3.stat.descriptive.SummaryStatistics;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Engine;
@@ -38,6 +40,7 @@ import java.nio.file.Path;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.*;
+import java.util.function.DoubleBinaryOperator;
 import java.util.stream.Collectors;
 
 @ApplicationScoped
@@ -51,6 +54,10 @@ public class NodeService {
 
     @ConfigProperty(name="quarkus.datasource.db-kind")
     String dbKind;
+    @Inject
+    NodeGroupService nodeGroupService;
+    @Inject
+    FolderService folderService;
 
 
     @Transactional
@@ -200,7 +207,7 @@ public class NodeService {
     /**
      *
      * @param node
-     * @param root
+     * @param roots
      * @return
      * @throws IOException
      */
@@ -213,6 +220,7 @@ public class NodeService {
             case "jq":
             case "nata":
             case "sql":
+            case "fp":
                 for(int vIdx=0; vIdx<roots.size(); vIdx++){
                     Value root =  roots.get(vIdx);
                     try {
@@ -223,11 +231,20 @@ public class NodeService {
                             rtrn.addAll(createdValues);
                         }
                     } catch (IOException e) {
+                        e.printStackTrace();//TODO remove debug printStackTrace
                     }
                 }
                 break;
+            case "rd":
+                RelativeDifference relDiff = (RelativeDifference) node;
+                for(int rIdx=0; rIdx<roots.size(); rIdx++){
+                    Value root =  roots.get(rIdx);
+                    List<Value> found = calculateRelativeDifferenceValues(relDiff,root,rtrn.size());
+                    rtrn.addAll(found);
+                }
+                break;
             default:
-                System.err.println("Unknown node type: " + node.type);
+                System.err.println("calculateValues unknown node type: " + node.type);
         }
         rtrn.forEach(Value::getPath);//forcing entities to be loaded is so dirty
         return rtrn;
@@ -240,11 +257,127 @@ public class NodeService {
             case "ecma" -> calculateJsValues((JsNode)node,sourceValues,startingOrdinal+1);
             case "nata" -> calculateJsonataValues((JsonataNode)node,sourceValues,startingOrdinal+1);
             case "sql" -> calculateSqlJsonpathValues((SqlJsonpathNode)node,sourceValues,startingOrdinal+1);
+            case "fp" -> calculateFpValues((FingerprintNode)node,sourceValues,startingOrdinal+1);
             default -> {
                 System.err.println("Unknown node type: "+node.type);
                 yield Collections.emptyList();
             }
         };
+    }
+    //this performs change detection across all values, not just recent
+    @Transactional
+    public List<Value> calculateRelativeDifferenceValues(RelativeDifference relDiff, Value  root,int startingOrdinal) throws IOException {
+        List<Value> rtrn = new ArrayList<>();
+        try{
+            long minPrevious = relDiff.getWindow() > relDiff.getMinPrevious() ? relDiff.getWindow() : relDiff.getMinPrevious();
+            Node groupBy = Node.findById(relDiff.getGroupByNode().getId());
+            List<Value> fingerprintValues = valueService.getDescendantValues(root,relDiff.getFingerprintNode());
+            for(int fIdx=0; fIdx<fingerprintValues.size(); fIdx++){
+                Value fingerprintValue = fingerprintValues.get(fIdx);
+                if( relDiff.getDomainNode()!=null ){
+                    //changing domainValues to just get the domainValues from this root would change from full series scanning to just scanning the new values
+                    //but that would only work if values are added sequentially to the domain value.
+                    //perhaps we check if root introduced the maximum domainValue then only calculate new changes for that last window
+                    //or get the domainValues greater than domain values from root and calculate all those changes?
+                    List<Value> domainValues = valueService.findMatchingFingerprint(
+                            relDiff.getDomainNode(),
+                            groupBy,
+                            fingerprintValue,
+                            relDiff.getDomainNode()
+                    );
+                    for(int dIdx=0; dIdx<domainValues.size(); dIdx++){
+                        Value domainValue = domainValues.get(dIdx);
+                        //todo this does not look for values after previous relDiff observation :(
+                        List<Value> rangeValues = valueService.findMatchingFingerprint(
+                                relDiff.getRangeNode(),
+                                groupBy,
+                                fingerprintValue,
+                                relDiff.getDomainNode(),
+                                domainValue,
+                                (int) (relDiff.getWindow() + minPrevious),
+                                0,
+                                true
+                        );
+                        List<Double> converted = rangeValues.stream().map(obj->{
+                            if (obj.data instanceof NumericNode numericNode){
+                                return numericNode.asDouble();
+                            }else if (obj.data.toString().matches("[0-9]+\\.?[0-9]*")){
+                                return Double.parseDouble(obj.data.toString());
+                            }else{
+                                return null;
+                            }
+                        }).filter(Objects::nonNull).toList();
+
+                        if (converted.size() < relDiff.getWindow() + minPrevious) {
+                            System.err.println("insufficient samples to calculate "+relDiff.name+" need "+(relDiff.getWindow() + minPrevious)+" have "+converted.size());
+                        } else {
+                            DoubleBinaryOperator op = switch (relDiff.getFilter()){
+                                case "min" -> Double::min;
+                                case "max" -> Double::max;
+                                case "mean" -> Double::sum;
+                                default -> Double::sum;
+                            };
+                            SummaryStatistics previousStats = new SummaryStatistics();
+                            converted
+                                    .stream()
+                                    .limit(minPrevious)
+                                    //.skip(relDiff.getWindow())
+                                    .mapToDouble(Double::doubleValue)
+                                    .forEach(previousStats::addValue);
+                            Double value = converted
+                                    .stream()
+                                    //.limit(relDiff.getWindow())
+                                    .skip(minPrevious)
+                                    .mapToDouble(Double::doubleValue)
+                                    .reduce(op)
+                                    .getAsDouble();
+                            if(relDiff.getFilter().equals("mean")){
+                                value = value / converted.size();
+                            }
+                            double ratio = value / previousStats.getMean();
+                            if( ratio < 1 - relDiff.getThreshold() || ratio > 1 + relDiff.getThreshold() ){
+                                // We cannot know which datapoint is first with the regression; as a heuristic approach
+                                // we'll select first datapoint with value lower than mean (if this is a drop, e.g. throughput)
+                                // or above the mean (if this is an increase, e.g. memory usage).
+                                Double cv = null;
+                                //why does i start with less than last in window?
+                                for(int i = (int)relDiff.getWindow() -1 ; i >= 0; --i){
+                                    cv = converted.get(i);
+                                    if( ratio < 1 && cv < previousStats.getMean() ){
+                                        break;
+                                    }else if (ratio > 1 && cv > previousStats.getMean()){
+                                        break;
+                                    }
+                                }
+                                assert cv != null;
+                                Double prevData = converted.get((int)relDiff.getWindow()-1);
+                                Double lastData = cv;
+                                ObjectMapper mapper = new ObjectMapper();
+                                ObjectNode data = mapper.createObjectNode();
+                                data.set("previous",new DoubleNode(prevData));
+                                data.set("last",new DoubleNode(lastData));
+                                data.set("value",new DoubleNode(value));
+                                data.set("ratio",new DoubleNode(100*(ratio-1)));
+                                //data.set("dIdx",new IntNode(dIdx));//was added for debug
+                                data.set("domainvalue",domainValue.data);
+                                //skip domain values due to a detection
+                                dIdx+=minPrevious;
+                                Value changeValue = new Value(root.folder,relDiff,data);
+                                changeValue.idx=startingOrdinal;
+                                List<Value> foundParents = valueService.getAncestor(fingerprintValue,groupBy);
+                                if(foundParents.size()==1){
+                                    changeValue.sources=foundParents;
+                                }
+                                rtrn.add(changeValue);
+                            }
+                        }
+                    }
+                }
+            }
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+        return rtrn;
     }
 
     @Transactional

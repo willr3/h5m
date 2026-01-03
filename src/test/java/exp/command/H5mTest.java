@@ -1,11 +1,11 @@
 package exp.command;
 
 import exp.provided.DatasourceConfiguration;
-import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.main.LaunchResult;
 import io.quarkus.test.junit.main.QuarkusMainLauncher;
 import io.quarkus.test.junit.main.QuarkusMainTest;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import java.io.File;
 import java.io.IOException;
@@ -36,21 +36,18 @@ public class H5mTest {
         });
     }
     @Test
-    @TestTransaction
     public void list(QuarkusMainLauncher launcher) {
         LaunchResult result = launcher.launch("list");
         assertEquals(0,result.exitCode(),result.getOutput());
     }
 
     @Test
-    @TestTransaction
     public void help(QuarkusMainLauncher launcher) {
         LaunchResult result = launcher.launch("help");
         assertEquals(0,result.exitCode(),result.getOutput());
     }
 
     @Test
-    @TestTransaction
     public void add_folder(QuarkusMainLauncher launcher) {
         String testName = StackWalker.getInstance()
                 .walk(s -> s.skip(0).findFirst())
@@ -68,7 +65,6 @@ public class H5mTest {
     }
 
     @Test
-    @TestTransaction
     public void list_folder(QuarkusMainLauncher launcher) {
         List<LaunchResult> results = run(launcher,
             new String[]{"add","folder","foo"},
@@ -86,7 +82,6 @@ public class H5mTest {
         }
     }
     @Test
-    @TestTransaction
     public void remove_folder(QuarkusMainLauncher launcher) {
         String testName = StackWalker.getInstance()
                 .walk(s -> s.skip(0).findFirst())
@@ -105,7 +100,6 @@ public class H5mTest {
     }
 
     @Test
-    @TestTransaction
     public void add_jq_list_node(QuarkusMainLauncher launcher) {
         String testName = StackWalker.getInstance()
                 .walk(s -> s.skip(0).findFirst())
@@ -125,7 +119,134 @@ public class H5mTest {
         assertTrue(result.getOutput().contains("biz"),"expect to find biz: "+result.getOutput());
     }
     @Test
-    @TestTransaction
+    public void add_relativedifference_list_node(QuarkusMainLauncher launcher) {
+        String testName = StackWalker.getInstance()
+                .walk(s -> s.skip(0).findFirst())
+                .get()
+                .getMethodName();
+        List<LaunchResult> results = run(launcher,
+                new String[]{"add","folder",testName},
+                new String[]{"add","jq","to",testName,"domainNode",".x"},
+                new String[]{"add","jq","to",testName,"rangeNode",".y"},
+                new String[]{"add","jq","to",testName,"fp1",".fp1"},
+                new String[]{"add","jq","to",testName,"fp2",".fp2"},
+                new String[]{"list",testName,"nodes"},
+                new String[]{"add","relativedifference","rd1","to",testName,"range","rangeNode","domain","domainNode","fingerprint","fp1,fp2"},
+                new String[]{"list",testName,"nodes"}
+        );
+        results.forEach(result->{
+            assertEquals(0,result.exitCode(),result.getOutput());
+        });
+        LaunchResult result = results.getLast();
+        assertTrue(result.getOutput().contains("rd1"),"expect to find rd1: "+result.getOutput());
+    }
+    @Test
+    public void calculate_relativedifference_node(QuarkusMainLauncher launcher) throws IOException {
+        String testName = StackWalker.getInstance()
+                .walk(s -> s.skip(0).findFirst())
+                .get()
+                .getMethodName();
+        Path folder = Files.createTempDirectory("h5m");
+        Path filePath01 = Files.writeString(Files.createTempFile(folder,"h5m",".json").toAbsolutePath(),
+                """
+                {
+                  "x": 3, "y": 1.1, "fp1": "alpha"
+                }
+                """
+        );
+        Path filePath02 = Files.writeString(Files.createTempFile(folder,"h5m",".json").toAbsolutePath(),
+                """
+                {
+                    "x": 2, "y": 1.1, "fp1": "alpha"
+                }
+                """
+        );
+        Path filePath03 = Files.writeString(Files.createTempFile(folder,"h5m",".json").toAbsolutePath(),
+                """
+                {
+                    "x": 1, "y": 2.1, "fp1": "alpha"
+                }
+                """
+        );
+        List<LaunchResult> results = run(launcher,
+                new String[]{"add","folder",testName},
+                new String[]{"add","jq","to",testName,"domainNode",".x"},
+                new String[]{"add","jq","to",testName,"rangeNode",".y"},
+                new String[]{"add","jq","to",testName,"fp1",".fp1"},
+                new String[]{"list",testName,"nodes"},
+                new String[]{"add","relativedifference","relativediff","to",testName,"range","rangeNode","domain","domainNode","fingerprint","fp1","window","1","minPrevious","1"},
+                new String[]{"list",testName,"nodes"},
+                new String[]{"upload",folder.toString(),"to",testName},
+                new String[]{"list","value","from",testName}
+        );
+        results.forEach(result->{
+            assertEquals(0,result.exitCode(),result.getOutput());
+        });
+
+
+
+    }
+    @Test @Disabled //not yet working because relativedifference doesn't know about the "datsaet" node
+    //need to tell relativedifference which node is the dataset. either detect it with CTE (is that possible)
+    //or make it an attribute on the Folder / NodeGroup
+    public void calculate_relativedifference_dataset_node(QuarkusMainLauncher launcher) throws IOException {
+        String testName = StackWalker.getInstance()
+                .walk(s -> s.skip(0).findFirst())
+                .get()
+                .getMethodName();
+        Path folder = Files.createTempDirectory("h5m");
+        Path filePath01 = Files.writeString(Files.createTempFile(folder,"h5m",".json").toAbsolutePath(),
+                """
+                {
+                  "each": [
+                    {"x": 3, "y": 1.1, "fp1": "alpha", "fp2": "alpha"},
+                    {"x": 3, "y": 2.2, "fp1": "alpha", "fp2": "bravo"}
+                  ]
+                }
+                """
+        );
+        Path filePath02 = Files.writeString(Files.createTempFile(folder,"h5m",".json").toAbsolutePath(),
+                """
+                {
+                  "each": [
+                    {"x": 2, "y": 1.1, "fp1": "alpha", "fp2": "alpha"},
+                    {"x": 2, "y": 2.2, "fp1": "alpha", "fp2": "bravo"}
+                  ]
+                }
+                """
+        );
+        Path filePath03 = Files.writeString(Files.createTempFile(folder,"h5m",".json").toAbsolutePath(),
+                """
+                {
+                  "each": [
+                    {"x": 1, "y": 2.1, "fp1": "alpha", "fp2": "alpha"},
+                    {"x": 1, "y": 3.2, "fp1": "alpha", "fp2": "bravo"}
+                  ]
+                }
+                """
+        );
+        List<LaunchResult> results = run(launcher,
+                new String[]{"add","folder",testName},
+                new String[]{"add","jq","to",testName,"split",".each[]"},
+                new String[]{"add","jq","to",testName,"domainNode","{split}:.x"},
+                new String[]{"add","jq","to",testName,"rangeNode","{split}:.y"},
+                new String[]{"add","jq","to",testName,"fp1","{split}:.fp1"},
+                new String[]{"add","jq","to",testName,"fp2","{split}:.fp2"},
+                new String[]{"list",testName,"nodes"},
+                new String[]{"add","relativedifference","relativediff","to",testName,"range","rangeNode","domain","domainNode","fingerprint","fp1,fp2","window","1","minPrevious","1"},
+                new String[]{"list",testName,"nodes"},
+                new String[]{"upload",folder.toString(),"to",testName},
+                new String[]{"list","value","from",testName}
+        );
+        results.forEach(result->{
+            assertEquals(0,result.exitCode(),result.getOutput());
+        });
+
+
+
+    }
+
+    @Test
     public void remove_node(QuarkusMainLauncher launcher) {
         String testName = StackWalker.getInstance()
                 .walk(s -> s.skip(0).findFirst())
@@ -146,7 +267,6 @@ public class H5mTest {
     }
 
     @Test
-    @TestTransaction
     public void upload_list_values(QuarkusMainLauncher launcher) throws IOException {
         String testName = StackWalker.getInstance()
                 .walk(s -> s.skip(0).findFirst())
@@ -185,7 +305,6 @@ public class H5mTest {
         assertTrue(result.getOutput().contains(" buz "),"result should contain .bar:" +result.getOutput());
     }
     @Test
-    @TestTransaction
     public void upload_folder_list_values(QuarkusMainLauncher launcher) throws IOException {
         String testName = StackWalker.getInstance()
                 .walk(s -> s.skip(0).findFirst())
@@ -238,7 +357,6 @@ public class H5mTest {
         assertTrue(result.getOutput().contains(" bur "),"result should contain .bar:" +result.getOutput());
     }
     @Test
-    @TestTransaction
     public void upload_jsonata_list_values(QuarkusMainLauncher launcher) throws IOException {
         String testName = StackWalker.getInstance()
                 .walk(s -> s.skip(0).findFirst())
@@ -277,7 +395,6 @@ public class H5mTest {
         assertTrue(result.getOutput().contains(" buz "),"result should contain .bar:" +result.getOutput());
     }
     @Test
-    @TestTransaction
     public void upload_sqlpath_list_values(QuarkusMainLauncher launcher) throws IOException {
         String testName = StackWalker.getInstance()
                 .walk(s -> s.skip(0).findFirst())
@@ -316,7 +433,6 @@ public class H5mTest {
         assertTrue(result.getOutput().contains(" buz "),"result should contain .bar:" +result.getOutput());
     }
     @Test
-    @TestTransaction
     public void upload_list_values_by_node(QuarkusMainLauncher launcher) throws IOException {
         String testName = StackWalker.getInstance()
                 .walk(s -> s.skip(0).findFirst())
@@ -358,7 +474,6 @@ public class H5mTest {
         });
     }
     @Test
-    @TestTransaction
     public void upload_jq_multi_input(QuarkusMainLauncher launcher) throws IOException {
         String testName = StackWalker.getInstance()
                 .walk(s -> s.skip(0).findFirst())
@@ -393,7 +508,6 @@ public class H5mTest {
         assertTrue(result.getOutput().contains("Count: 8"));
     }
     @Test
-    @TestTransaction
     public void upload_js_multi_input(QuarkusMainLauncher launcher) throws IOException {
         String testName = StackWalker.getInstance()
                 .walk(s -> s.skip(0).findFirst())
@@ -429,7 +543,6 @@ public class H5mTest {
     }
 
     @Test
-    @TestTransaction
     public void recalculate_jq_multi_input(QuarkusMainLauncher launcher) throws IOException {
         String testName = StackWalker.getInstance()
                 .walk(s -> s.skip(0).findFirst())
@@ -466,7 +579,6 @@ public class H5mTest {
         assertTrue(result.getOutput().contains("Count: 8"));
     }
     @Test
-    @TestTransaction
     public void list_values_as_table(QuarkusMainLauncher launcher) throws IOException {
         String testName = StackWalker.getInstance()
                 .walk(s -> s.skip(0).findFirst())
