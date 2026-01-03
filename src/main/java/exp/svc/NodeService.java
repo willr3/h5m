@@ -10,6 +10,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.*;
+import exp.entity.Folder;
 import exp.entity.Node;
 import exp.entity.Value;
 import exp.entity.node.*;
@@ -56,6 +57,10 @@ public class NodeService {
 
     @ConfigProperty(name="quarkus.datasource.db-kind")
     String dbKind;
+    @Inject
+    NodeGroupService nodeGroupService;
+    @Inject
+    FolderService folderService;
 
 
     @Transactional
@@ -205,7 +210,7 @@ public class NodeService {
     /**
      *
      * @param node
-     * @param root
+     * @param roots
      * @return
      * @throws IOException
      */
@@ -218,6 +223,7 @@ public class NodeService {
             case "jq":
             case "nata":
             case "sql":
+            case "fp":
                 for(int vIdx=0; vIdx<roots.size(); vIdx++){
                     Value root =  roots.get(vIdx);
                     try {
@@ -228,11 +234,60 @@ public class NodeService {
                             rtrn.addAll(createdValues);
                         }
                     } catch (IOException e) {
+                        e.printStackTrace();//TODO remove debug printStackTrace
+                    }
+                }
+                break;
+            case "rd":
+                System.out.println("RELATIVE DIFFERENCE GOES HERE");
+                RelativeDifference relDiff = (RelativeDifference) node;
+
+                long minPrevious = relDiff.getWindow() > relDiff.getMinPrevious() ? relDiff.getWindow() : relDiff.getMinPrevious();
+                Node groupBy = Node.findById(relDiff.getRangeNode().getId());
+                groupBy = groupBy.group.root;
+                for(int rIdx=0; rIdx<roots.size(); rIdx++){
+                    Value root =  roots.get(rIdx);
+                    try{
+
+                        List<Value> fingerprintValues = valueService.getDescendantValues(root,relDiff.getFingerprintNode());
+                        for(int fIdx=0; fIdx<fingerprintValues.size(); fIdx++){
+                            Value fingerprintValue = fingerprintValues.get(fIdx);
+                            if( relDiff.getDomainNode()!=null ){
+                                List<Value> domainValues = valueService.findMatchingFingerprint(relDiff.getDomainNode(),groupBy,fingerprintValue,relDiff.getDomainNode());
+                                for(int dIdx=0; dIdx<domainValues.size(); dIdx++){
+                                    Value domainValue = domainValues.get(dIdx);
+                                    Value previousValue = Value.find("from Value v where v.createdAt < ?1 and v.node.id = ?2 order by createdAt desc limit 1",domainValue.getCreatedAt(),domainValue.node.id).firstResult();
+                                    List<Value> rangeValues = valueService.findMatchingFingerprint(
+                                            relDiff.getRangeNode(),
+                                            groupBy, //TODO support dataset grouping
+                                            fingerprintValue,
+                                            relDiff.getDomainNode(),
+                                            domainValue,
+                                            (int) (relDiff.getWindow() + minPrevious),
+                                            0,
+                                            true
+                                            );
+                                    System.out.println(root.id+" "+fingerprintValue.data+" less than "+domainValue.data+" has the following range values "+rangeValues.size()+"\n  "+rangeValues.stream().map(v->v.getId()+"="+v.data).collect(Collectors.joining("\n  ")));
+                                }
+                            }
+                        }
+
+                        if(relDiff.getDomainNode()!=null){
+                            List<Value> fromRoot = valueService.getDescendantValues(root,relDiff.getDomainNode());
+                            System.out.println("fromRoot:"+fromRoot);
+                        }else{
+                            List<Value> fromRoot = valueService.getDescendantValues(root,relDiff.getRangeNode());
+                            System.out.println("fromRoot:"+fromRoot);
+                        }
+
+
+                    }catch (Exception e){
+                        e.printStackTrace();
                     }
                 }
                 break;
             default:
-                System.err.println("Unknown node type: " + node.type);
+                System.err.println("calculateValues unknown node type: " + node.type);
         }
         rtrn.forEach(Value::getPath);//forcing entities to be loaded is so dirty
         return rtrn;
@@ -245,6 +300,7 @@ public class NodeService {
             case "ecma" -> calculateJsValues((JsNode)node,sourceValues,startingOrdinal+1);
             case "nata" -> calculateJsonataValues((JsonataNode)node,sourceValues,startingOrdinal+1);
             case "sql" -> calculateSqlJsonpathValues((SqlJsonpathNode)node,sourceValues,startingOrdinal+1);
+            case "fp" -> calculateFpValues((FingerprintNode)node,sourceValues,startingOrdinal+1);
             default -> {
                 System.err.println("Unknown node type: "+node.type);
                 yield Collections.emptyList();

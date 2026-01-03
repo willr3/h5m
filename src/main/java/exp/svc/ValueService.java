@@ -11,7 +11,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
-import jakarta.ws.rs.core.Context;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.hibernate.Session;
 import org.hibernate.query.NativeQuery;
@@ -20,7 +19,6 @@ import java.io.*;
 import java.security.DigestOutputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -39,6 +37,8 @@ public class ValueService {
 
     @ConfigProperty(name="quarkus.datasource.db-kind")
     String dbKind;
+    @Inject
+    NodeService nodeService;
 
 
     @Transactional
@@ -120,50 +120,21 @@ public class ValueService {
     }
 
     /*
-     * Finds the values for an ancestor node Source where a descendant created the expected fingerprint value, does not look for sibling or cousin values
+     * Finds the values for an ancestor or relative node Source where a relative created the expected fingerprint value
      */
     @Transactional
     public List<Value> findMatchingFingerprint(Node source,Value fingerprint){
-        List<Value> rtrn = new ArrayList<>(em.createNativeQuery(
-                switch (dbKind){
-                    case "sqlite"->
-                        """
-                        with recursive ancestor(vid) as (
-                            select v.id as vid 
-                                from value v where v.node_id = :nodeId and v.data = :data
-                            union 
-                            select v.id as vid 
-                                from value v join value_edge ve on v.id = ve.source_id join ancestor a on a.vid = ve.value_id
-                        ) 
-                        select * from value v join ancestor a on v.id=a.vid where v.node_id=:sourceId
-                        """;
-                    case "postgresql"->
-                        """
-                        with recursive ancestor(vid) as (
-                            select v.id as vid 
-                                from value v where v.node_id = :nodeId and v.data = cast(:data as jsonb)
-                            union 
-                            select v.id as vid 
-                                from value v join value_edge ve on v.id = ve.source_id join ancestor a on a.vid = ve.value_id
-                        ) 
-                        select * from value v join ancestor a on v.id=a.vid where v.node_id=:sourceId
-                        """;
-                    default -> "";
-                }
-            ,Value.class)
-                .setParameter("nodeId", fingerprint.node.id)
-                .setParameter("data", fingerprint.data.toString())
-                .setParameter("sourceId", source.id)
-                .getResultList());
-        return rtrn;
+        source = Node.findById(source.id);
+        return findMatchingFingerprint(source,source.group.root,fingerprint,null,null,-1,-1,true);
     }
+
     /*
      * Finds the values for a relative node Source where a descendant created the expected fingerprint value, now it works on siblings and cousins
      * we want this to also find sibling and cousin values but that probably requires another traversal
      * sorting by a value is useful if that value is our timestamp but we also need that value
      */
     @Transactional
-    public List<Value> findMatchingFingerprintOrderBy(Node source,Value fingerprint,Node sort){
+    public List<Value> findMatchingFingerprint_unused(Node source, Value fingerprint, Node sort){
         List<Value> rtrn = new ArrayList<>(em.createNativeQuery(
             switch(dbKind){
                 case "sqlite"->
@@ -217,52 +188,165 @@ public class ValueService {
                     select * from value v join descendant d on v.id=d.vid where v.node_id=:sourceId order by sortable asc;                    
                     """;
                 default -> "";
-            }
-
-
-                ,Value.class)
-
-                                       .setParameter("nodeId", fingerprint.node.id)
+            },Value.class)
+                .setParameter("nodeId", fingerprint.node.id)
                 .setParameter("data", fingerprint.data.toString())
                 .setParameter("sourceId", source.id)
                 .setParameter("sortId",sort.id)
                 .getResultList());
         return rtrn;
     }
+
+    //this is to support getting the necessary values for change detection
     @Transactional
-    public List<Value> findMatchingFingerprintOrderBy(Node source,Value fingerprint,Value before,int limit){
-        List<Value> rtrn = new ArrayList<>(em.createNativeQuery(
-                        """
+    public List<Value> findMatchingFingerprint(Node source,Value fingerprint, Node sort){
+        return findMatchingFingerprint(source,source.group.root,fingerprint,sort,null,-1,-1,true);
+    }
+    public List<Value> findMatchingFingerprint(Node source,Node groupBy,Value fingerprint, Node sort){
+        return findMatchingFingerprint(source,groupBy,fingerprint,sort,null,-1,-1,true);
+    }
+    @Transactional
+    public List<Value> findMatchingFingerprint(Node rangeNode,Node groupBy,Value fingerprint,Node domainNode, Value domainValue,int limit,int offset,boolean preceedingValues){
+
+        assert rangeNode!=null && groupBy!=null && fingerprint!=null;
+
+        String sql = switch (dbKind){
+            case "sqlite"->
+                    """
                         with recursive ancestor(vid) as (
-                            select v.id as vid 
-                                from value v where v.node_id = :nodeId and v.data = :data
-                            union 
-                            select v.id as vid 
+                            select v.id as vid
+                                from value v where v.node_id = :nodeId and v.data = :fingerprint
+                            union
+                            select v.id as vid
                                 from value v join value_edge ve on v.id = ve.source_id join ancestor a on a.vid = ve.value_id
                         ),
+                    """;
+            case "postgresql"->
+                    """
+                    with recursive ancestor(vid) as (
+                        select v.id as vid
+                            from value v where v.node_id = :nodeId and v.data = cast( :fingerprint as jsonb)
+                        union 
+                        select v.id as vid 
+                            from value v join value_edge ve on v.id = ve.source_id join ancestor a on a.vid = ve.value_id
+                    ),
+                    """;
+            default -> "";
+        };
+
+        if(domainValue!=null || domainNode!=null) { //we have a sortable domain value
+            String domainValueComp = switch (dbKind){
+                case "sqlite"-> "and v.data GTLT :domain";
+                case "postgresql"-> "and v.data GTLT cast( :domain as jsonb)";
+                default -> "";
+            };
+            sql += switch (dbKind) {
+                case "sqlite" -> """
                         sorter(vid,sortable) as (
-                            select v.id as vid,v.data as sortable 
-                                from value v where v.node_id = :sortId and v.data < :before
+                            select v.id as vid,v.data as sortable
+                                from value v where v.node_id = :sortId DOMAIN_VALUE_COMP
                             union
                             select v.id as vid, s.sortable as sortable
                                 from value v join value_edge ve on v.id = ve.source_id join sorter s on s.vid = ve.value_id
                         ),
                         descendant(vid,sortable) as (
                            select v.id as vid, s.sortable as sortable
-                             from value v join sorter s on v.id = s.vid join ancestor a on v.id = a.vid join node n on n.id = v.node_id where n.type = 'root' --only the root values from ancestor with sorter
+                             from value v join sorter s on v.id = s.vid join ancestor a on v.id = a.vid
+                             where v.node_id = :groupById --limit descendants to values from the grouping node
+                           union
+                           select v.id as vid, d.sortable as sortable
+                                 from value v join value_edge ve on v.id = ve.value_id join descendant d on d.vid = ve.source_id
+                        )
+                        select * from value v join descendant d on v.id=d.vid 
+                            where v.node_id=:sourceId order by sortable ORDER_DIRECTION
+                        """;
+                case "postgresql" -> """
+                        sorter(vid,sortable) as (
+                            select v.id as vid,v.data as sortable
+                                from value v where v.node_id = :sortId DOMAIN_VALUE_COMP
+                            union
+                            select v.id as vid, s.sortable as sortable
+                                from value v join value_edge ve on v.id = ve.source_id join sorter s on s.vid = ve.value_id
+                        ),
+                        descendant(vid,sortable) as (
+                           select v.id as vid, s.sortable as sortable
+                             from value v join sorter s on v.id = s.vid join ancestor a on v.id = a.vid
+                             where v.node_id = :groupById --limit descendants to values from the grouping node
+                           union
+                           select v.id as vid, d.sortable as sortable
+                                 from value v join value_edge ve on v.id = ve.value_id join descendant d on d.vid = ve.source_id
+                        )
+                        select * from value v join descendant d on v.id=d.vid
+                            where v.node_id=:sourceId order by sortable ORDER_DIRECTION
+                        """;
+                default -> "";
+            };
+            sql = sql.replace("DOMAIN_VALUE_COMP",domainValue != null ? domainValueComp : "");
+        }else{
+            //sorting by created_at
+            sql+=switch(dbKind){
+                case "sqlite"->
+                        """
+                        descendant(vid) as (
+                           select v.id as vid
+                             from value v join ancestor a on v.id = a.vid
+                             where v.node_id = :groupById --limit descendants to values from the grouping node
+                           union
+                           select v.id as vid
+                                 from value v join value_edge ve on v.id = ve.value_id join descendant d on d.vid = ve.source_id
+                        )
+                        select * from value v join descendant d on v.id=d.vid
+                            where v.node_id=:sourceId order by created_at ORDER_DIRECTION
+                        """;
+                case "postgresql"->
+                        """
+                        descendant(vid) as (
+                           select v.id as vid
+                             from value v join ancestor a on v.id = a.vid
+                             where v.node_id = :groupById --limit descendants to values from the grouping node
                            union
                            select v.id as vid, d.sortable as sortable
                                  from value v join value_edge ve on v.id = ve.value_id join descendant d on d.vid = ve.source_id
                         )                        
-                        select * from value v join descendant d on v.id=d.vid where v.node_id=:sourceId order by sortable desc limit :limit;
-                        """,Value.class)
+                        select * from value v join descendant d on v.id=d.vid
+                            where v.node_id=:sourceId order by created_at ORDER_DIRECTION
+                        """;
+                default -> "";
+            };
+        }
+        sql = sql
+                .replace("GTLT", preceedingValues ? "<" : ">")
+                .replace("ORDER_DIRECTION", preceedingValues ? "desc" : "asc");
+        if(offset > 0){
+            sql+=" offset :offset";
+        }
+        if(limit > 0){
+            sql+=" limit :limit";
+        }
+        //noinspection unchecked
+        NativeQuery<Value> query = (NativeQuery<Value>) em.createNativeQuery(sql,Value.class);
+        query
                 .setParameter("nodeId", fingerprint.node.id)
-                .setParameter("data", fingerprint.data.toString())
-                .setParameter("sourceId", source.id)
-                .setParameter("sortId",before.node.id)
-                .setParameter("before",before.data.toString())
-                .setParameter("limit",limit)
-                .getResultList());
+                .setParameter("fingerprint", fingerprint.data.toString())
+                .setParameter("sourceId", rangeNode.id)
+                .setParameter("groupById",groupBy.id);
+
+
+        if(domainValue!=null){
+            query
+                .setParameter("sortId",domainValue.node.id)
+                .setParameter("domain",domainValue.data.toString());
+        }else if (domainNode!=null){
+            query.setParameter("sortId",domainNode.id);
+        }
+        if(offset > 0){
+            query.setParameter("offset",offset);
+        }
+        if(limit > 0){
+            query.setParameter("limit",limit);
+        }
+        List<Value> rtrn = query
+                .getResultList();
         //reversed
         return rtrn.reversed();
     }
@@ -277,35 +361,44 @@ public class ValueService {
      * @return
      */
     @Transactional
-    //TODO here thar be dragons
     public List<JsonNode> getGroupedValues(Node groupBy){
         List<JsonNode> rtrn = new ArrayList<>();
         NativeQuery query = (NativeQuery) em.createNativeQuery(
-                switch(dbKind) {
-                    case "sqlite" ->
-                        """
-                        with recursive tree(id,node_id,root_id,idx,data) as (
-                            select v.id,v.node_id,ve.source_id as root_id,v.idx,v.data from value_edge ve left join value v on ve.value_id = v.id where ve.source_id in (select id from value where node_id = :nodeId)
-                            union
-                            select v.id,v.node_id,t.root_id,v.idx,v.data from value v join value_edge ve on v.id = ve.value_id join tree t on ve.source_id = t.id
-                        ), bynode as (
-                            select node_id,root_id,json_group_array(json(data)) as data from tree group by node_id,root_id order by idx
-                        )
-                        select json_group_object(n.name,json( ( case when json_array_length(b.data) > 1 then b.data else b.data->0 end))) as data from bynode b join node n on b.node_id = n.id group by root_id; 
-                        """;
-                    case "postgresql" ->
-                        """
-                        with recursive tree(id,node_id,root_id,idx,data) as (
-                            select v.id,v.node_id,ve.source_id as root_id,v.idx,v.data from value_edge ve left join value v on ve.value_id = v.id where ve.source_id in (select id from value where node_id = :nodeId)
-                            union
-                            select v.id,v.node_id,t.root_id,v.idx,v.data from value v join value_edge ve on v.id = ve.value_id join tree t on ve.source_id = t.id
-                        ), bynode as (
-                            select node_id,root_id,jsonb_agg(to_jsonb(data)) as data from tree group by node_id,root_id,idx order by idx
-                        )
-                        select jsonb_object_agg(n.name,to_jsonb( ( case when jsonb_array_length(b.data) > 1 then b.data else b.data->0 end))) as data from bynode b join node n on b.node_id = n.id group by root_id;                        
-                        """;
-                default ->"";
-                }
+            switch(dbKind) {
+                case "sqlite" ->
+                    """
+                    with recursive tree(id,node_id,root_id,idx,data) as (
+                        select v.id,v.node_id,ve.source_id as root_id,v.idx,v.data 
+                            from value_edge ve left join value v on ve.value_id = v.id 
+                            where ve.source_id in (select id from value where node_id = :nodeId)
+                        union
+                        select v.id,v.node_id,t.root_id,v.idx,v.data 
+                            from value v join value_edge ve on v.id = ve.value_id join tree t on ve.source_id = t.id
+                    ), bynode as (
+                        select node_id,root_id,json_group_array(json(data)) as data 
+                            from tree group by node_id,root_id order by idx
+                    )
+                    select json_group_object(n.name,json( ( case when json_array_length(b.data) > 1 then b.data else b.data->0 end))) as data 
+                        from bynode b join node n on b.node_id = n.id group by root_id; 
+                    """;
+                case "postgresql" ->
+                    """
+                    with recursive tree(id,node_id,root_id,idx,data) as (
+                        select v.id,v.node_id,ve.source_id as root_id,v.idx,v.data 
+                            from value_edge ve left join value v on ve.value_id = v.id 
+                            where ve.source_id in (select id from value where node_id = :nodeId)
+                        union
+                        select v.id,v.node_id,t.root_id,v.idx,v.data 
+                            from value v join value_edge ve on v.id = ve.value_id join tree t on ve.source_id = t.id
+                    ), bynode as (
+                        select node_id,root_id,jsonb_agg(to_jsonb(data)) as data 
+                            from tree group by node_id,root_id,idx order by idx
+                    )
+                    select jsonb_object_agg(n.name,to_jsonb( ( case when jsonb_array_length(b.data) > 1 then b.data else b.data->0 end))) as data 
+                    from bynode b join node n on b.node_id = n.id group by root_id;
+                    """;
+            default ->"";
+            }
         ).setParameter("nodeId",groupBy.id);
         List<JsonNode> found = query
                 .unwrap(NativeQuery.class)
@@ -359,6 +452,7 @@ public class ValueService {
         return rtrn;
     }
 
+    //get the values from node that descend from root with the associated value source path (nodeId and index for each source value)
     @Transactional
     public Map<String,Value> getDescendantValueByPath(Value root,Node node){
         List<Value> found = getDescendantValues(root,node);
@@ -373,6 +467,7 @@ public class ValueService {
 
 
     //TODO concerned about writeToFile using "'s to wrap strings
+    //TODO have write to file return the filePath instead of accepting it as an argument
     @Transactional
     public void writeToFile(long valueId,String filePath){
         Session session = em.unwrap(Session.class);
