@@ -49,6 +49,11 @@ public class Value extends PanacheEntity {
     @Column(name = "last_updated")
     private LocalDateTime lastUpdated;
 
+
+    public LocalDateTime getCreatedAt() {return createdAt;}
+
+    public  LocalDateTime getLastUpdated() {return lastUpdated;}
+
     public Long getId(){return id;}
 
     //cannot cascade delete becasue this entity "owns" the reference to the parent values
@@ -102,7 +107,7 @@ public class Value extends PanacheEntity {
 
     @Override
     public int hashCode(){
-        return Objects.hash(id,node,sources,folder);
+        return Objects.hash(id,node,/*sources,*/folder);
     }
 
     @Override

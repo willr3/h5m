@@ -1,6 +1,7 @@
 package exp.queue;
 
 import exp.entity.Work;
+import exp.entity.node.RelativeDifference;
 import exp.svc.NodeService;
 import exp.svc.ValueService;
 import exp.svc.WorkService;
@@ -8,6 +9,7 @@ import io.vertx.core.impl.ConcurrentHashSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.management.relation.Relation;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -15,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 
 /*
@@ -170,21 +173,24 @@ public class WorkQueue implements BlockingQueue<Runnable> {
         try {
             int c = runnables.size();
             works.forEach(w->{
-                    if(!isPending(w)){
-                        pendingWork.add(w);
-                        runnables.add(new WorkRunner(w, this, nodeService, valueService, workService));
-                    }
+                if(!isPending(w)){
+                    pendingWork.add(w);
+                    runnables.add(new WorkRunner(w, this, nodeService, valueService, workService));
+                    assert isPending(w);
+                }else{
+                    workService.delete(w); // remove rejected
+                }
             });
             sort();
             if(c == 0){
                 signalNotEmpty();
             }
-        }finally {
+        } finally {
             putLock.unlock();
         }
     }
-    public void addWork(Work work) {
-        add(new WorkRunner(work,this,nodeService,valueService,workService));
+    public boolean addWork(Work work) {
+        return add(new WorkRunner(work,this,nodeService,valueService,workService));
     }
     public boolean hasWork(Work work){
         return isPending(work) || isActive(work);
@@ -407,6 +413,9 @@ public class WorkQueue implements BlockingQueue<Runnable> {
                 if( r instanceof WorkRunner workRunner && isPending(workRunner.work)){
                     //do not add something already in queue
                 }else{
+                    if( r instanceof WorkRunner workRunner){
+                        pendingWork.add(workRunner.work);
+                    }
                     runnables.add(r);
                 }
             }

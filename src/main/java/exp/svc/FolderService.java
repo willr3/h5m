@@ -127,15 +127,16 @@ public class FolderService {
         folder = Folder.findById(folder.id); // deal with detached entity
         Node root = folder.group.root;
         List<Value> rootValues = valueService.getValues(root);
+        rootValues.forEach(Value::getPath); // this fixes the LazyException, por que?
+        List<Work> newWorks = new ArrayList<>();
         for(Value rootValue: rootValues){
-            List.copyOf(folder.group.sources).forEach(source -> {
+            for(Node source : List.copyOf(folder.group.sources)){
                 Work newWork = new Work(source,new ArrayList<>(source.sources),List.of(rootValue));
                 workService.create(newWork);
-                //WorkRunner runner = new WorkRunner(newWork);
-                workExecutor.getWorkQueue().addWork(newWork);
-                //managedExecutor.runAsync(runner);
-            });
+                newWorks.add(newWork);
+            }
         }
+        workExecutor.getWorkQueue().addWorks(newWorks);
     }
     @Transactional
     public void upload(Folder folder,String path,JsonNode data){

@@ -1,11 +1,13 @@
 package exp.entity;
 
+import exp.entity.node.RelativeDifference;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import jakarta.persistence.*;
 import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.Immutable;
 
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 @Entity
@@ -53,6 +55,9 @@ public class Work  extends PanacheEntity implements Comparable<Work>{
     public Work(Node activeNode,List<Node> sourceNodes,List<Value> sourceValues){
         this();
         this.activeNode = activeNode;
+        if(this.activeNode instanceof RelativeDifference){
+            this.cumulative = true;
+        }
         this.sourceValues = sourceValues == null ? Collections.emptyList() : new ArrayList(sourceValues);
         this.sourceNodes = sourceNodes == null ? Collections.emptyList() : new ArrayList(sourceNodes);
     }
@@ -63,6 +68,11 @@ public class Work  extends PanacheEntity implements Comparable<Work>{
 
     public void setActiveNode(Node activeNode) {
         this.activeNode = activeNode;
+        if(activeNode instanceof RelativeDifference){
+            this.cumulative = true;
+        }else {
+            this.cumulative = false;
+        }
     }
 
     //work A depends on work B if A.activeNode depends on B.activeNode or
@@ -97,11 +107,6 @@ public class Work  extends PanacheEntity implements Comparable<Work>{
     public boolean equals(Object o){
         if(o instanceof Work){
             Work work = (Work)o;
-//          ID could be different for the same scope of work
-//            boolean sameId = Objects.equals(this.id, work.id);
-//            if(!sameId){
-//                return false;
-//            }
             boolean sameNode = Objects.equals(this.activeNode, work.activeNode);
             if(!sameNode){
                 return false;
@@ -112,6 +117,9 @@ public class Work  extends PanacheEntity implements Comparable<Work>{
                 );
             if(!sameSources){
                 return false;
+            }
+            if(cumulative){
+                return true;
             }
             boolean sameValues = this.sourceValues.size()==work.sourceValues.size() && (
                     IntStream.range(0,sourceValues.size()).allMatch(i->sourceValues.get(i).equals(work.sourceValues.get(i)))
@@ -125,8 +133,10 @@ public class Work  extends PanacheEntity implements Comparable<Work>{
         List<Object> param = new ArrayList<>();
         param.add(activeNode);
         param.addAll(sourceNodes);
-        param.addAll(sourceValues);
-        return Objects.hash(param.toArray());
+        if(!cumulative) {
+            param.addAll(sourceValues);
+        }
+        return Objects.hash(param);
     }
 
     @Override
@@ -142,6 +152,10 @@ public class Work  extends PanacheEntity implements Comparable<Work>{
 
     @Override
     public String toString() {
-        return "Work<id="+id+" activeNode="+activeNode+" retry="+retryCount+">";
+        return "Work<id="+id+" activeNode="+activeNode+
+                " sourceNodes="+sourceNodes.stream().map(n->""+n.getId()).collect(Collectors.joining(","))+
+                " sourceValues="+sourceValues.stream().map(v->""+v.getId()).collect(Collectors.joining(","))+
+                " retry="+retryCount+
+                " hashCode="+hashCode()+" >";
     }
 }

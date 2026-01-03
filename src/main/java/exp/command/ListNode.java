@@ -35,13 +35,15 @@ public class ListNode implements Callable<Integer> {
             System.err.println("Node group "+groupName+" not found");
             return 1;
         }
-        System.out.println(ListCmd.table(80,nodeGroup.sources,List.of("name","type","fqdn","operation","encoding"),
+        System.out.println(
+            ListCmd.table(80,nodeGroup.sources,List.of("name","type","fqdn","operation"),
                 List.of(n->n.name,
                 n->n.type,
                 Node::getFqdn,
-                n->n.operation,
-                Node::getOperationEncoding)));
-
+                n->n.operation
+                )
+            )
+        );
         return 0;
     }
 

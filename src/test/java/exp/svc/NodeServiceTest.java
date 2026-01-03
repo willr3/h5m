@@ -2,6 +2,7 @@ package exp.svc;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.DoubleNode;
 import com.fasterxml.jackson.databind.node.IntNode;
 import com.fasterxml.jackson.databind.node.LongNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -9,10 +10,7 @@ import exp.FreshDb;
 import exp.entity.Node;
 import exp.entity.NodeGroup;
 import exp.entity.Value;
-import exp.entity.node.JqNode;
-import exp.entity.node.JsNode;
-import exp.entity.node.RootNode;
-import exp.entity.node.SqlJsonpathNode;
+import exp.entity.node.*;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.transaction.*;
@@ -39,6 +37,8 @@ public class NodeServiceTest extends FreshDb {
 
     @Inject
     NodeService nodeService;
+    @Inject
+    ValueService valueService;
 
     @Test
     public void create_without_group() {
@@ -163,6 +163,74 @@ public class NodeServiceTest extends FreshDb {
         List<Value> calculated = nodeService.calculateSqlJsonpathValues(node,sourceValueMap,0);
         assertNotNull(calculated);
         assertEquals(1,calculated.size());
+
+    }
+
+    @Test
+    public void calculateRelativeDifference_root() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException, IOException {
+        tm.begin();
+        Node rootNode = new RootNode();
+        rootNode.persist();
+        Node rangeNode = new JqNode("range",".y",rootNode);
+        rangeNode.persist();
+        Node domainNode = new JqNode("domain",".domain",rootNode);
+        domainNode.persist();
+        Node fingerprintNode = new JqNode("fingerprint",".fingerprint",rootNode);
+        fingerprintNode.persist();
+
+        Value rootValue01 = new Value(null,rootNode,new TextNode("root1"));
+        rootValue01.persist();
+        Value rootValue02 = new Value(null,rootNode,new TextNode("root2"));
+        rootValue02.persist();
+        Value rootValue03 = new Value(null,rootNode,new TextNode("root3"));
+        rootValue03.persist();
+
+        Value rangeValue01 = new Value(null,rangeNode, DoubleNode.valueOf(1));
+        rangeValue01.sources=List.of(rootValue01);
+        rangeValue01.persist();
+        Value rangeValue02 = new Value(null,rangeNode, DoubleNode.valueOf(2));
+        rangeValue02.sources=List.of(rootValue02);
+        rangeValue02.persist();
+        Value rangeValue03 = new Value(null,rangeNode, DoubleNode.valueOf(3));
+        rangeValue03.sources=List.of(rootValue03);
+        rangeValue03.persist();
+
+        //somehow domain values are missing value_edge...
+        //LongNode.valueOf breaks this???
+        Value domainValue01 = new Value(null,domainNode,DoubleNode.valueOf(10));
+        domainValue01.sources=List.of(rootValue01);
+        domainValue01.persist();
+        Value domainValue02 = new Value(null,domainNode,DoubleNode.valueOf(20));
+        domainValue02.sources=List.of(rootValue02);
+        domainValue02.persist();
+        Value domainValue03 = new Value(null,domainNode, DoubleNode.valueOf(30));
+        domainValue03.sources=List.of(rootValue03);
+        domainValue03.persist();
+
+        Value fingerprintValue01 = new Value(null,fingerprintNode,new TextNode("fp"));
+        fingerprintValue01.sources=List.of(rootValue01);
+        fingerprintValue01.persist();
+        Value fingerprintValue02 = new Value(null,fingerprintNode,new TextNode("fp"));
+        fingerprintValue02.sources=List.of(rootValue02);
+        fingerprintValue02.persist();
+        Value fingerprintValue03 = new Value(null,fingerprintNode,new TextNode("fp"));
+        fingerprintValue03.sources=List.of(rootValue03);
+        fingerprintValue03.persist();
+        tm.commit();
+
+        RelativeDifference relDifference = new RelativeDifference();
+        //relDifference.name="max.y";
+        relDifference.setFilter("max");
+        relDifference.setWindow(1);
+        relDifference.setMinPrevious(1);
+        relDifference.setNodes(fingerprintNode,rootNode,rangeNode,domainNode);
+
+        List<Value> found = nodeService.calculateRelativeDifferenceValues(relDifference,rootValue01,0);
+        assertNotNull(found);
+        assertEquals(1,found.size());
+        Value value = found.getFirst();
+        System.out.println("found\n"+found);
+        System.out.println("value\n"+value+"\n"+value.data);
 
     }
 
