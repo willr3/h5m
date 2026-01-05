@@ -7,6 +7,7 @@ import jakarta.persistence.*;
 @Table(
     name="folder"
 )
+@Cacheable
 public class Folder extends PanacheEntity {
 
     @Column(unique = true)

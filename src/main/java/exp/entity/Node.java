@@ -18,6 +18,7 @@ import java.util.stream.Collectors;
 )
 @Inheritance(strategy = InheritanceType.SINGLE_TABLE)
 @DiscriminatorColumn(name = "type", discriminatorType =  DiscriminatorType.STRING)
+@Cacheable
 public abstract class Node extends PanacheEntity implements Comparable<Node> {
 
     public static String FQDN_SEPARATOR = ":";

@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 @Table(
         name = "value"
 )
+@Cacheable
 public class Value extends PanacheEntity {
 
     @Column(name = "data", columnDefinition = "JSONB")

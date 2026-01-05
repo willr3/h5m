@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 @Table(
         name = "nodegroup"
 )
+@Cacheable
 public class NodeGroup extends PanacheEntity {
 
     public String name;

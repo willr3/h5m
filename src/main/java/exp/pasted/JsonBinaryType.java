@@ -97,6 +97,9 @@ public class JsonBinaryType implements UserType<JsonNode> {
 
     @Override
     public JsonNode assemble(Serializable cached, Object owner) throws HibernateException {
+        if(cached==null){
+            return null;
+        }
         try {
             return mapper.readTree(cached.toString());
         } catch (JsonProcessingException ex) {

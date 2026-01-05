@@ -582,18 +582,18 @@ public class ValueServiceTest extends FreshDb {
         tm.commit();
 
         tm.begin();
-        try{
+
             Value found = valueService.byId(vabc.id);
             List<Value> sources = found.sources;
+            sources.size(); //to trigger load
+        tm.commit();
             assertNotNull(sources);
             assertEquals(4, sources.size());
 
             assertTrue(sources.indexOf(va) < sources.indexOf(vab),"va should come before vab");
             assertTrue(sources.indexOf(va) < sources.indexOf(vac),"va should come before vac");
             assertTrue(sources.indexOf(vr) < sources.indexOf(va),"vr should come before va");
-        }finally {
-            tm.commit();
-        }
+
 
     }
 
