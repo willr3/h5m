@@ -119,6 +119,24 @@ public class ValueService {
         return rtrn;
     }
 
+    @Transactional
+    public boolean dependsOn(Value a, Value b){
+        int count = em.createNativeQuery("""
+            with recursive ancestor(vid) as (
+                select ve.child_id as vid 
+                    from value_edge ve where ve.child_id = :valueAId
+                union
+                select ve.parent_id as vid
+                    from value_edge ve join ancestor a on a.vid = ve.child_id
+            )
+            select 1 from ancestor where vid = :valueBId
+        """).setParameter("valueAId",a.getId())
+        .setParameter("valueBId",b.getId())
+        .getResultList().size();
+        return count > 0;
+    }
+
+
     /*
      * Finds the values for an ancestor node Source where a descendant created the expected fingerprint value, does not look for sibling or cousin values
      */
