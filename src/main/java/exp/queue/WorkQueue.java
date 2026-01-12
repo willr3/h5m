@@ -6,8 +6,6 @@ import exp.svc.NodeService;
 import exp.svc.ValueService;
 import exp.svc.WorkService;
 import io.vertx.core.impl.ConcurrentHashSet;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import javax.management.relation.Relation;
 import java.util.*;
@@ -29,7 +27,6 @@ import java.util.stream.Collectors;
  */
 public class WorkQueue implements BlockingQueue<Runnable> {
 
-    private static final Logger log = LoggerFactory.getLogger(WorkQueue.class);
     //TODO using counters blocks work on different values, change to set of active work
     //private Counters<Node> counters = new Counters<>();
     private Set<Work> activeWork = new ConcurrentHashSet<>();
@@ -95,13 +92,15 @@ public class WorkQueue implements BlockingQueue<Runnable> {
 
     private int getScore(int index){
         Runnable runnable = runnables.get(index);
-        if(runnable instanceof WorkRunner){
-            WorkRunner workRunner = (WorkRunner) runnable;
-            boolean blockedByActiveWork = activeWork.stream().anyMatch(w->workRunner.work.dependsOn(w));
+        if(runnable instanceof WorkRunner workRunner){
+            boolean blockedByActiveWork = activeWork.stream()
+                    //.anyMatch(w->workRunner.work.dependsOn(w));
+                    .anyMatch(w->workService.dependsOn(workRunner.work,w));
             boolean blockedByPending = runnables.stream()
-                    .filter(v->v instanceof WorkRunner)
+                    .filter(v->v instanceof WorkRunner && !v.equals(workRunner))
                     .map(w->((WorkRunner) w).work)
-                    .anyMatch(w->workRunner.work.dependsOn(w));
+                    //.anyMatch(w->workRunner.work.dependsOn(w));
+                    .anyMatch(w->workService.dependsOn(workRunner.work,w));
             if(blockedByActiveWork || blockedByPending){
                 return 1;
             }
@@ -146,6 +145,14 @@ public class WorkQueue implements BlockingQueue<Runnable> {
         }finally {
             fullyUnlock();
         }
+        if(found==null){
+            System.out.println("removeFirstUnblocked returning null" +
+                    "\n  runnable "+
+                    runnables.stream().map(Runnable::toString).collect(Collectors.joining("\n  runnable "))
+                    +"\n  active "+activeWork.stream().map(Work::toString).collect(Collectors.joining("\n  active "))
+                    +"\n  pending "+pendingWork.stream().map(Work::toString).collect(Collectors.joining("\n  pending "))
+            );
+        }
         if(runnables.isEmpty()){
             synchronized (this) {
                 this.notify();
@@ -160,17 +167,20 @@ public class WorkQueue implements BlockingQueue<Runnable> {
      * @return
      */
     public List<Runnable> getRequiredPrecedingRunnables(Runnable runnable){
+        List<Runnable> rtrn = null;
         int index = runnables.indexOf(runnable);
-        if(runnable instanceof WorkRunner){
-            WorkRunner workRunner = (WorkRunner) runnable;
-            return runnables.stream().filter(v->
-                    v instanceof WorkRunner && workRunner.work.dependsOn(((WorkRunner) v).work)
+        if(runnable instanceof WorkRunner workRunner){
+            rtrn = runnables.stream().filter(v->
+                    !v.equals(workRunner) &&
+                    v instanceof WorkRunner bRunner &&
+                    workService.dependsOn(workRunner.work,bRunner.work) // workRunner.work.dependsOn(((WorkRunner) v).work)
             ).toList();
         }else if(index > 0){
-                return List.of(runnables.get(index-1));
+                rtrn = List.of(runnables.get(index-1));
         }else{
-            return Collections.emptyList();
+            rtrn = Collections.emptyList();
         }
+        return rtrn;
     }
     private void sort(){
         runnables = KahnDagSort.sort(runnables,this::getRequiredPrecedingRunnables);

@@ -110,6 +110,23 @@ public class NodeService {
         return rtrn;
     }
 
+    @Transactional
+    public boolean dependsOn(Node a,Node b){
+        int count = em.createNativeQuery("""
+            with recursive ancestor(nid) as (
+                select ne.child_id as nid 
+                    from node_edge ne where ne.child_id = :nodeAId
+                union
+                select ne.parent_id as nid
+                    from node_edge ne join ancestor a on a.nid = ne.child_id
+            )
+            select 1 from ancestor where nid = :nodeBId
+        """).setParameter("nodeAId",a.getId())
+                .setParameter("nodeBId",b.getId())
+                .getResultList().size();
+        return  count > 0;
+    }
+
 
     @Transactional
     public void delete(Node node){

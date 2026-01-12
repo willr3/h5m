@@ -78,6 +78,26 @@ public class NodeServiceTest extends FreshDb {
     }
 
     @Test
+    public void dependsOn() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        Node rootNode = new RootNode();
+        rootNode.name="root";
+        rootNode.persist();
+        JqNode first = new JqNode("first",".first",rootNode);
+        first.persist();
+        JqNode second = new JqNode("second",".second",first);
+        second.persist();
+        JqNode third = new JqNode("third",".third",second);
+        third.persist();
+        tm.commit();
+
+        assertTrue(nodeService.dependsOn(third,first),"third should depend on first");
+        assertTrue(nodeService.dependsOn(second,first),"second depends on first");
+        assertFalse(nodeService.dependsOn(first,second),"first should not depend on second");
+        assertFalse(nodeService.dependsOn(first,third),"first should not depend on third");
+    }
+    @Test
     public void renameParameters_spaced_parameters() {
         assertEquals("function foo( biz , buz ){}", nodeService.renameParameters("function foo( fiz , fuzz ){}", Map.of("fiz", "biz", "fuzz", "buz")));
     }

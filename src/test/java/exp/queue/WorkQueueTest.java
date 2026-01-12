@@ -76,7 +76,7 @@ public class WorkQueueTest extends FreshDb {
 
     @Test
     public void poll_null_until_source_completes() throws InterruptedException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
-        WorkQueue q = new WorkQueue(null,null,null);
+        WorkQueue q = new WorkQueue(null,null,workService);
 
         tm.begin();
         Node aNode = new JqNode("a");
@@ -90,6 +90,7 @@ public class WorkQueueTest extends FreshDb {
         Work bWork = new Work(bNode,null,null);
         bWork.persist();
         tm.commit();
+
 
         q.addWork(bWork);
         q.addWork(aWork);
@@ -112,7 +113,7 @@ public class WorkQueueTest extends FreshDb {
 
     @Test
     public void poll_return_first_non_blocked() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
-        WorkQueue q = new WorkQueue(null,null,null);
+        WorkQueue q = new WorkQueue(null,null,workService);
 
         tm.begin();
         Node aNode = new JqNode("a");
@@ -136,6 +137,8 @@ public class WorkQueueTest extends FreshDb {
         q.addWork(cWork);
 
         Runnable firstRunnable = q.poll();
+        assertNotNull(firstRunnable);
+        System.out.println(firstRunnable);
         assertFalse(q.isPending(aWork),"a should be removed from the q");
 
         Runnable polled = q.poll();

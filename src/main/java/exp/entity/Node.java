@@ -163,7 +163,7 @@ public abstract class Node extends PanacheEntity implements Comparable<Node> {
 
     @Override
     public int hashCode(){
-        return Objects.hash(id, name, operation, List.copyOf(sources));
+        return Objects.hash(id, name, operation/*, List.copyOf(sources)*/);
     }
 
     /*public boolean dependsOn(Node source){

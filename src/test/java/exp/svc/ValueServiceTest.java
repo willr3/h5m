@@ -79,6 +79,39 @@ public class ValueServiceTest extends FreshDb {
         assertNotNull(found);
     }
 
+    @Test
+    public void dependsOn() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        Node rootNode = new RootNode();
+        rootNode.name="root";
+        rootNode.persist();
+        Value rootValue = new Value(null,rootNode,new TextNode("root"));
+        rootValue.persist();
+        JqNode first = new JqNode("first",".first",rootNode);
+        first.persist();
+        Value firstValue = new Value(null,first,new TextNode("first"));
+        firstValue.sources=List.of(rootValue);
+        firstValue.persist();
+        JqNode second = new JqNode("second",".second",first);
+        second.persist();
+        Value secondValue = new Value(null,second,new TextNode("second"));
+        secondValue.sources=List.of(firstValue);
+        secondValue.persist();
+        JqNode third = new JqNode("third",".third",second);
+        third.persist();
+        Value thirdValue = new Value(null,third,new TextNode("third"));
+        thirdValue.sources=List.of(secondValue);
+        thirdValue.persist();
+        tm.commit();
+
+        assertTrue(valueService.dependsOn(firstValue,firstValue),"a value should depend on itself");
+        assertTrue(valueService.dependsOn(thirdValue,firstValue),"third should depend on first");
+        assertTrue(valueService.dependsOn(secondValue,firstValue),"second should depend on first");
+        assertFalse(valueService.dependsOn(firstValue,thirdValue),"first should not depend on third");
+
+    }
+
 
     @Test
     public void lazy_data() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException, JsonProcessingException {

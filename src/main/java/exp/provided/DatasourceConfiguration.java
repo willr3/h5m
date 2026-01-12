@@ -76,6 +76,7 @@ public class DatasourceConfiguration {
             pragma journal_mode = WAL;
             pragma synchronous = normal;
             pragma temp_store = memory;
+            -- pragma read_uncommitted = ON; -- for theorized 'dirty reads' in other connections
             """);
 /*            try(ResultSet rs = statement.executeQuery("SELECT name FROM sqlite_master")){
                 while(rs.next()){
