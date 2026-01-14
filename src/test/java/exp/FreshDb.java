@@ -28,6 +28,7 @@ public class FreshDb {
     String dbKind;
 
     @BeforeEach
+    //@AfterEach
     public void dropRows() throws SQLException {
         try(Connection conn = ds.getConnection()){
             conn.setAutoCommit(true);

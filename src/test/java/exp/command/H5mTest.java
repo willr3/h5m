@@ -536,6 +536,7 @@ public class H5mTest {
                 new String[]{"add","jq","to",testName,"integer","{foo}:.integer"},
                 new String[]{"add","jq","to",testName,"array","{foo}:.array"},
                 new String[]{"add","jq","to",testName,"obj","{foo}:.object"},
+                new String[]{"list","nodes","from",testName},
                 new String[]{"upload",folder.toString(),"to",testName},
                 new String[]{"list","value","from",testName,"by","foo","as","table"}
 

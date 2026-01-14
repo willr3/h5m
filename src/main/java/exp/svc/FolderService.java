@@ -156,10 +156,11 @@ public class FolderService {
         });
 */
         //List.copyOf is a hack to get around ConcurrentModificationException that is likely due to using entity list and panache setSources
-        List.copyOf(folder.group.sources).forEach(source -> {
+        List<Work> toQueue = List.copyOf(folder.group.sources).stream().map(source -> {
             Work newWork = new Work(source,new ArrayList<>(source.sources),List.of(newValue));
             workService.create(newWork);
-            workQueue.addWork(newWork);
-        });
+            return newWork;
+        }).toList();
+        workQueue.addWorks(toQueue);
     }
 }

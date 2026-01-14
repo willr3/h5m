@@ -59,6 +59,11 @@ public class WorkRunner implements Runnable {
         this.workService = workService;
     }
 
+    @Override
+    public String toString(){
+        return "WorkRunner work.id="+work.id+" work.node.id="+work.activeNode.id+" work.node.name="+work.activeNode.name;
+    }
+
     public WorkRunner then(Runnable then){
         this.then = then;
         return this;
@@ -116,6 +121,7 @@ public class WorkRunner implements Runnable {
                     List<Node> dependentNodes = nodeService.getDependentNodes(work.activeNode);
                     dependentNodes.forEach(node->{
                         Work newWork = new Work(node,node.sources,work.sourceValues);
+                        //workService.create(newWork);
                         workQueue.addWork(newWork);
                     });
 
@@ -128,7 +134,7 @@ public class WorkRunner implements Runnable {
             workService.delete(work);
         }catch( Exception e){
             //TODO how to handle the exception, adding it back to the todo list
-            System.err.println("WorkRunner caught: "+e.getMessage());
+            System.err.println("WorkRunner caught: "+e.getMessage()+"\n work="+work);
             e.printStackTrace();
             work.retryCount++;
             if(work.retryCount > RETRY_LIMIT){
