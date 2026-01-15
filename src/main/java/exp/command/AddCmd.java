@@ -14,6 +14,7 @@ import java.util.concurrent.Callable;
         AddJs.class,
         AddJsonata.class,
         AddSqlJsonpath.class,
+        AddSqlJsonpathAll.class,
     }
 )
 public class AddCmd implements Callable<Integer> {

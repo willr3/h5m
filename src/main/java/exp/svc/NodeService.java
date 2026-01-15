@@ -246,9 +246,16 @@ public class NodeService {
             }
         };
     }
-
     @Transactional
     public List<Value> calculateSqlJsonpathValues(SqlJsonpathNode node, Map<String,Value> sourceValues, int startingOrdinal) throws IOException {
+        return calculateSqlJsonpathValuesFirstOrAll(node,sourceValues,startingOrdinal,"jsonb_path_query_first");
+    }
+    @Transactional
+    public List<Value> calculateSqlAllJsonpathValues(SqlJsonpathNode node, Map<String,Value> sourceValues, int startingOrdinal) throws IOException {
+        return calculateSqlJsonpathValuesFirstOrAll(node,sourceValues,startingOrdinal,"jsonb_path_query_array");
+    }
+    @Transactional
+    private List<Value> calculateSqlJsonpathValuesFirstOrAll(SqlJsonpathNode node, Map<String,Value> sourceValues, int startingOrdinal,String psqlFunction) throws IOException {
         List<Value> rtrn = new ArrayList<>();
         if(sourceValues.isEmpty()){//end early when there isn't input
             return rtrn;
@@ -275,8 +282,8 @@ public class NodeService {
                                 """;
                         case "postgresql" ->
                                 """
-                                update value set data = jsonb_path_query_first( (select data from value where id = ?) , ?::jsonpath ) where id = ?
-                                """;
+                                update value set data = PSQL_FUNCTION( (select data from value where id = ?) , ?::jsonpath ) where id = ?
+                                """.replaceAll("PSQL_FUNCTION",psqlFunction);
                         default -> "";
                     }
             )) {
