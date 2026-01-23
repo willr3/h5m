@@ -300,8 +300,10 @@ public class NodeService {
             Value.<Value>find("data is not null and id = ?1", newValue.id)
                  .project(Value.DataProjection.class)
                  .firstResultOptional()
-                 .ifPresent(projection -> newValue.data = projection.data());
 
+                 .ifPresentOrElse(projection -> newValue.data = projection.data(),()->{
+                     System.err.println("no data found for newValue.id="+newValue.id+" node="+newValue.node.id+" "+newValue.node.name);
+                 });
             rtrn.add(newValue);
         });
         return rtrn;

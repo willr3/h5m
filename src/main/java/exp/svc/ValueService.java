@@ -50,7 +50,6 @@ public class ValueService {
     @Transactional
     public Value create(Value value){
         if(!value.isPersistent()){
-            value.id = null;
             Value merged = em.merge(value);
             em.flush();
             value.id = merged.id;
@@ -290,7 +289,7 @@ public class ValueService {
                     ), bynode as (
                         select node_id,root_id,json_group_array(json(data)) as data from tree group by node_id,root_id order by idx
                     )
-                    select json_group_object(n.name,json( ( case when json_array_length(b.data) > 1 then b.data else b.data->0 end))) as data from bynode b join node n on b.node_id = n.id group by root_id; 
+                    select json_group_object(n.name,json( ( case when json_array_length(b.data) > 1 then b.data else b.data->0 end))) as data from bynode b join node n on b.node_id = n.id group by root_id order by root_id; 
                     """;
                 case "postgresql" ->
                     """
@@ -301,7 +300,7 @@ public class ValueService {
                     ), bynode as (
                         select node_id,root_id,jsonb_agg(to_jsonb(data)) as data from tree group by node_id,root_id,idx order by idx
                     )
-                    select jsonb_object_agg(n.name,to_jsonb( ( case when jsonb_array_length(b.data) > 1 then b.data else b.data->0 end))) as data from bynode b join node n on b.node_id = n.id group by root_id;                        
+                    select jsonb_object_agg(n.name,to_jsonb( ( case when jsonb_array_length(b.data) > 1 then b.data else b.data->0 end))) as data from bynode b join node n on b.node_id = n.id group by root_id order by root_id;
                     """;
                 default -> "";
             }, JsonNode.class
