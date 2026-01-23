@@ -1,5 +1,6 @@
 package exp.command;
 
+import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.NumericNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import io.hyperfoil.tools.yaup.AsciiArt;
@@ -299,8 +300,8 @@ public class ListCmd implements Callable<Integer> {
                 }else if (c instanceof NumericNode){
                     c = ((NumericNode) c).numberValue();
                 }
-                if( c == null){
-                    c = "NULL";
+                if( c == null || c instanceof NullNode){
+                    c = "null";
                 }else if( c instanceof Long || c instanceof Integer){
                     if(columnFormats[a]==null){
                         columnFormats[a] = "d";
@@ -310,15 +311,16 @@ public class ListCmd implements Callable<Integer> {
                         columnFormats[a] = "f"; // columnFormat changes to s from 'null' and leaves previos doubles un-truncated
                     }else if (columnFormats[a].equals("s")){
                         //mixed value type colunn, convert to fixed width?
-                        c = String.format("%.2f", c);
+                        //c = String.format("%.2f", c);
                     }
+                    c = String.format("%.2f", c);
                 }else{
                     columnFormats[a] = "s";
                 }
-                int cellWidth = columnFormats[a] == null ? "NULL".length() : switch(columnFormats[a]){
+                int cellWidth = columnFormats[a] == null ? "null".length() : c.toString().length();/* switch(columnFormats[a]){
                     case "f" -> String.format("%.2f",((Number)c).doubleValue()).length();
                     default -> c.toString().length();
-                };
+                };*/
                 if(cellWidth > columnWidths[a]){
                     columnWidths[a] = cellWidth;
                 }
