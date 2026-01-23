@@ -1,6 +1,7 @@
 package exp.command;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.NumericNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -106,16 +107,15 @@ public class ListValue implements Callable<Integer> {
                     keyList.sort(String.CASE_INSENSITIVE_ORDER);
                     List<Function<JsonNode,Object>> accessors = keyList.stream().map(name-> (Function<JsonNode, Object>) json -> {
                         JsonNode found = json.get(name);
-                        if(found == null){
+                        if(found == null || found instanceof NullNode){
                             return "null";
                         }else if(found instanceof TextNode) {
                             return ((TextNode) found).textValue();
-                        }else if (found instanceof NumericNode){
+                        }else if (found instanceof NumericNode) {
                             return ((NumericNode) found).numberValue();
                         }else{
                             return found.toString();
                         }
-
                     }).toList();
                     System.out.println("Count: " + jsons.size());
                     System.out.println(ListCmd.table(80, jsons, keyList, accessors));
