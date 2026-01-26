@@ -882,7 +882,6 @@ public class NodeService {
                     newValue.node = node;
                     newValue.data = jsNode;
                     newValue.sources = node.sources.stream().filter(n->sourceValues.containsKey(n.name)).map(n -> sourceValues.get(n.name)).collect(Collectors.toList());
-                    System.out.println("newValue "+jsNode+" path="+newValue.getPath());
                     rtrn.add(newValue);
                     jp.nextToken();
                 }
