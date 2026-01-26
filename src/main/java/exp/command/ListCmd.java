@@ -365,8 +365,8 @@ public class ListCmd implements Callable<Integer> {
                 case "d":
                     rowFormat.append("%" + width + "d");
                     break;
-                case "f":
-                    rowFormat.append("%" + (width ) + ".2f");
+                case "f"://already converted
+                    rowFormat.append("%" + (width ) + "s");
                     break;
                 default:
                     rowFormat.append("%-" + width + "s");
