@@ -637,6 +637,7 @@ public class H5mTest {
         });
 
         LaunchResult result = results.getLast();
+        assertTrue(result.getOutput().contains("Count: 6"),"expect to extract 6 values");
         assertTrue(result.getOutput().contains("│ 1.33"),"double should be truncated\n"+result.getOutput());
         assertFalse(result.getOutput().contains("│ 1.333"),"double should be truncated\n"+result.getOutput());
         assertFalse(result.getOutput().contains("\"example\""),"strings should not be quoted\n"+result.getOutput());
@@ -681,6 +682,7 @@ public class H5mTest {
         });
 
         LaunchResult result = results.getLast();
+        assertTrue(result.getOutput().contains("Count: 1"),"expect one entry in the table");
         assertFalse(result.getOutput().contains("1.333"),"double should be truncated");
         assertFalse(result.getOutput().contains("\"example\""),"strings should not be quoted");
 

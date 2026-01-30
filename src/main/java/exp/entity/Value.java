@@ -96,7 +96,6 @@ public class Value extends PanacheEntity {
     @PrePersist
     public void preUpdate() {
         this.lastUpdated =  LocalDateTime.now();
-        this.sources = KahnDagSort.sort(sources,Value::getSources);
     }
 
     public List<Value> getSources() {return this.sources;}

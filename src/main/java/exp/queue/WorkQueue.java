@@ -37,7 +37,7 @@ public class WorkQueue implements BlockingQueue<Runnable> {
 
     private final ReentrantLock takeLock = new ReentrantLock();
     private final Condition notEmpty = takeLock.newCondition();
-    private final ReentrantLock putLock = new ReentrantLock();
+    //private final ReentrantLock putLock = new ReentrantLock();
 
     private List<Runnable> runnables = new  ArrayList<>();
 
@@ -75,12 +75,14 @@ public class WorkQueue implements BlockingQueue<Runnable> {
     }
 
     private void fullyLock(){
+//        putLock.lock();
         takeLock.lock();
-        putLock.lock();
+
+
     }
     private void fullyUnlock(){
+//        putLock.unlock();
         takeLock.unlock();
-        putLock.unlock();
     }
     private void signalNotEmpty(){
         takeLock.lock();
@@ -144,6 +146,11 @@ public class WorkQueue implements BlockingQueue<Runnable> {
         }finally {
             fullyUnlock();
         }
+        if(runnables.isEmpty()){
+            synchronized (this) {
+                this.notify();
+            }
+        }
         return found;
     }
 
@@ -169,7 +176,8 @@ public class WorkQueue implements BlockingQueue<Runnable> {
         runnables = KahnDagSort.sort(runnables,this::getRequiredPrecedingRunnables);
     }
     public void addWorks(Collection<Work> works){
-        putLock.lock();
+//        putLock.lock();
+        takeLock.lock();
         try {
             int c = runnables.size();
             works.forEach(w->{
@@ -186,7 +194,8 @@ public class WorkQueue implements BlockingQueue<Runnable> {
                 signalNotEmpty();
             }
         } finally {
-            putLock.unlock();
+//            putLock.unlock();
+            takeLock.unlock();
         }
     }
     public boolean addWork(Work work) {
@@ -203,6 +212,13 @@ public class WorkQueue implements BlockingQueue<Runnable> {
         return activeWork.contains(work);
     }
 
+    public int pendingCount(){
+        return pendingWork.size();
+    }
+    public int activeCount(){
+        return activeWork.size();
+    }
+
     @Override
     public boolean add(Runnable runnable) {
         if(runnable instanceof WorkRunner workRunner){
@@ -214,7 +230,8 @@ public class WorkQueue implements BlockingQueue<Runnable> {
                 pendingWork.add(workRunner.work);
             }
         }
-        putLock.lock();
+//        putLock.lock();
+        takeLock.lock();
         try {
             int c = runnables.size();
             runnables.add(runnable);
@@ -225,7 +242,8 @@ public class WorkQueue implements BlockingQueue<Runnable> {
                 signalNotEmpty();
             }
         }finally {
-            putLock.unlock();
+//            putLock.unlock();
+            takeLock.unlock();
         }
         //This is not supported
         return true;
@@ -295,7 +313,8 @@ public class WorkQueue implements BlockingQueue<Runnable> {
 
     @Override
     public void put(Runnable runnable) throws InterruptedException {
-        putLock.lock();
+//        putLock.lock();
+        takeLock.lock();
         try{
             if(runnable instanceof WorkRunner workRunner){
                 if(isPending(workRunner.work)){
@@ -310,7 +329,8 @@ public class WorkQueue implements BlockingQueue<Runnable> {
                 signalNotEmpty();
             }
         }finally {
-            putLock.unlock();
+//            putLock.unlock();
+            takeLock.unlock();
         }
         //not supported
     }

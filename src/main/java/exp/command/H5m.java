@@ -80,8 +80,6 @@ public class H5m implements QuarkusApplication {
             return 1;
         }
         folderService.recalculate(folder);
-        workExecutor.shutdown();//will wait for idle
-        workExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
         return 0;
     }
     @CommandLine.Command(name="upload",description = "")

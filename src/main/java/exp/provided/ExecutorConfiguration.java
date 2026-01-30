@@ -37,7 +37,7 @@ public class ExecutorConfiguration {
     @Inject
     ValueService valueService;
 
-    @Inject @ConfigProperty(name = "h5m.work.maximumPoolSize",defaultValue = "1")
+    @Inject @ConfigProperty(name = "h5m.work.maximumPoolSize",defaultValue = "10")
     int maximumPoolSize;
     @Inject @ConfigProperty(name = "h5m.work.keepAlive",defaultValue = "10")
     int keepAlive;
@@ -64,14 +64,14 @@ public class ExecutorConfiguration {
 
         WorkQueue workQueue = new WorkQueue(nodeService,valueService,workService);
         WorkQueueExecutor rtrn = new WorkQueueExecutor(
-                1,
+                maximumPoolSize,
                 maximumPoolSize,
                 keepAlive,
                 convertTimeUnit(keepAliveUnit),
                 workQueue
         );
         rtrn.allowCoreThreadTimeOut(false);
-        rtrn.prestartCoreThread();
+        rtrn.prestartAllCoreThreads();
 
         ExecutorServiceMetrics serviceMetrics = new ExecutorServiceMetrics(rtrn,"workExecutor",null);
         serviceMetrics.bindTo(registry);
