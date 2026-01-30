@@ -40,6 +40,8 @@ import java.nio.file.Path;
 import java.sql.PreparedStatement;
 import java.util.*;
 import java.util.function.DoubleBinaryOperator;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @ApplicationScoped
@@ -82,10 +84,24 @@ public class NodeService {
         if(node.id == null || node.id == -1){
 
         }else{
-            em.persist(node);
+            Node existing = Node.findById(node.id);
+            if(!existing.name.equals(node.name)){
+                List<Node> toChange = em.createNativeQuery(
+                        "select n.* from node n join node_edge ne on n.id = ne.child_id where ne.parent_id=? and n.type='ecma'"
+                ,Node.class).setParameter(1,node.id).getResultList();
+                Map<String,String> changes = Map.of(existing.name,node.name);
+                for(Node n : toChange){
+                    n.operation = renameParameters(n.operation, changes);
+                    em.merge(n);
+                }
+            }
+            em.merge(node);
         }
         return node.id;
     }
+
+
+
 
     @Transactional
     public List<Node> getDependentNodes(Node n){
@@ -548,6 +564,48 @@ public class NodeService {
 
         return rtrn;
     }
+
+    private int preceedingNonSpace(int idx,String input){
+        do{
+            idx--;
+        }while(idx >= 0 && " \t\n".contains(input.substring(idx,idx+1)));
+        return idx;
+    }
+    private int followingNonSpace(int idx,String input){
+        while(idx < input.length() && " \t\n".contains(input.substring(idx,idx+1))){
+            idx++;
+        }
+        return idx;
+    }
+    public String renameParameters(String function,Map<String,String> renames){
+        for(String key:renames.keySet()){
+            Matcher m = Pattern.compile(key).matcher(function);
+            while(m.find()){
+                int before = preceedingNonSpace(m.start(),function);
+                int after = followingNonSpace(m.end(),function);
+
+                String previous = ""+(before > 0 ? function.charAt(before) : ' ');
+                String following = ""+(after < function.length() ? function.charAt(after) : ' ');
+                //conditions that do not match the variable reference
+                if(
+                    previous.matches("[a-zA-Z_\\$]") || //part of another name
+                    following.matches("[a-zA-Z_\\$0-9]") || //part of another name
+                    previous.equals(".") || //method call
+                    following.equals(":") // key in an object
+                ){
+                    //skip it
+                }else{
+                    function =
+                        function.substring(0, m.start()) +
+                        renames.get(key) +
+                        function.substring(m.end());
+                    m.reset(function);
+                }
+            }
+        }
+        return function;
+    }
+
     @Transactional
     public List<Value> calculateJsValues(JsNode node,Map<String,Value> sourceValues,int startingOrdinal) throws IOException {
         List<Value> rtrn = new ArrayList<>();

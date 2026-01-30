@@ -76,6 +76,48 @@ public class NodeServiceTest extends FreshDb {
 
 
     }
+
+    @Test
+    public void renameParameters_spaced_parameters() {
+        assertEquals("function foo( biz , buz ){}", nodeService.renameParameters("function foo( fiz , fuzz ){}", Map.of("fiz", "biz", "fuzz", "buz")));
+    }
+    @Test
+    public void renameParameters_nested_parameters() {
+        assertEquals("function foo({biz,buz}){}", nodeService.renameParameters("function foo({fiz,fuzz}){}", Map.of("fiz", "biz", "fuzz", "buz")));
+    }
+    @Test
+    public void renameParameters_skip_method_call() {
+        assertEquals("buz=>buz.foo()", nodeService.renameParameters("foo=>foo.foo()", Map.of("foo", "buz")));
+    }
+    @Test
+    public void renameParameters_string_literal() {
+        assertEquals("buz=>`{buz}`", nodeService.renameParameters("foo=>`{foo}`", Map.of("foo", "buz")));
+    }
+    @Test
+    public void renameParameter_skip_object_key(){
+        assertEquals("buzz=>({foo:buzz})",nodeService.renameParameters("foo=>({foo:foo})",Map.of("foo","buzz")));
+    }
+
+    @Test
+    public void update_changes_javascript_argument_name() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        tm.begin();
+        Node n = new JqNode("oldName", "operation");
+        n.persist();
+        Node js = new JsNode("jsNode", "(oldName)=>oldName");
+        js.sources=List.of(n);
+        js.persist();
+        tm.commit();
+
+        n.name = "newName";
+
+        nodeService.update(n);
+        Node found = Node.findById(js.id);
+        assertEquals("(newName)=>newName", found.operation,"the change should update method");
+
+    }
+
+
+
     @Test
     public void calculateJsValue_yield() throws IOException {
         ObjectMapper mapper = new ObjectMapper();
