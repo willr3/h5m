@@ -209,7 +209,7 @@ public class H5mTest {
 
 
     }
-    @Test @Disabled //not yet working because relativedifference doesn't know about the "datsaet" node
+    @Test //not yet working because relativedifference doesn't know about the "datsaet" node
     //need to tell relativedifference which node is the dataset. either detect it with CTE (is that possible)
     //or make it an attribute on the Folder / NodeGroup
     public void calculate_relativedifference_dataset_node(QuarkusMainLauncher launcher) throws IOException {
