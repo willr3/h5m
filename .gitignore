@@ -4,3 +4,6 @@
 *.project
 *.idea
 dependency-reduced-pom.xml
+.env
+.mvn/
+perf_test/states.yaml

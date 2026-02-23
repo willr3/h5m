@@ -1,0 +1,4 @@
+states:
+  H5M_PATH: #full path for sqlite db (defaults to ~/h5m.db if not set)
+  asprof_dir: #e.g. /tmp/async-profiler-4.2.1-872be63-linux-x64/
+  h5m_folder: #path to the base git folder for h5m

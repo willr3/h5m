@@ -1,0 +1,320 @@
+scripts:
+
+  start-postgresql:
+  - sh: if podman container exists h5m-db; then podman stop h5m-db; podman rm h5m-db; fi
+  - sh: podman run --detach --name h5m-db -e POSTGRES_PASSWORD=quarkus --env POSTGRES_USER=quarkus --env POSTGRES_DB=quarkus --publish 5432:5432 mirror.gcr.io/library/postgres:16
+    # --rm 
+    then:
+    - regex: (?<RUN.postgresContainerId>[a-f0-9]{64})
+  - sleep: 10s # is it taking the pod a few seconds to be ready to answer db connection attempts?
+
+  stop-postgresql:
+  - read-state: ${{RUN.postgresContainerId}}
+    then:
+    - sh: podman stop ${{RUN.postgresContainerId}}
+
+  build:
+  - sh: cd ${{h5m_folder}}
+  - sh: git diff-index --quiet HEAD --; echo $? #checking for dirty branch  
+    then:
+    - regex: 0
+      else:
+      - set-state: RUN.dirty dirty    
+  - sh: git rev-parse --short HEAD
+    then:
+    - set-state: RUN.h5m_commit
+  - sh: git rev-parse --abbrev-ref HEAD
+    then:
+    - set-state: RUN.h5m_branch
+  - sh: >
+      if [[ -f ".env" ]]; then rm .env; fi    
+  - js: >
+      "${{db_type}}" == "postgresql"
+    then:
+    - sh: |
+        cat <<EOF > .env
+        quarkus.datasource.db-kind=postgresql
+        quarkus.datasource.jdbc.url=jdbc:postgresql://0.0.0.0:5432/quarkus
+        quarkus.datasource.username=quarkus
+        quarkus.datasource.password=quarkus
+        EOF
+  - sh: echo "h5m.work.maximumPoolSize=1" >> .env
+  - script: create-filename
+  - sh: time mvn clean package -DskipTests=true -DskipITs #-Pnative
+    then:
+    - regex: real\s+(?<RUN.build.real>\S+)  
+    - regex: user\s+(?<RUN.build.user>\S+)
+    - regex: sys\s+(?<RUN.build.sys>\S+)
+  
+  create-filename:
+  - set-state: RUN.filename ${{= [ "${{filename:}}", "${{h5m_branch}}", "${{h5m_commit}}", "${{dirty:}}" ].filter(v=>v.length>0).join(".") }}
+  - sh: find . -maxdepth 1 -type f -name "*${{filename}}*" | wc -l
+    then:
+    - set-state: filename_counter
+    - set-state: RUN.filename ${{RUN.filename}}.${{= String(${{filename_counter}}).padStart(3, '0'); }}
+  
+
+  create-sql-nodes:
+  - sh: java -jar ${{h5m_jar}} add sqlpathall to quarkus-spring-boot-comparison runtimeName "$.results[*].keyvalue().key"
+  - sh: java -jar ${{h5m_jar}} add sqlpathall to quarkus-spring-boot-comparison rssStartup "$.results[*].*.rss.avStartupRss"
+  - sh: java -jar ${{h5m_jar}} add sqlpathall to quarkus-spring-boot-comparison maxRss "$.results[*].*.load.avMaxRss"
+  - sh: java -jar ${{h5m_jar}} add sqlpathall to quarkus-spring-boot-comparison avBuildTime "$.results[*].*.build.avBuildTime"
+  - sh: java -jar ${{h5m_jar}} add sqlpathall to quarkus-spring-boot-comparison avTimeToFirstRequest "$.results[*].*.startup.avStartTime"
+  - sh: java -jar ${{h5m_jar}} add sqlpathall to quarkus-spring-boot-comparison avThroughput "$.results[*].*.load.avThroughput"
+  - sh: java -jar ${{h5m_jar}} add sqlpathall to quarkus-spring-boot-comparison rssFirstRequest "$.results[*].*.rss.avFirstRequestRss"
+  - sh: java -jar ${{h5m_jar}} add sqlpathall to quarkus-spring-boot-comparison maxThroughputDensity "$.results[*].*.load.maxThroughputDensity"
+  - sh: java -jar ${{h5m_jar}} add sqlpath to quarkus-spring-boot-comparison buildId "$.env.BUILD_ID"
+  - sh: java -jar ${{h5m_jar}} add sqlpath to quarkus-spring-boot-comparison buildUrl "$.env.BUILD_URL"
+  - sh: java -jar ${{h5m_jar}} add sqlpath to quarkus-spring-boot-comparison quarkusVersion "$.config.QUARKUS_VERSION"
+  - sh: java -jar ${{h5m_jar}} add sqlpath to quarkus-spring-boot-comparison springVersion "$.config.SPRING_BOOT_VERSION"
+  - sh: |
+      java -jar ${{h5m_jar}} add js to quarkus-spring-boot-comparison dataset - <<'EOF'
+      function* dataset({runtimeName, rssStartup, maxRss, avBuildTime, avTimeToFirstRequest, avThroughput, rssFirstRequest, maxThroughputDensity, buildId, buildUrl, quarkusVersion, springVersion}){
+        var map = runtimeName.map((name, i) => ({
+          runtime: name.split('-')[0],
+          buildType: name.split('-')[1],
+          rssStartup: rssStartup[i],
+          maxRss: maxRss[i],
+          avBuildTime: avBuildTime[i],
+          avTimeToFirstRequest: avTimeToFirstRequest[i],
+          avThroughput: avThroughput[i],
+          rssFirstRequest: rssFirstRequest[i],
+          maxThroughputDensity: maxThroughputDensity[i],
+          buildId: buildId,
+          buildUrl: buildUrl,
+          version: ((name.split('-')[0].substring(0, 6) == 'spring' ) ? springVersion: quarkusVersion )
+        }))
+        for (var item of map){
+          yield item;
+        }
+      }
+      EOF
+  - sh: java -jar ${{h5m_jar}} add sqlpath to quarkus-spring-boot-comparison avBuildTime "{dataset}:$.avBuildTime"
+  - sh: java -jar ${{h5m_jar}} add sqlpath to quarkus-spring-boot-comparison avThroughput "{dataset}:$.avThroughput"
+  - sh: java -jar ${{h5m_jar}} add sqlpath to quarkus-spring-boot-comparison avTimeToFirstRequest "{dataset}:$.avTimeToFirstRequest"
+  - sh: java -jar ${{h5m_jar}} add sqlpath to quarkus-spring-boot-comparison build "{dataset}:$.buildId"
+  - sh: java -jar ${{h5m_jar}} add sqlpath to quarkus-spring-boot-comparison buildType "{dataset}:$.buildType"
+  - sh: java -jar ${{h5m_jar}} add sqlpath to quarkus-spring-boot-comparison maxRss "{dataset}:$.maxRss"
+  - sh: java -jar ${{h5m_jar}} add sqlpath to quarkus-spring-boot-comparison maxThroughputDensity "{dataset}:$.maxThroughputDensity"
+  - sh: java -jar ${{h5m_jar}} add sqlpath to quarkus-spring-boot-comparison rssFirstRequest "{dataset}:$.rssFirstRequest"
+  - sh: java -jar ${{h5m_jar}} add sqlpath to quarkus-spring-boot-comparison rssStartup "{dataset}:$.rssStartup"
+  - sh: java -jar ${{h5m_jar}} add sqlpath to quarkus-spring-boot-comparison runtime "{dataset}:$.runtime"
+  - sh: java -jar ${{h5m_jar}} add sqlpath to quarkus-spring-boot-comparison version "{dataset}:$.version"
+
+
+  create-jq-nodes:
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison runtimeName "[.results | to_entries[] | .key]"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison rssStartup "[.results[].rss.avStartupRss]"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison maxRss "[.results[].load.avMaxRss]"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison avBuildTime "[.results[].build.avBuildTime]"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison avTimeToFirstRequest "[.results[].startup.avStartTime]"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison avThroughput "[.results[].load.avThroughput]"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison rssFirstRequest "[.results[].rss.avFirstRequestRss]"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison maxThroughputDensity "[.results[].load.maxThroughputDensity]"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison buildId ".env.BUILD_ID"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison buildUrl ".env.BUILD_URL"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison quarkusVersion ".config.QUARKUS_VERSION"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison springVersion ".config.SPRING_BOOT_VERSION"
+  - sh: |
+      java -jar ${{h5m_jar}} add js to quarkus-spring-boot-comparison dataset - <<'EOF'
+      function* dataset({runtimeName, rssStartup, maxRss, avBuildTime, avTimeToFirstRequest, avThroughput, rssFirstRequest, maxThroughputDensity, buildId, buildUrl, quarkusVersion, springVersion}){
+        var map = runtimeName.map((name, i) => ({
+          runtime: name.split('-')[0],
+          buildType: name.split('-')[1],
+          rssStartup: rssStartup[i],
+          maxRss: maxRss[i],
+          avBuildTime: avBuildTime[i],
+          avTimeToFirstRequest: avTimeToFirstRequest[i],
+          avThroughput: avThroughput[i],
+          rssFirstRequest: rssFirstRequest[i],
+          maxThroughputDensity: maxThroughputDensity[i],
+          buildId: buildId,
+          buildUrl: buildUrl,
+          version: ((name.split('-')[0].substring(0, 6) == 'spring' ) ? springVersion: quarkusVersion )
+        }))
+        for (var item of map){
+          yield item;
+        }
+      }
+      EOF
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison avBuildTime "{dataset}:.avBuildTime"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison avThroughput "{dataset}:.avThroughput"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison avTimeToFirstRequest "{dataset}:.avTimeToFirstRequest"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison build "{dataset}:.buildId"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison buildType "{dataset}:.buildType"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison maxRss "{dataset}:.maxRss"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison maxThroughputDensity "{dataset}:.maxThroughputDensity"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison rssFirstRequest "{dataset}:.rssFirstRequest"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison rssStartup "{dataset}:.rssStartup"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison runtime "{dataset}:.runtime"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison version "{dataset}:.version"
+
+
+  create-upload-folder:
+  - sh: cd ${{h5m_folder}}/perf_test
+  - sh:
+      command: gpg  --pinentry-mode loopback -d 113-quarkus-spring-boot-comparison.tar.gz.gpg | tar -xzf -
+      prompt:
+        "Enter passphrase: ": ${{gzip_secret}}
+  - set-state: RUN.upload_folder ${{h5m_folder}}/perf_test/113-quarkus-spring-boot-comparison
+
+  cleanup-upload-folder:
+  - sh: rm -r ${{upload_folder}}
+
+  create-improved-jq-nodes:
+  - sh: |
+      java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison dataset - <<'EOF'
+      . as $top | 
+      .results | keys[] as $key | 
+      { 
+      runtime: $key | split("-")[0], buildType: $key | split("-")[1], 
+      rssStartup: .[$key].rss.avStartupRss, 
+      maxRss: .[$key].load.avMaxRss, 
+      avBuildTime: .[$key].build.avBuildTime, 
+      avTimeToFirstRequest: .[$key].startup.avStartTime, 
+      avThroughput: .[$key].load.avThroughput, 
+      rssFirstRequest: .[$key].rss.avFirstRequestRss, 
+      maxThroughputDensity: .[$key].load.maxThroughputDensity, 
+      buildId: $top.env.BUILD_ID, 
+      buildUrl: $top.env.BUILD_URL, 
+      version: (if $key | startswith("spring") then $top.config.SPRING_BOOT_VERSION else $top.config.QUARKUS_VERSION end ) 
+      }
+      EOF
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison avBuildTime "{dataset}:.avBuildTime"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison avThroughput "{dataset}:.avThroughput"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison avTimeToFirstRequest "{dataset}:.avTimeToFirstRequest"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison build "{dataset}:.buildId"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison buildType "{dataset}:.buildType"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison maxRss "{dataset}:.maxRss"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison maxThroughputDensity "{dataset}:.maxThroughputDensity"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison rssFirstRequest "{dataset}:.rssFirstRequest"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison rssStartup "{dataset}:.rssStartup"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison runtime "{dataset}:.runtime"
+  - sh: java -jar ${{h5m_jar}} add jq to quarkus-spring-boot-comparison version "{dataset}:.version"
+
+  test:
+  - sh: cd ${{h5m_folder}}
+  - js: >
+      "${{db_type}}" == "postgresql"
+    then:
+    - script: start-postgresql
+    else:
+    - read-state: ${{H5M_PATH}}
+      else:
+      - sh: echo ~/h5m.db
+        then:
+        - set-state: RUN.H5M_PATH
+    - sh: rm -rf ${{H5M_PATH}}*
+    - sh: export H5M_PATH="${{H5M_PATH}}" #use the path override
+  - js: ${{= "${{profiler}}" == "jfr"}}
+    then:
+    - set-state: RUN.jvm_args ${{= "${{RUN.jvm_args:}}" + " " + "${{jfr_args}}" }}  
+  - js: ${{= "${{profiler}}" == "asprof"}}
+    then:
+    - set-state: RUN.jvm_args ${{= "${{RUN.jvm_args:}}" + " " + "${{asprof_jvm_args}}" }}
+  - sh: java -jar ${{h5m_jar}} add folder quarkus-spring-boot-comparison
+  - script: create-${{node_type}}-nodes
+  - signal: starting
+  - sh: 
+      command: >
+        time java
+        ${{jvm_args:}}
+        -jar ${{h5m_jar}}
+        upload ${{upload_folder}} to quarkus-spring-boot-comparison
+        | tee /tmp/upload.log
+    then:
+    - regex: real\s+(?<RUN.upload.real>\S+)  
+    - regex: user\s+(?<RUN.upload.user>\S+)
+    - regex: sys\s+(?<RUN.upload.sys>\S+)
+    - parse:
+      - pattern: Slow query took (?<ms>\d+) milliseconds \[
+        eat: ToMatch
+        enables: capture_sql
+        rules: 
+        - PreClose
+      - pattern: (?<sql:add>[^\]]+)
+        requires: capture_sql
+      - pattern: \]
+        requires: capture_sql
+        disables: capture_sql
+        rules: 
+        - PostClose
+  verify:
+  - script: verify-${{db_type}}
+  - js: >
+      "${{db_type}}" == "postgresql"
+    then:
+    - sh: >
+        if [[ -f ".env" ]]; then rm .env; fi
+    - script: stop-postgresql
+    
+
+  verify-postgresql:
+  - add-prompt: "quarkus=# "
+  #- add-prompt: (END)
+  - sh: podman exec -it $(podman ps --quiet --filter "ancestor=postgres") psql --dbname=quarkus --username=quarkus
+  - sh: \pset pager off
+  - sh: \pset format csv
+    #Output format is csv.
+  - sh: \x
+    #Expanded display is on.
+  - sh: select count(*) as count from value;
+    then:
+    - regex: count,(?<RUN.count>\d+)
+  - sh: select count(*) as count from value where node_id = 1; #expect the group's root node to be id = 1
+    then:
+    - regex: count,(?<RUN.uploads>\d+)
+  - sh: \q #exits the psql prompt
+
+  verify-sqlite:
+  - add-prompt: "sqlite> "  
+  - sh: sqlite3 ${{H5M_PATH}}
+  - sh: .headers off
+  - sh: .mode line
+  - sh: select count(*) as count from value;
+    # count = 3436
+    then:
+    - regex: count = (?<RUN.values>\d+)
+  - sh: select count(*) as count from value where node_id = 1; #expect the group's root node to be id = 1
+    then:
+    - regex: count = (?<RUN.uploads>\d+)
+  - sh: select next_val from work_SEQ;
+    then:
+    - regex: next_val = (?<RUN.workIdx>\d+)
+  - sh: .quit #exits the sqlite3 prompt
+
+hosts:
+  target: LOCAL
+
+roles:
+  test:
+    hosts:  
+    - target
+    setup-scripts:
+    - create-upload-folder
+    - build
+
+    run-scripts:
+    - test
+    cleanup-scripts:
+    - verify
+    - cleanup-upload-folder
+
+
+states:
+  asprof_dir: "" #set this for the local environment
+  asprof_event: cpu
+  h5m_jar: h5m/target/h5m.jar
+  db_type: sqlite # sqlite or postgresql
+  node_type: jq # sql or jq
+  jfr: false
+  asprof: false
+  gzip_secret: "" #shared privately
+  h5m_folder: "" # path to the git repository
+  H5M_PATH: "" #path to the sqlite db
+  profiler: "" #no profiling or jfr or asprof
+  filename: h5m
+  slow_hql: >
+    -Dquarkus.log.category."org.hibernate.SQL_SLOW".level=INFO -Dquarkus.hibernate-orm.log.queries-slower-than-ms=100
+  asprof_jvm_args: "-agentpath:${{asprof_dir}}/lib/libasyncProfiler.so=start,event=${{asprof_event}},file=${{h5m_folder}}/${{filename}}.html"
+  jfr_args: "-XX:StartFlightRecording=name=quarkus,dumponexit=true,filename=${{filename}}.jfr"
