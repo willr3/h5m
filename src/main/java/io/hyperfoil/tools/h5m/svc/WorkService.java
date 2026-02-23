@@ -123,6 +123,7 @@ public class WorkService implements WorkServiceInterface {
 
     @Transactional
     public void execute(Work w){
+
         WorkQueue workQueue = workExecutor.getWorkQueue();
         try {
             Work work = em.find(Work.class, w.id);
@@ -171,7 +172,6 @@ public class WorkService implements WorkServiceInterface {
                 }
             }
             newOrUpdated.addAll(calculated);
-
             //we need to trigger more calculations? perhaps for a recalculation we do?
             if(!newOrUpdated.isEmpty()){
                 if(work.activeNode!=null){

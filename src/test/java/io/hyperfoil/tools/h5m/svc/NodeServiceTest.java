@@ -94,6 +94,10 @@ public class NodeServiceTest extends FreshDb {
     public void renameParameter_skip_object_key(){
         assertEquals("buzz=>({foo:buzz})",nodeService.renameParameters("foo=>({foo:foo})",Map.of("foo","buzz")));
     }
+    @Test
+    public void renameParameter_tertiary_refernece(){
+        assertEquals("(_a,_b,_c)=> _a ? _b: _c",nodeService.renameParameters("(a,b,c)=> a ? b: c",Map.of("a","_a","b","_b","c","_c")));
+    }
 
     @Test
     public void update_changes_javascript_argument_name() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
@@ -411,10 +415,13 @@ public class NodeServiceTest extends FreshDb {
     public void calculateJqValues_single_key_sourceValue() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
         ObjectMapper mapper = new ObjectMapper();
         tm.begin();
+        RootNode root = new RootNode();
+        root.persist();
         NodeEntity upload = new JqNode();//should be a different type of node?
         upload.name="upload";
         upload.persist();
         ValueEntity v1 = new ValueEntity();
+        v1.node = root;
         v1.data = mapper.readTree("""
                 {
                   "foo": [ { "key": "one"}, { "key" : "two" } ],
@@ -437,10 +444,13 @@ public class NodeServiceTest extends FreshDb {
     public void calculateJqValues_single_key_iterating() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
         ObjectMapper mapper = new ObjectMapper();
         tm.begin();
+        RootNode root = new RootNode();
+        root.persist();
         NodeEntity upload = new JqNode();//should be a different type of node?
         upload.name="upload";
         upload.persist();
         ValueEntity v1 = new ValueEntity();
+        v1.node=root;
         v1.data= mapper.readTree("""
                 {
                   "foo": [ { "key": "one"}, { "key" : "two" } ],
@@ -469,10 +479,14 @@ public class NodeServiceTest extends FreshDb {
     @Test
     public void calculateJqValues_multiple_sourceValues() throws IOException, HeuristicRollbackException, SystemException, HeuristicMixedException, RollbackException, NotSupportedException {
         tm.begin();
+        RootNode root = new RootNode();
+        root.persist();
         ValueEntity v1 = new ValueEntity();
+        v1.node=root;
         v1.data=new TextNode("cat");
         v1.persist();
         ValueEntity v2 = new ValueEntity();
+        v2.node=root;
         v2.data=new TextNode("dog");
         v2.persist();
 
@@ -751,10 +765,10 @@ public class NodeServiceTest extends FreshDb {
         assertTrue(fourth.contains("dog"),"fourth should have dog: "+second);
 
         //check the multivalues
-        assertTrue(Stream.of("one","uno","cat","dog").allMatch(first::contains),"missing expected key in "+first);
-        assertTrue(Stream.of("one","dos","dog").allMatch(second::contains),"missing expected key in "+second);
-        assertTrue(Stream.of("two","uno","dog").allMatch(third::contains),"missing expected key in "+third);
-        assertTrue(Stream.of("two","dos","dog").allMatch(fourth::contains),"missing expected key in "+fourth);
+        assertTrue(Stream.of("one","uno","cat","dog").allMatch(first::contains),"missing expected key in first: "+first);
+        assertTrue(Stream.of("one","dos","dog").allMatch(second::contains),"missing expected key in second: "+second);
+        assertTrue(Stream.of("two","uno","dog").allMatch(third::contains),"missing expected key in third: "+third);
+        assertTrue(Stream.of("two","dos","dog").allMatch(fourth::contains),"missing expected key in fourth: "+fourth);
 
     }
 

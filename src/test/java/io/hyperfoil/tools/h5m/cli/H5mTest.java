@@ -35,6 +35,27 @@ public class H5mTest {
             } else{ }
         });
     }
+
+    //disabled so it doesn't fail a build
+    //This test requires a running Horreum backup on port 6000 with username / password = horreum / horreum
+    @Test @Disabled
+    public void loadLegacyTests(QuarkusMainLauncher launcher){
+        LaunchResult result = null;
+        result = launcher.launch("load-legacy-tests","username=horreum","password=horreum","url=jdbc:postgresql://0.0.0.0:6000/horreum");
+        System.out.println("exitCode="+result.exitCode());
+        assertEquals(0,result.exitCode());
+
+    }
+    @Test @Disabled
+    public void loadLegacyRuns(QuarkusMainLauncher launcher){
+        LaunchResult result = null;
+        result = launcher.launch("load-legacy-tests","testId=391","username=horreum","password=horreum","url=jdbc:postgresql://0.0.0.0:6000/horreum");
+        assertEquals(0,result.exitCode());
+        result = launcher.launch("load-legacy-runs","testId=391","username=horreum","password=horreum","url=jdbc:postgresql://0.0.0.0:6000/horreum");
+        System.out.println("exitCode="+result.exitCode());
+        assertEquals(0,result.exitCode());
+    }
+
     @Test
     public void list(QuarkusMainLauncher launcher) {
         LaunchResult result = launcher.launch("list");
@@ -210,10 +231,8 @@ public class H5mTest {
         LaunchResult last = results.getLast();
         assertTrue(last.getOutput().contains("Count: 13"),"expect 13 values from test");
     }
-    @Test //not yet working because relativedifference doesn't know about the "datsaet" node
-    //need to tell relativedifference which node is the dataset. either detect it with CTE (is that possible)
-    //or make it an attribute on the FolderEntity / NodeGroupEntity
     @Disabled("There should be only changes detected for x = 2 and x = 12 but there are two other detected for x = 3 and x = 13")
+    @Test
     public void calculate_relativedifference_dataset_node(QuarkusMainLauncher launcher) throws IOException {
         String testName = StackWalker.getInstance()
                 .walk(s -> s.skip(0).findFirst())
