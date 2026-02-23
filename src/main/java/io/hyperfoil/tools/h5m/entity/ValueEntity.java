@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotNull;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -29,6 +31,7 @@ public class ValueEntity extends PanacheEntity {
     @ManyToOne(fetch = FetchType.LAZY   )
     @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "node_id")
     @JsonIdentityReference(alwaysAsId = true)
+    @NotNull
     public NodeEntity node;
 
     @ManyToOne(fetch = FetchType.LAZY)
