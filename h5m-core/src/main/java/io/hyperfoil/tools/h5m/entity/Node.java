@@ -45,7 +45,7 @@ public abstract class Node extends PanacheEntity implements Comparable<Node> {
 
     //making this eager causes too many joins
     //cannot cascade delete because this entity "owns" the reference to the parent values
-    @ManyToMany(cascade = { CascadeType.PERSIST, CascadeType.MERGE }, fetch = FetchType.LAZY )
+    @ManyToMany(cascade = { CascadeType.PERSIST, CascadeType.REFRESH }, fetch = FetchType.LAZY )
     @JoinTable(
             name="node_edge",
             joinColumns = @JoinColumn(name = "child_id"),

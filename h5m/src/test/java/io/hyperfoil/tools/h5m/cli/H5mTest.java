@@ -34,6 +34,14 @@ public class H5mTest {
             } else{ }
         });
     }
+
+    @Test
+    public void loadLegacyTests(QuarkusMainLauncher launcher){
+        LaunchResult result = launcher.launch("load-legacy-tests","username=horreum","password=horreum","url=jdbc:postgresql://0.0.0.0:6000/horreum");
+        System.out.println("exitCode="+result.exitCode());
+        assertEquals(0,result.exitCode());
+    }
+
     @Test
     public void list(QuarkusMainLauncher launcher) {
         LaunchResult result = launcher.launch("list");

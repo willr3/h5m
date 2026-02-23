@@ -3,6 +3,7 @@ package io.hyperfoil.tools.h5m.entity.node;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.IntNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.hyperfoil.tools.h5m.entity.Node;
 import io.hyperfoil.tools.h5m.entity.Value;
@@ -17,6 +18,15 @@ import java.util.function.Function;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class JsNodeTest {
+
+    @Test
+    public void isNullEmptyOrIdentityFunction(){
+        assertTrue(JsNode.isNullEmptyOrIdentityFunction("args => args"));
+        assertTrue(JsNode.isNullEmptyOrIdentityFunction("(args)=> args"));
+        assertTrue(JsNode.isNullEmptyOrIdentityFunction("( args ) => args"));
+        assertTrue(JsNode.isNullEmptyOrIdentityFunction("( args ) => { console.log(args); return args; }"));
+        assertTrue(JsNode.isNullEmptyOrIdentityFunction("function( args ){ console.log(args); return args; }"));
+    }
 
     @Test
     public void getParameterNames_empty_named_star_function(){
@@ -35,12 +45,41 @@ public class JsNodeTest {
     }
     @Test
     public void getParameterNames_named_star_function_multiline(){
-        List<String> params = JsNode.getParameterNames("function* dataset({foo,\n  bar,\n biz}){\nyield foo;\nyield bar;\nyield biz;}");
+        List<String> params = JsNode.getParameterNames("function* dataset({\nfoo,\n  bar,\n biz}){\nyield foo;\nyield bar;\nyield biz;}");
         assertNotNull(params);
         assertEquals(3, params.size(),"expect 3 entries");
         assertEquals("foo",params.get(0));
         assertEquals("bar",params.get(1));
         assertEquals("biz",params.get(2));
+    }
+    @Test
+    public void getParameterNames_named_star_function_multiline_keep_spread(){
+        List<String> params = JsNode.getParameterNames("function* dataset({\nfoo,\n  bar,\n biz}){\nyield foo;\nyield bar;\nyield biz;}",false);
+        assertNotNull(params);
+        assertEquals(3, params.size(),"expect 3 entries");
+        assertEquals("{\nfoo",params.get(0));
+        assertEquals("bar",params.get(1));
+        assertEquals("biz}",params.get(2));
+    }
+    @Test
+    public void getParameterNames_comment_and_default_values(){
+        List<String> params = JsNode.getParameterNames("""
+                /**
+                 * Calculates the mean or coefficient of variation % (CV%) for a pre-filtered array of log entries.
+                 *
+                 * @param {Array<Object>} filteredArr - A pre-filtered array of log entry objects.
+                 * @param {string} [logData="time"] - The property name of the value to be processed (e.g., "time", "activated").
+                 * @param {boolean} [stddev=false] - If true, calculates the coefficient of variation (as a percentage) instead of the mean.
+                 * @param {boolean} [usePopulation=false] - If true, uses the population formula for standard deviation (N), otherwise uses the sample formula (N-1).
+                 * @returns {string} The calculated value formatted to three decimal places, or "NaN" if the input is invalid or empty.
+                 */
+                (filteredArr, logData = "time", stddev = false, usePopulation = false) => {
+                }
+                """);
+        System.out.println(params.size());
+        for(int i = 0; i < params.size(); i++){
+            System.out.printf("%2d %s%n",i,params.get(i));
+        }
     }
 
     @Test
@@ -121,7 +160,7 @@ public class JsNodeTest {
         assertEquals(4, params.size(),"expected 4 values: "+params);
     }
     @Test
-    public void createFunctionParameters_destructure() throws JsonProcessingException {
+    public void createParameters_destructure() throws JsonProcessingException {
         ObjectMapper mapper = new ObjectMapper();
         Map<String, Value> values = Map.of(
                 "a",new Value(null,null,mapper.readTree("1")),
@@ -140,6 +179,19 @@ public class JsNodeTest {
         assertTrue(objectNode.has("b"),"expected a value: "+objectNode.toString());
         assertEquals("2",objectNode.get("b").toString(),"expected b value: "+objectNode.toString());
         assertEquals("3",params.get(1).toString(),"expected b value: "+objectNode.toString());
+    }
+    @Test
+    public void createParameters_single_value_different_name() throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        Map<String, Value> values = Map.of(
+                "a",new Value(null,null,mapper.readTree("1"))
+        );
+        List<JsonNode> params = JsNode.createParameters("function(v){return v;}",values);
+        assertNotNull(params,"return should not be null");
+        assertEquals(1,params.size(),"expected 2 values: "+params);
+        JsonNode node = params.get(0);
+        assertNotNull(node,"return should not be null");
+        assertInstanceOf(IntNode.class,node);
 
     }
 

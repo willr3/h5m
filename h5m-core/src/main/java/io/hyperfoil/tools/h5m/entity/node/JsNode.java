@@ -98,7 +98,11 @@ public class JsNode extends Node {
                 }
             }else{
                 if(!sourceValues.containsKey(param)){
-                    System.err.println("unable to find parameter value for " + param);
+                    if(params.size()==1 && sourceValues.size()==1){
+                        rtrn.add(sourceValues.get(sourceValues.keySet().iterator().next()).data);
+                    }else {
+                        System.err.println("unable to find parameter value for " + param);
+                    }
                 }else{
                     if(currentNode != null){
                         currentNode.set(param,sourceValues.get(param).data);
@@ -108,7 +112,27 @@ public class JsNode extends Node {
                 }
             }
         }
+        //if no parameter names match but there are input values and params
+        if(rtrn.isEmpty() && !sourceValues.isEmpty() && !params.isEmpty()){
+            if(sourceValues.size()==1){
+                rtrn.add(sourceValues.get(sourceValues.keySet().iterator().next()).data);
+            }else{
+                ObjectNode node = mapper.createObjectNode();
+                sourceValues.forEach((k,v)->{node.set(k,v.data);});
+                rtrn.add(node);
+            }
+        }
         return rtrn;
+    }
+
+    public static boolean isNullEmptyOrIdentityFunction(String input){
+        return
+            input==null ||
+            input.isEmpty() ||
+            input.matches("\\s*\\(?\\s*(?<arg>[a-zA-Z_$][a-zA-Z0-9_$]*)\\s*\\)?\\s*=>\\s*\\k<arg>\\s*") ||
+            input.matches("\\s*\\(?\\s*(?<arg>[a-zA-Z_$][a-zA-Z0-9_$]*)\\s*\\)?\\s*=>.*?return\\s+\\k<arg>.*") ||
+            input.matches("\\s*function\\*?\\s*\\w*\\s*\\(\\s*(?<arg>[a-zA-Z_$][a-zA-Z0-9_$]*)\\s*\\)\\s*\\{.*?return\\s+\\k<arg>.*")
+            ;
     }
 
     /**
@@ -125,6 +149,17 @@ public class JsNode extends Node {
         }
         List<String> rtrn = null;
         String parameters = null;
+        //remove leading comments
+        int length = input.length();
+        do {
+            length = input.length();
+            if(input.trim().startsWith("//")){
+                input = input.substring(input.indexOf(System.lineSeparator()+1));
+            }
+            if(input.trim().startsWith("/*")){
+                input = input.substring(input.indexOf("*/")+2);
+            }
+        }while(input.length() < length);
         if(input.startsWith("function(")) {
             parameters = input.substring("function(".length(), input.indexOf(")")).trim();
         }else if (input.startsWith("function*")) {
@@ -141,8 +176,15 @@ public class JsNode extends Node {
         String filter = removeSpread ? "\\.\\.\\.|\\{|}" : "\"\\\\.\\\\.\\\\.";
         if(parameters != null){
             rtrn = Stream.of(parameters.split(","))
-                .map(s -> s.trim()
-                        .replaceAll(filter, "")
+                .map(s -> {
+                            s = s.trim()
+                            .replaceAll(filter, "")
+                            .trim();
+                            if(s.contains("=")){
+                                s = s.substring(0,s.indexOf("=")).trim();
+                            }
+                            return s;
+                        }
                 )
                 .filter(s -> !s.isBlank())
                 .toList();
