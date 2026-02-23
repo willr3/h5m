@@ -136,6 +136,31 @@ public class NodeService implements NodeServiceInterface {
     }
 
     @Transactional
+    public boolean functionalyEquivalent(NodeEntity a,NodeEntity b){
+        if(!Objects.equals(a.name,b.name)){
+            return false;
+        }
+        if(!Objects.equals(a.operation,b.operation)){
+            return false;
+        }
+        if(a.sources.size()!=b.sources.size()){
+            return false;
+        }
+        if(a.id!=null){
+            a = NodeEntity.findById(a.id);
+        }
+        if(b.id!=null){
+            b = NodeEntity.findById(b.id);
+        }
+        for(int i=0;i<a.sources.size() && i<b.sources.size();i++){
+            if(!functionalyEquivalent(a.sources.get(i),b.sources.get(i))){
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Transactional
     public long update(NodeEntity node){
         if(node.id == null || node.id == -1){
 
@@ -730,7 +755,7 @@ public class NodeService implements NodeServiceInterface {
                     previous.matches("[a-zA-Z_\\$]") || //part of another name
                     following.matches("[a-zA-Z_\\$0-9]") || //part of another name
                     previous.equals(".") || //method call
-                    following.equals(":") // key in an object
+                            (following.equals(":") && !previous.equals("?")) // key in an object, not a tertiary expression
                 ){
                     //skip it
                 }else{

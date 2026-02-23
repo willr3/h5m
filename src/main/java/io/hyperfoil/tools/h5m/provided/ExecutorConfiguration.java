@@ -26,7 +26,7 @@ public class ExecutorConfiguration {
             @ConfigProperty(name = "h5m.worker.core", defaultValue = "1") int core,
             @ConfigProperty(name = "h5m.worker.maxPoolSize", defaultValue = "50") int max,
             @ConfigProperty(name = "h5m.worker.keepalive", defaultValue = "PT60S") Duration keepAlive) {
-        WorkQueueExecutor rtrn = new WorkQueueExecutor(core, max, keepAlive.toSeconds(), TimeUnit.SECONDS, new WorkQueue());
+        WorkQueueExecutor rtrn = new WorkQueueExecutor(max, max, keepAlive.toSeconds(), TimeUnit.SECONDS, new WorkQueue());
         rtrn.allowCoreThreadTimeOut(false);
         rtrn.prestartAllCoreThreads();
 
