@@ -35,6 +35,14 @@ public class NodeGroupEntity extends PanacheEntity {
     }
 
 
+    public void addNode(NodeEntity node){
+        if(!sources.contains(node)){
+            sources.add(node);
+            node.group = this;
+        }
+    }
+
+
     public List<NodeEntity> getTopLevelNodes(){
         return sources.stream().filter(node -> node.sources.size() == 1 && node.sources.contains(root)).collect(Collectors.toList());
     }

@@ -4,6 +4,7 @@ import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 @Schema(description = "The type of transformation a node performs")
 public enum NodeType {
+    EDIVISIVE("ed"),
     FINGERPRINT("fp"),
     FIXED_THRESHOLD("ft"),
     JQ("jq"),

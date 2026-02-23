@@ -70,7 +70,7 @@ public class KahnDagSort {
             }
         }
         if (rtrn.size() != list.size()) {
-            StringBuilder sb = new StringBuilder("Cycle detected in DAG involving: ");
+            StringBuilder sb = new StringBuilder("Cycle detected in DAG rtrn="+rtrn.size()+" list="+list.size()+" involving: ");
             boolean first = true;
             for (int i = 0, size = list.size(); i < size; i++) {
                 if (inDegrees.get(list.get(i)).get() > 0) {
