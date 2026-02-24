@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.node.*;
 import io.hyperfoil.tools.h5m.entity.Node;
 import io.hyperfoil.tools.h5m.entity.Value;
 import io.hyperfoil.tools.h5m.entity.node.*;
+import io.roastedroot.jq4j.Jq;
 import io.hyperfoil.tools.h5m.pasted.ProxyJacksonArray;
 import io.hyperfoil.tools.h5m.pasted.ProxyJacksonObject;
 import io.hyperfoil.tools.yaup.hash.HashFactory;
@@ -29,10 +30,11 @@ import org.graalvm.polyglot.proxy.Proxy;
 import org.graalvm.polyglot.proxy.ProxyExecutable;
 import org.hibernate.Session;
 
-import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.PreparedStatement;
@@ -847,119 +849,68 @@ public class NodeService {
     @Transactional
     public List<Value> calculateJqValues(JqNode node,Map<String,Value> sourceValues,int startingOrdinal) throws IOException {
         List<Value> rtrn = new ArrayList<>();
-        List<String> args = new ArrayList<>();
-        List<File> paths = new ArrayList<>();
-        File tmpFilter = Files.createTempFile("h5m.jq." + node.name,".txt").toFile();
-        tmpFilter.deleteOnExit();
-        Files.write(tmpFilter.toPath(),node.operation.getBytes());
+        ObjectMapper mapper = new ObjectMapper();
 
-        args.addAll(List.of(
-                "/usr/bin/jq",
-                "--from-file",
-                tmpFilter.toPath().toAbsolutePath().toString()
-        ));
-        if ( JqNode.isNullInput(node.operation)){
-            args.add("--null-input");
-        }else if(node.sources.size()>1 || sourceValues.size() >1){//if this is a multi file input
-            args.add("--slurp");
-        }
-
-        args.add("--compact-output");
-        args.add("--");//terminate argument processing
-        //iterate sources to preserve order
-        //another CME while iterating an entity collection, who is mutating these nodes?
-        List.copyOf(node.sources).forEach(sourceNode -> {
-            if(sourceValues.containsKey(sourceNode.name)){
-                try {
-                    Value sourceValue = sourceValues.get(sourceNode.name);
-                    File f = Files.createTempFile("h5m."+sourceNode.name,".json").toFile();
-                    valueService.writeToFile(sourceValue.id,f.getAbsolutePath());
-                    paths.add(f);
-                    args.add(f.getAbsolutePath());
-                }catch(IOException e){
-                    System.err.println("failed to create temporary file for "+sourceNode.name+"\n"+e.getMessage());
-                }
-
-            }
-        });
-        //if there are no sources we just add all the inputs together
-        if(node.sources.isEmpty()){
-            sourceValues.values().forEach(sourceValue -> {
-                try {
-                    File f = Files.createTempFile("h5m.", ".json").toFile();
-                    valueService.writeToFile(sourceValue.id, f.getAbsolutePath());
-                    paths.add(f);
-                    args.add(f.getAbsolutePath());
-                }catch(IOException e){
-                    System.err.println("failed to create temporary file\n"+e.getMessage());
+        // Build the JSON bytes to feed as stdin
+        // When sources are defined, preserve their order; otherwise use all values
+        List<Value> orderedValues = new ArrayList<>();
+        if (!node.sources.isEmpty()) {
+            //iterate sources to preserve order
+            List.copyOf(node.sources).forEach(sourceNode -> {
+                if(sourceValues.containsKey(sourceNode.name)){
+                    orderedValues.add(sourceValues.get(sourceNode.name));
                 }
             });
-
-        }
-        Path destinationPath = Files.createTempFile(".h5m." + node.name+".",".out");//getOutPath().resolve(name + "." + startingOrdinal);
-        destinationPath.toFile().deleteOnExit();
-        ProcessBuilder processBuilder = new ProcessBuilder(args);
-        processBuilder.environment().put("TERM", "xterm");
-        //processBuilder.directory(getJqPath().resolve(name).toFile()); //not yet creating the working directory
-        processBuilder.redirectOutput(destinationPath.toFile());
-        //processBuilder.redirectErrorStream(true);
-        Process p = processBuilder.start();
-        String line = null;
-        StringBuilder err = new StringBuilder();
-        try (BufferedReader reader = p.errorReader()) {
-            while ((line = reader.readLine()) != null) {
-                //TODO handle error output from process
-                err.append(line);
-                err.append(System.lineSeparator());
-            }
-        }
-        try (BufferedReader reader = p.inputReader()) {
-            while ((line = reader.readLine()) != null) {
-                err.append(line);
-                err.append(System.lineSeparator());
-                //TODO handle output that somehow wasn't redirected
-            }
-        }
-        if(!err.isEmpty()){
-            System.err.println("Error processing "+node.id+" "+node.name+"\n  values: "+sourceValues.entrySet().stream().map(e->e.getKey()+"="+e.getValue().id).collect(Collectors.joining(", "))+"\n"+err);
-        }
-        //TODO use onExit instead of blocking the thread?
-        try {
-            p.waitFor();
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-        int ec = p.exitValue();
-        if (ec != 0) {
-            //TODO handle failed jq
         } else {
-            int order = startingOrdinal;
-            //create a token from each root
-            File f = destinationPath.toFile();
-            try (FileInputStream fis = new FileInputStream(f)) {
-                JsonFactory jf = new JsonFactory();
-                JsonParser jp = jf.createParser(fis);
-                jp.setCodec(new ObjectMapper());
-                jp.nextToken();
-                while (jp.hasCurrentToken()) {
-                    JsonNode jsNode = jp.readValueAsTree();
-                    if(!jsNode.isNull()){
-                        Value newValue = new Value();
-                        newValue.idx = order++;
-                        newValue.node = node;
-                        newValue.data = jsNode;
-                        newValue.sources = node.sources.stream().filter(n -> sourceValues.containsKey(n.name)).map(n -> sourceValues.get(n.name)).collect(Collectors.toList());
-                        rtrn.add(newValue);
-                    }
-                    jp.nextToken();
-                }
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
+            //if there are no sources we just add all the inputs together
+            orderedValues.addAll(sourceValues.values());
         }
 
-        //remove temporary files
-        paths.forEach(File::delete);
+        ByteArrayOutputStream stdinBuf = new ByteArrayOutputStream();
+        for (Value v : orderedValues) {
+            stdinBuf.write(mapper.writeValueAsBytes(v.data));
+            stdinBuf.write('\n');
+        }
+
+        // Build jq arguments
+        List<String> jqArgs = new ArrayList<>();
+        jqArgs.add("-M");
+        if (JqNode.isNullInput(node.operation)){
+            jqArgs.add("--null-input");
+        } else if(node.sources.size()>1 || sourceValues.size() >1){
+            jqArgs.add("--slurp");
+        }
+        jqArgs.add("--compact-output");
+        jqArgs.add(node.operation);
+
+        var result = Jq.builder()
+                .withStdin(stdinBuf.toByteArray())
+                .withArgs(jqArgs.toArray(String[]::new))
+                .run();
+
+        if (result.failure()) {
+            System.err.println("Error processing "+node.id+" "+node.name+"\n  values: "+sourceValues.entrySet().stream().map(e->e.getKey()+"="+e.getValue().id).collect(Collectors.joining(", "))+"\n"+new String(result.stderr(), StandardCharsets.UTF_8));
+            return rtrn;
+        }
+
+        // Parse each JSON root from stdout
+        int order = startingOrdinal;
+        JsonFactory jf = new JsonFactory();
+        JsonParser jp = jf.createParser(result.stdout());
+        jp.setCodec(mapper);
+        jp.nextToken();
+        while (jp.hasCurrentToken()) {
+            JsonNode jsNode = jp.readValueAsTree();
+            if(!jsNode.isNull()){
+                Value newValue = new Value();
+                newValue.idx = order++;
+                newValue.node = node;
+                newValue.data = jsNode;
+                newValue.sources = node.sources.stream().filter(n -> sourceValues.containsKey(n.name)).map(n -> sourceValues.get(n.name)).collect(Collectors.toList());
+                rtrn.add(newValue);
+            }
+            jp.nextToken();
+        }
 
         return rtrn;
     }
