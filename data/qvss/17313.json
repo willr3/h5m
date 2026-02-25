@@ -1,0 +1,38 @@
+{
+    "env": {
+        "HOST": "mwperf4",
+        "USER": "jenkins",
+        "BUILD_ID": 69,
+        "BUILD_URL": "https://ci.app/job/Products/job/Quarkus/job/Competitors/job/quarkus-spring-boot-comparison/69/"
+    },
+    "config": {
+        "cgroup": {
+            "cpu": "0,2,4,6,8,10,12,14",
+            "load": {
+                "cpu": "1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39,41,43,45,47,49,51,53,55,57,59,61,63",
+                "name": "load-generator",
+                "mem_max": "24G"
+            },
+            "mem_max": "12G",
+            "service": {
+                "cpu": "0,2,4,6",
+                "name": "benchmark-app",
+                "mem_max": "12G"
+            }
+        },
+        "profiler": {
+            "0": "none",
+            "events": "cpu"
+        },
+        "CMD_PREFIX": "",
+        "JVM_MEMORY": "",
+        "JAVA_VERSION": "22.3.1.r17-grl",
+        "QUARKUS_VERSION": "2.16.7.Final",
+        "SPRING_BOOT_VERSION": "2.7.12"
+    },
+    "timing": {
+        "stop": "2023-05-18T15:03:47Z",
+        "start": "2023-05-18T15:00:29Z"
+    },
+    "$schema": "urn:quarkus-sb-compare:0.1"
+}

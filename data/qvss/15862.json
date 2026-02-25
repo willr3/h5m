@@ -1,0 +1,83 @@
+{
+    "env": {
+        "HOST": "mwperf4",
+        "USER": "jenkins",
+        "BUILD_ID": 51,
+        "BUILD_URL": "https://ci.app/job/Products/job/Quarkus/job/Competitors/job/quarkus-spring-boot-comparison/51/"
+    },
+    "config": {
+        "cgroup": {
+            "cpu": "0,2,4,6",
+            "name": "quarkus-sb",
+            "mem_max": "12G"
+        },
+        "profiler": {
+            "0": "none",
+            "events": "cpu"
+        },
+        "CMD_PREFIX": "",
+        "JVM_MEMORY": "",
+        "JAVA_VERSION": "17.0.6-tem",
+        "QUARKUS_VERSION": "3.0.0.Alpha4",
+        "SPRING_BOOT_VERSION": "2.6.3"
+    },
+    "timing": {
+        "stop": "2023-03-30T11:33:11Z",
+        "start": "2023-03-30T11:22:38Z"
+    },
+    "$schema": "urn:quarkus-sb-compare:0.1",
+    "results": {
+        "quarkus3-jvm": {
+            "rss": {
+                "startup": [
+                    164.171875,
+                    166.08203125,
+                    170.21484375
+                ],
+                "avStartupRss": 166.82291666666666,
+                "firstRequest": [
+                    185.82421875,
+                    192.62890625,
+                    199.296875
+                ],
+                "avFirstRequestRss": 192.58333333333334
+            },
+            "load": {
+                "rss": [
+                    455.60546875,
+                    453.4140625,
+                    460.26171875
+                ],
+                "avMaxRss": 456.4270833333333,
+                "throughput": [
+                    16087.43,
+                    16898.66,
+                    15755.43
+                ],
+                "avThroughput": 16247.173333333332,
+                "throughputDensity": [
+                    35.31000197196382,
+                    37.26981890862726,
+                    34.231458663973456
+                ],
+                "maxThroughputDensity": 37.26981890862726
+            },
+            "build": {
+                "timings": [
+                    7.39,
+                    7.77,
+                    7.42
+                ],
+                "avBuildTime": 7.526666666666666
+            },
+            "startup": {
+                "timings": [
+                    2167,
+                    2041,
+                    2146
+                ],
+                "avStartTime": 2118
+            }
+        }
+    }
+}

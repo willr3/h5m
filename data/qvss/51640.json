@@ -1,0 +1,85 @@
+{
+    "env": {
+        "HOST": "mwperf4",
+        "USER": "jenkins",
+        "BUILD_ID": 138,
+        "BUILD_URL": "https://ci.app/job/Products/job/Quarkus/job/Competitors/job/quarkus-spring-boot-comparison/138/"
+    },
+    "config": {
+        "cgroup": {
+            "cpu": "0,2,4,6,8,10,12,14",
+            "name": "quarkus-sb",
+            "mem_max": "14G"
+        },
+        "profiler": {
+            "0": "flamegraph",
+            "events": "cpu"
+        },
+        "CMD_PREFIX": "",
+        "JVM_MEMORY": "",
+        "JAVA_VERSION": "21.0.2-graalce",
+        "QUARKUS_VERSION": "3.17.8",
+        "SPRING_BOOT_VERSION": "3.4.1",
+        "NATIVE_SPRING_BUILD_OPTIONS": "",
+        "NATIVE_QUARKUS_BUILD_OPTIONS": ""
+    },
+    "timing": {
+        "stop": "2025-01-29T19:24:47Z",
+        "start": "2025-01-29T19:13:06Z"
+    },
+    "$schema": "urn:quarkus-sb-compare:0.1",
+    "results": {
+        "quarkus3-jvm": {
+            "rss": {
+                "startup": [
+                    194.8359375,
+                    197.27734375,
+                    196.16015625
+                ],
+                "avStartupRss": 196.09114583333334,
+                "firstRequest": [
+                    248.3046875,
+                    246.78125,
+                    245.00390625
+                ],
+                "avFirstRequestRss": 246.69661458333334
+            },
+            "load": {
+                "rss": [
+                    925.4140625,
+                    884.84765625,
+                    905.44921875
+                ],
+                "avMaxRss": 905.2369791666666,
+                "throughput": [
+                    30568.34,
+                    30470.84,
+                    30470.22
+                ],
+                "avThroughput": 30503.13333333333,
+                "throughputDensity": [
+                    33.03206773994749,
+                    34.436255534806925,
+                    33.652047369442826
+                ],
+                "maxThroughputDensity": 34.436255534806925
+            },
+            "build": {
+                "timings": [
+                    12.91,
+                    12.92,
+                    12.99
+                ],
+                "avBuildTime": 12.94
+            },
+            "startup": {
+                "timings": [
+                    4654,
+                    4572,
+                    5167
+                ],
+                "avStartTime": 4797.666666666667
+            }
+        }
+    }
+}

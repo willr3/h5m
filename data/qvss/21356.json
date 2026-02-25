@@ -1,0 +1,85 @@
+{
+    "env": {
+        "HOST": "mwperf4",
+        "USER": "jenkins",
+        "BUILD_ID": 99,
+        "BUILD_URL": "https://ci.app/job/Products/job/Quarkus/job/Competitors/job/quarkus-spring-boot-comparison/99/"
+    },
+    "config": {
+        "cgroup": {
+            "cpu": "0,2,4,6,8,10,12,14",
+            "name": "quarkus-sb",
+            "mem_max": "12G"
+        },
+        "profiler": {
+            "0": "none",
+            "events": "cpu"
+        },
+        "CMD_PREFIX": "",
+        "JVM_MEMORY": "",
+        "JAVA_VERSION": "22.3.1.r17-grl",
+        "QUARKUS_VERSION": "3.4.3",
+        "SPRING_BOOT_VERSION": "3.1.4",
+        "NATIVE_SPRING_BUILD_OPTIONS": "",
+        "NATIVE_QUARKUS_BUILD_OPTIONS": ""
+    },
+    "timing": {
+        "stop": "2023-10-17T18:42:38Z",
+        "start": "2023-10-17T18:20:57Z"
+    },
+    "$schema": "urn:quarkus-sb-compare:0.1",
+    "results": {
+        "quarkus3-reactive-native": {
+            "rss": {
+                "startup": [
+                    64.67578125,
+                    64.58984375,
+                    64.53125
+                ],
+                "avStartupRss": 64.59895833333333,
+                "firstRequest": [
+                    73.1015625,
+                    73.0703125,
+                    72.953125
+                ],
+                "avFirstRequestRss": 73.04166666666667
+            },
+            "load": {
+                "rss": [
+                    466.8125,
+                    401.7578125,
+                    428.40625
+                ],
+                "avMaxRss": 432.3255208333333,
+                "throughput": [
+                    7830.94,
+                    7827.7,
+                    7831.92
+                ],
+                "avThroughput": 7830.186666666666,
+                "throughputDensity": [
+                    16.77534341946713,
+                    19.483628585318424,
+                    18.281526004814356
+                ],
+                "maxThroughputDensity": 19.483628585318424
+            },
+            "build": {
+                "timings": [
+                    130.19,
+                    129.88,
+                    130.08
+                ],
+                "avBuildTime": 130.04999999999998
+            },
+            "startup": {
+                "timings": [
+                    50,
+                    50,
+                    50
+                ],
+                "avStartTime": 50
+            }
+        }
+    }
+}

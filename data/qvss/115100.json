@@ -1,0 +1,137 @@
+{
+    "env": {
+        "HOST": "mwperf4",
+        "USER": "jenkins",
+        "BUILD_ID": 176,
+        "BUILD_URL": "https://ci.app/job/Products/job/Quarkus/job/Competitors/job/quarkus-spring-boot-comparison/176/"
+    },
+    "config": {
+        "cgroup": {
+            "cpu": "0,2,4,6,8,10,12,14",
+            "name": "quarkus-sb",
+            "mem_max": "14G"
+        },
+        "profiler": {
+            "name": "none",
+            "events": "cpu"
+        },
+        "CMD_PREFIX": "",
+        "JVM_MEMORY": "",
+        "JAVA_VERSION": "25-graalce",
+        "QUARKUS_VERSION": "3.28.1",
+        "SPRING_BOOT_VERSION": "3.5.6",
+        "NATIVE_SPRING_BUILD_OPTIONS": "",
+        "NATIVE_QUARKUS_BUILD_OPTIONS": ""
+    },
+    "timing": {
+        "stop": "2025-09-26T18:40:12Z",
+        "start": "2025-09-26T17:55:42Z"
+    },
+    "$schema": "urn:quarkus-sb-compare:0.1",
+    "results": {
+        "quarkus3-jvm": {
+            "rss": {
+                "startup": [
+                    198.16015625,
+                    210.6171875,
+                    209.52734375
+                ],
+                "avStartupRss": 206.1015625,
+                "firstRequest": [
+                    291.46875,
+                    303.40234375,
+                    298.4296875
+                ],
+                "avFirstRequestRss": 297.7669270833333
+            },
+            "load": {
+                "rss": [
+                    491.6953125,
+                    548.92578125,
+                    552.625
+                ],
+                "avMaxRss": 531.08203125,
+                "throughput": [
+                    30859.09,
+                    30954.03,
+                    31643.13
+                ],
+                "avThroughput": 31152.083333333332,
+                "throughputDensity": [
+                    62.76059424503869,
+                    56.390191638498486,
+                    57.25967880570007
+                ],
+                "maxThroughputDensity": 62.76059424503869
+            },
+            "build": {
+                "timings": [
+                    8.64,
+                    8.56,
+                    8.56
+                ],
+                "avBuildTime": 8.586666666666668
+            },
+            "startup": {
+                "timings": [
+                    3380,
+                    3344,
+                    3512
+                ],
+                "avStartTime": 3412
+            }
+        },
+        "quarkus3-native": {
+            "rss": {
+                "startup": [
+                    67.08203125,
+                    67.13671875,
+                    67.08984375
+                ],
+                "avStartupRss": 67.10286458333333,
+                "firstRequest": [
+                    74.1328125,
+                    74.1875,
+                    74.140625
+                ],
+                "avFirstRequestRss": 74.15364583333333
+            },
+            "load": {
+                "rss": [
+                    256.09375,
+                    239.01171875,
+                    269.62890625
+                ],
+                "avMaxRss": 254.91145833333334,
+                "throughput": [
+                    19224.53,
+                    19208.32,
+                    19363.28
+                ],
+                "avThroughput": 19265.376666666667,
+                "throughputDensity": [
+                    75.06832946918853,
+                    80.3655992285943,
+                    71.81455530604853
+                ],
+                "maxThroughputDensity": 80.3655992285943
+            },
+            "build": {
+                "timings": [
+                    123.38,
+                    124.7,
+                    122.01
+                ],
+                "avBuildTime": 123.36333333333333
+            },
+            "startup": {
+                "timings": [
+                    455,
+                    53,
+                    53
+                ],
+                "avStartTime": 187
+            }
+        }
+    }
+}

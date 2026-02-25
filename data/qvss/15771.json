@@ -1,0 +1,131 @@
+{
+    "env": {
+        "HOST": "mwperf4",
+        "USER": "jenkins",
+        "BUILD_ID": 27,
+        "BUILD_URL": "https://ci.app/job/Products/job/Quarkus/job/Competitors/job/quarkus-spring-boot-comparison/27/"
+    },
+    "config": {
+        "cgroup": {
+            "cpu": "0,2,4,6,8,10,12,14",
+            "name": "quarkus-sb",
+            "mem_max": "12G"
+        },
+        "CMD_PREFIX": "",
+        "JVM_MEMORY": "",
+        "JAVA_VERSION": "22.3.r17-grl",
+        "QUARKUS_VERSION": "3.0.0.Alpha5",
+        "SPRING_BOOT_VERSION": "3.0.5"
+    },
+    "timing": {
+        "stop": "2023-03-28T07:12:46Z",
+        "start": "2023-03-28T06:45:57Z"
+    },
+    "$schema": "urn:quarkus-sb-compare:0.1",
+    "results": {
+        "spring3-jvm": {
+            "rss": {
+                "startup": [
+                    299.71484375,
+                    314.390625,
+                    310.0546875
+                ],
+                "avStartupRss": 308.0533854166667,
+                "firstRequest": [
+                    306.42578125,
+                    322.578125,
+                    320.2890625
+                ],
+                "avFirstRequestRss": 316.4309895833333
+            },
+            "load": {
+                "rss": [
+                    518.34765625,
+                    566.27734375,
+                    531.0703125
+                ],
+                "avMaxRss": 538.5651041666666,
+                "throughput": [
+                    4524.22,
+                    4555.4,
+                    4546.15
+                ],
+                "avThroughput": 4541.923333333333,
+                "throughputDensity": [
+                    8.728157531820614,
+                    8.044468051349616,
+                    8.56035423746267
+                ],
+                "maxThroughputDensity": 8.728157531820614
+            },
+            "build": {
+                "timings": [
+                    4.1,
+                    4.08,
+                    4.13
+                ],
+                "avBuildTime": 4.103333333333333
+            },
+            "startup": {
+                "timings": [
+                    5342,
+                    5393,
+                    5367
+                ],
+                "avStartTime": 5367.333333333333
+            }
+        },
+        "spring3-native": {
+            "rss": {
+                "startup": [
+                    146.55859375,
+                    146.578125,
+                    146.7265625
+                ],
+                "avStartupRss": 146.62109375,
+                "firstRequest": [
+                    149.25390625,
+                    149.2734375,
+                    149.421875
+                ],
+                "avFirstRequestRss": 149.31640625
+            },
+            "load": {
+                "rss": [
+                    463.578125,
+                    799.81640625,
+                    811.6875
+                ],
+                "avMaxRss": 691.6940104166666,
+                "throughput": [
+                    5852.44,
+                    7259.37,
+                    7190.74
+                ],
+                "avThroughput": 6767.516666666666,
+                "throughputDensity": [
+                    12.624495601469546,
+                    9.076295438894668,
+                    8.859000539000538
+                ],
+                "maxThroughputDensity": 12.624495601469546
+            },
+            "build": {
+                "timings": [
+                    208.56,
+                    203.09,
+                    207.77
+                ],
+                "avBuildTime": 206.47333333333333
+            },
+            "startup": {
+                "timings": [
+                    221,
+                    221,
+                    221
+                ],
+                "avStartTime": 221
+            }
+        }
+    }
+}

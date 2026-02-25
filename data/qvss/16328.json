@@ -1,0 +1,135 @@
+{
+    "env": {
+        "HOST": "mwperf4",
+        "USER": "jenkins",
+        "BUILD_ID": 66,
+        "BUILD_URL": "https://ci.app/job/Products/job/Quarkus/job/Competitors/job/quarkus-spring-boot-comparison/66/"
+    },
+    "config": {
+        "cgroup": {
+            "cpu": "0,2,4,6,8,10,12,14",
+            "name": "quarkus-sb",
+            "mem_max": "12G"
+        },
+        "profiler": {
+            "0": "none",
+            "events": "cpu"
+        },
+        "CMD_PREFIX": "",
+        "JVM_MEMORY": "",
+        "JAVA_VERSION": "22.3.1.r17-grl",
+        "QUARKUS_VERSION": "2.16.6.Final",
+        "SPRING_BOOT_VERSION": "2.7.10"
+    },
+    "timing": {
+        "stop": "2023-04-11T19:25:58Z",
+        "start": "2023-04-11T19:04:20Z"
+    },
+    "$schema": "urn:quarkus-sb-compare:0.1",
+    "results": {
+        "spring-jvm": {
+            "rss": {
+                "startup": [
+                    292.640625,
+                    294.12109375,
+                    288.60546875
+                ],
+                "avStartupRss": 291.7890625,
+                "firstRequest": [
+                    328.8671875,
+                    336.765625,
+                    336.015625
+                ],
+                "avFirstRequestRss": 333.8828125
+            },
+            "load": {
+                "rss": [
+                    413.0625,
+                    540.4453125,
+                    423.1328125
+                ],
+                "avMaxRss": 458.8802083333333,
+                "throughput": [
+                    8650.67,
+                    9417.66,
+                    10223.93
+                ],
+                "avThroughput": 9430.753333333334,
+                "throughputDensity": [
+                    20.942762899077017,
+                    17.4257409254521,
+                    24.162460811284873
+                ],
+                "maxThroughputDensity": 24.162460811284873
+            },
+            "build": {
+                "timings": [
+                    16.47,
+                    16.28,
+                    16.53
+                ],
+                "avBuildTime": 16.426666666666666
+            },
+            "startup": {
+                "timings": [
+                    5081,
+                    5041,
+                    5056
+                ],
+                "avStartTime": 5059.333333333333
+            }
+        },
+        "quarkus-jvm": {
+            "rss": {
+                "startup": [
+                    162.69140625,
+                    162.29296875,
+                    161.8359375
+                ],
+                "avStartupRss": 162.2734375,
+                "firstRequest": [
+                    220.015625,
+                    218.72265625,
+                    219.22265625
+                ],
+                "avFirstRequestRss": 219.3203125
+            },
+            "load": {
+                "rss": [
+                    442.98046875,
+                    398.23828125,
+                    401.06640625
+                ],
+                "avMaxRss": 414.0950520833333,
+                "throughput": [
+                    28831.13,
+                    28975.54,
+                    28678.92
+                ],
+                "avThroughput": 28828.53,
+                "throughputDensity": [
+                    65.08442704337628,
+                    72.75930357335531,
+                    71.5066621214925
+                ],
+                "maxThroughputDensity": 72.75930357335531
+            },
+            "build": {
+                "timings": [
+                    6.79,
+                    6.78,
+                    6.75
+                ],
+                "avBuildTime": 6.773333333333333
+            },
+            "startup": {
+                "timings": [
+                    1939,
+                    2043,
+                    2021
+                ],
+                "avStartTime": 2001
+            }
+        }
+    }
+}

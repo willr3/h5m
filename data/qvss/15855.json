@@ -1,0 +1,53 @@
+{
+    "env": {
+        "HOST": "mwperf4",
+        "USER": "jenkins",
+        "BUILD_ID": 46,
+        "BUILD_URL": "https://ci.app/job/Products/job/Quarkus/job/Competitors/job/quarkus-spring-boot-comparison/46/"
+    },
+    "config": {
+        "cgroup": {
+            "cpu": "0,2,4,6",
+            "name": "quarkus-sb",
+            "mem_max": "12G"
+        },
+        "profiler": {
+            "0": "none",
+            "events": "cpu"
+        },
+        "CMD_PREFIX": "",
+        "JVM_MEMORY": "",
+        "JAVA_VERSION": "17.0.6-tem",
+        "QUARKUS_VERSION": "3.0.0.Alpha5",
+        "SPRING_BOOT_VERSION": "2.6.3"
+    },
+    "timing": {
+        "stop": "2023-03-30T10:34:54Z",
+        "start": "2023-03-30T10:25:59Z"
+    },
+    "$schema": "urn:quarkus-sb-compare:0.1",
+    "results": {
+        "quarkus3-jvm": {
+            "load": {
+                "rss": [
+                    508.765625,
+                    529.66796875,
+                    507.859375
+                ],
+                "avMaxRss": 515.4309895833334,
+                "throughput": [
+                    13514.89,
+                    13166.77,
+                    13666.94
+                ],
+                "avThroughput": 13449.533333333333,
+                "throughputDensity": [
+                    26.564078498817604,
+                    24.85853549172167,
+                    26.910874688490296
+                ],
+                "maxThroughputDensity": 26.910874688490296
+            }
+        }
+    }
+}

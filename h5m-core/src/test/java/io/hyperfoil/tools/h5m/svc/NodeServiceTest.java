@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Stream;
 
@@ -825,6 +826,59 @@ public class NodeServiceTest extends FreshDb {
         JsonNode fingerprint = mapper.readTree("{\"platform\":\"x86\",\"buildType\":\"release\"}");
         boolean result = nodeService.evaluateFingerprintFilter("(fp) => fp.platform === \"x86\" && fp.buildType === \"release\"", fingerprint);
         assertTrue(result, "compound filter should match when both conditions are true");
+    }
+
+    @Test
+    public void calculateFpValues_with_qvss_data() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
+        Path qvssPath = Path.of("../data/qvss/15763.json").toAbsolutePath();
+        JsonNode qvssData = mapper.readTree(qvssPath.toFile());
+
+        tm.begin();
+        Node rootNode = new RootNode();
+        rootNode.name = "upload";
+        rootNode.persist();
+
+        Value rootValue = new Value(null, rootNode, qvssData);
+        rootValue.persist();
+
+        JqNode quarkusVersionNode = new JqNode("QUARKUS_VERSION", ".config.QUARKUS_VERSION", rootNode);
+        quarkusVersionNode.persist();
+        JqNode javaVersionNode = new JqNode("JAVA_VERSION", ".config.JAVA_VERSION", rootNode);
+        javaVersionNode.persist();
+        tm.commit();
+
+        // calculate jq values for both nodes
+        Map<String,Value> sourceValues = Map.of("upload", rootValue);
+        tm.begin();
+        List<Value> qvValues = nodeService.calculateJqValues(quarkusVersionNode, sourceValues, 0);
+        qvValues.forEach(Value.getEntityManager()::merge);
+        List<Value> jvValues = nodeService.calculateJqValues(javaVersionNode, sourceValues, 0);
+        jvValues.forEach(Value.getEntityManager()::merge);
+        tm.commit();
+
+        assertEquals(1, qvValues.size(), "should extract one QUARKUS_VERSION value");
+        assertEquals(1, jvValues.size(), "should extract one JAVA_VERSION value");
+
+        // build fingerprint from those extracted values
+        FingerprintNode fpNode = new FingerprintNode("fp", "fp", List.of(javaVersionNode, quarkusVersionNode));
+
+        Map<String,Value> fpSourceValues = new HashMap<>();
+        fpSourceValues.put("QUARKUS_VERSION", qvValues.getFirst());
+        fpSourceValues.put("JAVA_VERSION", jvValues.getFirst());
+
+        List<Value> fpResult = nodeService.calculateFpValues(fpNode, fpSourceValues, 0);
+
+        assertEquals(1, fpResult.size(), "should produce exactly one fingerprint value");
+        ObjectNode fpObject = (ObjectNode) fpResult.getFirst().data;
+
+        // verify sorted keys and real data values
+        List<String> keys = new ArrayList<>();
+        fpObject.fieldNames().forEachRemaining(keys::add);
+        assertEquals("JAVA_VERSION", keys.get(0), "first key should be JAVA_VERSION (sorted)");
+        assertEquals("QUARKUS_VERSION", keys.get(1), "second key should be QUARKUS_VERSION (sorted)");
+        assertEquals("22.3.r17-grl", fpObject.get("JAVA_VERSION").asText());
+        assertEquals("3.0.0.Alpha5", fpObject.get("QUARKUS_VERSION").asText());
     }
 
     @Test
