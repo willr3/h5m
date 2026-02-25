@@ -4,8 +4,6 @@ import com.api.jsonata4java.expressions.EvaluateException;
 import com.api.jsonata4java.expressions.EvaluateRuntimeException;
 import com.api.jsonata4java.expressions.Expressions;
 import com.api.jsonata4java.expressions.ParseException;
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,14 +26,21 @@ import org.graalvm.polyglot.proxy.Proxy;
 import org.graalvm.polyglot.proxy.ProxyExecutable;
 import org.hibernate.Session;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileInputStream;
+import net.thisptr.jackson.jq.BuiltinFunctionLoader;
+import net.thisptr.jackson.jq.Expression;
+import net.thisptr.jackson.jq.Function;
+import net.thisptr.jackson.jq.JsonQuery;
+import net.thisptr.jackson.jq.PathOutput;
+import net.thisptr.jackson.jq.Scope;
+import net.thisptr.jackson.jq.Version;
+import net.thisptr.jackson.jq.Versions;
+import net.thisptr.jackson.jq.exception.JsonQueryException;
+import net.thisptr.jackson.jq.path.Path;
+
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.sql.PreparedStatement;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.DoubleBinaryOperator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -43,6 +48,23 @@ import java.util.stream.Collectors;
 
 @ApplicationScoped
 public class NodeService {
+
+    private static final Scope JQ_SCOPE;
+    private static final ConcurrentHashMap<String, JsonQuery> JQ_CACHE = new ConcurrentHashMap<>();
+    static {
+        JQ_SCOPE = Scope.newEmptyScope();
+        BuiltinFunctionLoader.getInstance().loadFunctions(Versions.JQ_1_6, JQ_SCOPE);
+    }
+
+    private static JsonQuery compileJq(String filter) throws JsonQueryException {
+        JsonQuery cached = JQ_CACHE.get(filter);
+        if (cached != null) {
+            return cached;
+        }
+        JsonQuery compiled = JsonQuery.compile(filter, Versions.JQ_1_6);
+        JQ_CACHE.put(filter, compiled);
+        return compiled;
+    }
 
     @Inject
     EntityManager em;
@@ -881,119 +903,92 @@ public class NodeService {
     @Transactional
     public List<Value> calculateJqValues(JqNode node,Map<String,Value> sourceValues,int startingOrdinal) throws IOException {
         List<Value> rtrn = new ArrayList<>();
-        List<String> args = new ArrayList<>();
-        List<File> paths = new ArrayList<>();
-        File tmpFilter = Files.createTempFile("h5m.jq." + node.name,".txt").toFile();
-        tmpFilter.deleteOnExit();
-        Files.write(tmpFilter.toPath(),node.operation.getBytes());
 
-        args.addAll(List.of(
-                "/usr/bin/jq",
-                "--from-file",
-                tmpFilter.toPath().toAbsolutePath().toString()
-        ));
-        if ( JqNode.isNullInput(node.operation)){
-            args.add("--null-input");
-        }else if(node.sources.size()>1 || sourceValues.size() >1){//if this is a multi file input
-            args.add("--slurp");
+        // Compile the jq filter expression
+        JsonQuery query;
+        try {
+            query = compileJq(node.operation);
+        } catch (JsonQueryException e) {
+            System.err.println("Error compiling jq filter for node " + node.id + " " + node.name + ": " + e.getMessage());
+            return rtrn;
         }
 
-        args.add("--compact-output");
-        args.add("--");//terminate argument processing
-        //iterate sources to preserve order
-        //another CME while iterating an entity collection, who is mutating these nodes?
-        List.copyOf(node.sources).forEach(sourceNode -> {
-            if(sourceValues.containsKey(sourceNode.name)){
-                try {
-                    Value sourceValue = sourceValues.get(sourceNode.name);
-                    File f = Files.createTempFile("h5m."+sourceNode.name,".json").toFile();
-                    valueService.writeToFile(sourceValue.id,f.getAbsolutePath());
-                    paths.add(f);
-                    args.add(f.getAbsolutePath());
-                }catch(IOException e){
-                    System.err.println("failed to create temporary file for "+sourceNode.name+"\n"+e.getMessage());
-                }
-
-            }
-        });
-        //if there are no sources we just add all the inputs together
-        if(node.sources.isEmpty()){
-            sourceValues.values().forEach(sourceValue -> {
-                try {
-                    File f = Files.createTempFile("h5m.", ".json").toFile();
-                    valueService.writeToFile(sourceValue.id, f.getAbsolutePath());
-                    paths.add(f);
-                    args.add(f.getAbsolutePath());
-                }catch(IOException e){
-                    System.err.println("failed to create temporary file\n"+e.getMessage());
+        // Collect source data in order, preserving node.sources ordering
+        List<JsonNode> sourceData = new ArrayList<>();
+        if (!node.sources.isEmpty()) {
+            List.copyOf(node.sources).forEach(sourceNode -> {
+                if (sourceValues.containsKey(sourceNode.name)) {
+                    sourceData.add(sourceValues.get(sourceNode.name).data);
                 }
             });
-
-        }
-        Path destinationPath = Files.createTempFile(".h5m." + node.name+".",".out");//getOutPath().resolve(name + "." + startingOrdinal);
-        destinationPath.toFile().deleteOnExit();
-        ProcessBuilder processBuilder = new ProcessBuilder(args);
-        processBuilder.environment().put("TERM", "xterm");
-        //processBuilder.directory(getJqPath().resolve(name).toFile()); //not yet creating the working directory
-        processBuilder.redirectOutput(destinationPath.toFile());
-        //processBuilder.redirectErrorStream(true);
-        Process p = processBuilder.start();
-        String line = null;
-        StringBuilder err = new StringBuilder();
-        try (BufferedReader reader = p.errorReader()) {
-            while ((line = reader.readLine()) != null) {
-                //TODO handle error output from process
-                err.append(line);
-                err.append(System.lineSeparator());
-            }
-        }
-        try (BufferedReader reader = p.inputReader()) {
-            while ((line = reader.readLine()) != null) {
-                err.append(line);
-                err.append(System.lineSeparator());
-                //TODO handle output that somehow wasn't redirected
-            }
-        }
-        if(!err.isEmpty()){
-            System.err.println("Error processing "+node.id+" "+node.name+"\n  values: "+sourceValues.entrySet().stream().map(e->e.getKey()+"="+e.getValue().id).collect(Collectors.joining(", "))+"\n"+err);
-        }
-        //TODO use onExit instead of blocking the thread?
-        try {
-            p.waitFor();
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-        int ec = p.exitValue();
-        if (ec != 0) {
-            //TODO handle failed jq
         } else {
-            int order = startingOrdinal;
-            //create a token from each root
-            File f = destinationPath.toFile();
-            try (FileInputStream fis = new FileInputStream(f)) {
-                JsonFactory jf = new JsonFactory();
-                JsonParser jp = jf.createParser(fis);
-                jp.setCodec(new ObjectMapper());
-                jp.nextToken();
-                while (jp.hasCurrentToken()) {
-                    JsonNode jsNode = jp.readValueAsTree();
-                    if(!jsNode.isNull()){
-                        Value newValue = new Value();
-                        newValue.idx = order++;
-                        newValue.node = node;
-                        newValue.data = jsNode;
-                        newValue.sources = node.sources.stream().filter(n -> sourceValues.containsKey(n.name)).map(n -> sourceValues.get(n.name)).collect(Collectors.toList());
-                        rtrn.add(newValue);
-                    }
-                    jp.nextToken();
-                }
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
+            sourceValues.values().forEach(sourceValue -> sourceData.add(sourceValue.data));
         }
 
-        //remove temporary files
-        paths.forEach(File::delete);
+        // Determine jq mode and build input, mirroring how jq processes a JSONL stream:
+        //   --null-input:  . is null, sources accessible only via inputs/input
+        //   --slurp:       all sources combined into a single array
+        //   default:       filter runs on the single source value
+        boolean isNullInput = JqNode.isNullInput(node.operation);
+        boolean isSlurp = !isNullInput && (node.sources.size() > 1 || sourceValues.size() > 1);
+
+        JsonNode input;
+        if (isNullInput) {
+            input = NullNode.getInstance();
+        } else if (isSlurp) {
+            ObjectMapper mapper = new ObjectMapper();
+            ArrayNode slurped = mapper.createArrayNode();
+            sourceData.forEach(slurped::add);
+            input = slurped;
+        } else {
+            input = !sourceData.isEmpty() ? sourceData.getFirst() : NullNode.getInstance();
+        }
+
+        // Register custom inputs/input builtins so null-input filters can read the source stream
+        Scope childScope = Scope.newChildScope(JQ_SCOPE);
+        if (isNullInput) {
+            childScope.addFunction("inputs", 0, (Scope scope, List<Expression> args, JsonNode in,
+                                                  Path ipath, PathOutput output, Version version) -> {
+                for (JsonNode data : sourceData) {
+                    output.emit(data, null);
+                }
+            });
+            childScope.addFunction("input", 0, new Function() {
+                private int index = 0;
+                @Override
+                public void apply(Scope scope, List<Expression> args, JsonNode in,
+                                  Path ipath, PathOutput output, Version version) throws JsonQueryException {
+                    if (index < sourceData.size()) {
+                        output.emit(sourceData.get(index++), null);
+                    }
+                }
+            });
+        }
+        try {
+            int order = startingOrdinal;
+            List<JsonNode> results = new ArrayList<>();
+            query.apply(childScope, input, results::add);
+
+            for (JsonNode jsNode : results) {
+                if (!jsNode.isNull()) {
+                    Value newValue = new Value();
+                    newValue.idx = order++;
+                    newValue.node = node;
+                    newValue.data = jsNode;
+                    newValue.sources = node.sources.stream()
+                            .filter(n -> sourceValues.containsKey(n.name))
+                            .map(n -> sourceValues.get(n.name))
+                            .collect(Collectors.toList());
+                    rtrn.add(newValue);
+                }
+            }
+        } catch (JsonQueryException e) {
+            System.err.println("Error processing " + node.id + " " + node.name
+                    + "\n  values: " + sourceValues.entrySet().stream()
+                    .map(entry -> entry.getKey() + "=" + entry.getValue().id)
+                    .collect(Collectors.joining(", "))
+                    + "\n" + e.getMessage());
+        }
 
         return rtrn;
     }

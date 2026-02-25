@@ -6,7 +6,7 @@ The existing Entities (Labels, Extractors, Transformers, Variables, ...)  are go
 All entities that calculate values from input become nodes with edges connecting the output of one node to the input of another.
 
 Other changes:
-* Replace postgres' jsonpath with `jq`
+* Replace postgres' jsonpath with `jq` (evaluated in-process via [jackson-jq](https://github.com/eiiches/jackson-jq))
 * Tests are Folders on the file system
 * Runs are files in the test folder on the file system
 * Value calculations are managed by a persistence backed ExecutorService instead of a JMS Queue.
@@ -14,12 +14,7 @@ Other changes:
 
 
 ## Getting started
-### 1. Install jq
-h5m relies on `jq` for jsonpath processing.
-
-https://jqlang.org/
-
-### 2. Build the project
+### 1. Build the project
 ```shell
 mvn clean package -Pnative
 ```
@@ -29,13 +24,13 @@ mvn clean package
 ```
 and substitute `java -jar /target/h5m.jar` wherever you see `target/h5m` in the following steps
 
-### 3. Create a Folder
+### 2. Create a Folder
 ```shell
 TEMP_DIR=$(mktemp -d)
 target/h5m add folder test
 ```
 
-### 4. create jq nodes for the test
+### 3. create jq nodes for the test
 ```shell
 target/h5m add jq to test foo .foo[]
 target/h5m add jq to test name {foo}:.name
@@ -46,7 +41,7 @@ The `foo` node's operation is a `jq` filter. The `name`,`bar`,`biz` nodes' opera
 to indicate the node gets input from another node. The `{name}:` prefix creates the edges that connect nodes in the 
 computation graph.
 
-### 5. List the nodes 
+### 4. List the nodes 
 ```shell
 target/h5m list test nodes
 ┌──────┬──────┬───────────┬────────────────┬───────────────────────────┐
@@ -62,12 +57,12 @@ The `encoding` is similar to the original `operation` we defined in the `h5m add
 fully qualified name of the source node(s). Node names need to be uniquely identifiable but copying nodes from another group
 can cause duplicates so we are considering a "fully qualified name" as a way to resolve the ambiguity.
 
-### 6. Create and upload sample run
+### 5. Create and upload sample run
 ```shell
 echo '{"foo":[{"name":"primero","bar":{"biz":["one","first"]}},{"name":"segundo","bar":{"biz":["two","second"]}}]}' > $TEMP_DIR/first.json
 target/h5m upload $TEMP_DIR to test
 ```
-### 7. List the values
+### 6. List the values
 ```shell
 target/h5m list test values
 Count: 10
@@ -133,9 +128,7 @@ Horreum currently relies on the jsonpath implementation in postgres. Changing to
 2. AI search results for "How do I perform X in jq" offer more accurate answers than "How do I perform X in postgres jsonpath". There are also several situations where X cannot be done in postgres jsonpath
 3. Support alternative persistence options (sqllite, db2, ...) and persistence migration without changing all jsonpath
 
-Concerns:
-1. jq requires file access to the input json which could lead to higher IO if the jq operation is performed on a different host than the json persistence.
-2. jq is an external dependency that is not bundled with h5m
+jq filters are evaluated in-process using [jackson-jq](https://github.com/eiiches/jackson-jq), a pure Java jq implementation built on top of Jackson. This eliminates the need for an external `jq` binary and avoids the overhead of forking processes and writing temporary files for each filter evaluation.
 
 ### Node Graph
 The existing Horreum entity model (Schemas, Labels, Extractors, Combination Functions, Runs, Datasets, LabelValues, Fingerprints...) are replaced with: 
