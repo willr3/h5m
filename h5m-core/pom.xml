@@ -24,6 +24,10 @@
             <artifactId>JSONata4Java</artifactId>
         </dependency>
         <dependency>
+            <groupId>net.thisptr</groupId>
+            <artifactId>jackson-jq</artifactId>
+        </dependency>
+        <dependency>
             <groupId>io.hyperfoil.tools</groupId>
             <artifactId>yaup-core</artifactId>
         </dependency>

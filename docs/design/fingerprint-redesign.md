@@ -90,10 +90,10 @@ public void setFingerprintFilter(String filter) {
 
 **`h5m-core/.../svc/NodeService.java`**
 - Add helper method `evaluateFingerprintFilter(String filter, JsonNode fingerprint)`:
-  - Pipes the fingerprint JSON through `jq --exit-status '<filter>'` via ProcessBuilder
-  - Returns `true` if exit code is 0 (truthy output), `false` if exit code is 1 (falsy) or non-zero
+  - Evaluates the fingerprint JSON through the jq filter expression using jackson-jq (in-process, no external binary)
+  - Returns `true` if the filter produces a truthy output (`true`, non-null, non-empty), `false` otherwise
   - Returns `true` if filter is null/empty (no filter = pass all)
-  - Follows the same ProcessBuilder pattern as `calculateJqValues()` (~line 848)
+  - Uses the same `compileJq()` caching and `JQ_SCOPE` pattern as `calculateJqValues()`
 - Modify `calculateRelativeDifferenceValues()` (~line 287):
   - After getting `fingerprintValues` list, before the loop that processes each fingerprint:
   - Get the filter: `String fpFilter = node.getFingerprintFilter();`

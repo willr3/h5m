@@ -92,7 +92,8 @@ public class JqNode extends Node {
     }
     //detect if the jq command is processing the inputs together
     public static boolean isNullInput(String command){
-        return command.matches("(?<!\\.)[^.]*inputs.*");//^(?<!\.)inputs
+        // Match the jq builtin `inputs` as a standalone word, but not `.inputs` (field access)
+        return command.matches(".*(?<!\\.)\\binputs\\b.*");
     }
 
     @Override

@@ -18,9 +18,6 @@ import java.io.*;
 import java.security.DigestOutputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -531,34 +528,6 @@ public class ValueService {
         return Value.find("node.id",node.id).list();
     }
 
-
-    //TODO concerned about writeToFile using "'s to wrap strings
-    //TODO have write to file return the filePath instead of accepting it as an argument
-    @Transactional
-    public void writeToFile(long valueId,String filePath){
-        Session session = em.unwrap(Session.class);
-        session.doWork(conn -> {
-            try(PreparedStatement statement = conn.prepareStatement("select data from value where id=?")){
-                statement.setLong(1,valueId);
-                try(ResultSet rs = statement.executeQuery()){
-                    if(rs.next()) {
-                        try (InputStream inputStream = rs.getBinaryStream(1);
-                             OutputStream outputStream = new FileOutputStream(filePath)) {
-
-                            long bytesCopied = inputStream.transferTo(outputStream);
-                            if (bytesCopied < 1) {
-                                System.err.println("failed to transfer data for value=" + valueId);
-                            }
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
-                        }
-                    }
-                }
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
-        });
-    }
 
     @Transactional
     public int deleteDescendantValues(Value root,Node node){

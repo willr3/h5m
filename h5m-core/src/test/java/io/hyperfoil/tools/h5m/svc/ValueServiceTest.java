@@ -18,9 +18,6 @@ import org.hibernate.LazyInitializationException;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -34,27 +31,6 @@ public class ValueServiceTest extends FreshDb {
     @Inject
     TransactionManager tm;
 
-
-    @Test
-    public void writeToFile_string() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException, IOException {
-        tm.begin();
-        Node rootNode = new RootNode();
-        rootNode.persist();
-        Value rootValue = new Value(null,rootNode,new TextNode("a"));
-        rootValue.persist();
-        tm.commit();
-
-        File f = Files.createTempFile("h5m-test", ".writeToFile").toFile();
-        f.deleteOnExit();
-        valueService.writeToFile(rootValue.id,f.getAbsolutePath());
-
-        String content = Files.readString(f.toPath());
-
-        assertNotNull(content);
-        assertTrue(content.contains("a"));
-        assertEquals("\"a\"", content);
-        //TODO should string content include the quotes?
-    }
 
     @Test
     public void delete_does_not_cascade_and_delete_ancestor() throws HeuristicRollbackException, SystemException, HeuristicMixedException, RollbackException, NotSupportedException {
