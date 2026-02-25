@@ -30,6 +30,9 @@ public class JsNode extends Node {
      * its sources.
      */
     public static JsNode parse(String name, String input, Function<String,List<Node>> nodeFn){
+        return parse(name,input,nodeFn,false);
+    }
+    public static JsNode parse(String name, String input, Function<String,List<Node>> nodeFn,boolean ignoreMissing){
         if(input==null || input.isBlank()){
             System.err.println("missing js node input");
             return null;
@@ -57,7 +60,7 @@ public class JsNode extends Node {
                 sourceNodes.add(foundNodes.get(0));
             }
         }
-        if(ok) {
+        if(ok || ignoreMissing) {
             rtrn = new JsNode(name, input, sourceNodes);
         }
         return rtrn;
@@ -154,7 +157,12 @@ public class JsNode extends Node {
         do {
             length = input.length();
             if(input.trim().startsWith("//")){
-                input = input.substring(input.indexOf(System.lineSeparator()+1));
+                if(input.contains(System.lineSeparator())){
+                    input = input.substring(input.indexOf(System.lineSeparator())+1);
+                }else{
+
+                }
+
             }
             if(input.trim().startsWith("/*")){
                 input = input.substring(input.indexOf("*/")+2);

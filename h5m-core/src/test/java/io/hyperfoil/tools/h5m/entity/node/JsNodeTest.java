@@ -192,7 +192,41 @@ public class JsNodeTest {
         JsonNode node = params.get(0);
         assertNotNull(node,"return should not be null");
         assertInstanceOf(IntNode.class,node);
+    }
 
+    @Test
+    public void createParameters_multiple_values_single_parameter() throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        Map<String, Value> values = Map.of(
+                "a",new Value(null,null,mapper.readTree("1")),
+                "b",new Value(null,null,mapper.readTree("2"))
+        );
+        List<JsonNode> params = JsNode.createParameters("function(v){return v;}",values);
+        assertNotNull(params,"return should not be null");
+        assertEquals(1,params.size(),"expected 2 values: "+params);
+        JsonNode node = params.get(0);
+        assertNotNull(node,"return should not be null");
+        assertInstanceOf(ObjectNode.class,node);
+        ObjectNode objectNode = (ObjectNode)node;
+        assertTrue(objectNode.has("a"),"expected a value: "+objectNode.toString());
+        assertTrue(objectNode.has("b"),"expected a value: "+objectNode.toString());
+    }
+    @Test
+    public void createParameters_multiple_values_multiple_parameters_different_name() throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        Map<String, Value> values = Map.of(
+                "a",new Value(null,null,mapper.readTree("1")),
+                "b",new Value(null,null,mapper.readTree("2"))
+        );
+        List<JsonNode> params = JsNode.createParameters("function(v,x=false,y='true'){return v;}",values);
+        assertNotNull(params,"return should not be null");
+        assertEquals(1,params.size(),"expected 2 values: "+params);
+        JsonNode node = params.get(0);
+        assertNotNull(node,"return should not be null");
+        assertInstanceOf(ObjectNode.class,node);
+        ObjectNode objectNode = (ObjectNode)node;
+        assertTrue(objectNode.has("a"),"expected a value: "+objectNode.toString());
+        assertTrue(objectNode.has("b"),"expected a value: "+objectNode.toString());
     }
 
     @Test
