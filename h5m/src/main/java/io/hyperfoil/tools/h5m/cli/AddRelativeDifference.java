@@ -34,6 +34,8 @@ public class AddRelativeDifference implements Callable<Integer> {
     String filter;
     @CommandLine.Option(names={"fingerprint"}, description = "node names to use as fingerprint")
     List<String> fingerprints;
+    @CommandLine.Option(names={"--fingerprint-filter", "-ff"}, arity = "0..1", description = "jq filter expression for fingerprints")
+    String fingerprintFilter;
 
     @CommandLine.Option(names = {"by"},description = "grouping node" ,arity = "0..1")
     public String groupBy;
@@ -143,6 +145,9 @@ public class AddRelativeDifference implements Callable<Integer> {
         relDifference.setThreshold(threshold);
         relDifference.setWindow(window);
         relDifference.setMinPrevious(minPrevious);
+        if (fingerprintFilter != null && !fingerprintFilter.isBlank()) {
+            relDifference.setFingerprintFilter(fingerprintFilter);
+        }
 
         Node created = nodeService.create(relDifference);
 

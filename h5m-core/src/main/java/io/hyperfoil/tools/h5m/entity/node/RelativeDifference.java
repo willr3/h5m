@@ -22,6 +22,7 @@ public class RelativeDifference extends Node {
     public static final int DEFAULT_MIN_PREVIOUS = 5;
     private static final String FILTER =  "filter";
     public static final String DEFAULT_FILTER = "mean";//attribute value must be a constant
+    private static final String FINGERPRINT_FILTER = "fingerprintFilter";
 
     @Transient
     private Json config;
@@ -113,6 +114,14 @@ public class RelativeDifference extends Node {
     }
     public void setFilter(String filter){
         config.set(FILTER,filter);
+        operation=config.toString();
+    }
+    @Transient
+    public String getFingerprintFilter(){
+        return config.getString(FINGERPRINT_FILTER);
+    }
+    public void setFingerprintFilter(String fingerprintFilter){
+        config.set(FINGERPRINT_FILTER,fingerprintFilter);
         operation=config.toString();
     }
 

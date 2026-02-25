@@ -15,7 +15,6 @@ import io.hyperfoil.tools.h5m.entity.Value;
 import io.hyperfoil.tools.h5m.entity.node.*;
 import io.hyperfoil.tools.h5m.pasted.ProxyJacksonArray;
 import io.hyperfoil.tools.h5m.pasted.ProxyJacksonObject;
-import io.hyperfoil.tools.yaup.hash.HashFactory;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -291,8 +290,12 @@ public class NodeService {
             long minPrevious = relDiff.getWindow() > relDiff.getMinPrevious() ? relDiff.getWindow() : relDiff.getMinPrevious();
             Node groupBy = Node.findById(relDiff.getGroupByNode().getId());
             List<Value> fingerprintValues = valueService.getDescendantValues(root,relDiff.getFingerprintNode());
+            String fpFilter = relDiff.getFingerprintFilter();
             for(int fIdx=0; fIdx<fingerprintValues.size(); fIdx++){
                 Value fingerprintValue = fingerprintValues.get(fIdx);
+                if (fpFilter != null && !evaluateFingerprintFilter(fpFilter, fingerprintValue.data)) {
+                    continue;
+                }
                 if( relDiff.getDomainNode()!=null ){
 
                     //when would this have more than 1 value?
@@ -833,17 +836,48 @@ public class NodeService {
 
     @Transactional
     public List<Value> calculateFpValues(FingerprintNode node, Map<String,Value> sourceValues, int startingOrdinal) throws IOException {
-        HashFactory hashFactory = new HashFactory();
-
-        String glob = node.sources.stream().map(source->sourceValues.containsKey(source.name) ? sourceValues.get(source.name).data.toString() : "").collect(Collectors.joining(""));
-        String hash = hashFactory.getStringHash(glob);
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode fpObject = mapper.createObjectNode();
+        TreeMap<String, JsonNode> sorted = new TreeMap<>();
+        for (Node source : node.sources) {
+            if (sourceValues.containsKey(source.name)) {
+                sorted.put(source.name, sourceValues.get(source.name).data);
+            }
+        }
+        sorted.forEach(fpObject::set);
         Value newValue = new Value();
         newValue.idx = startingOrdinal+1;
         newValue.node = node;
-        newValue.data = new TextNode(hash);
+        newValue.data = fpObject;
         newValue.sources = node.sources.stream().filter(n->sourceValues.containsKey(n.name)).map(n -> sourceValues.get(n.name)).collect(Collectors.toList());
         return List.of(newValue);
     }
+    public boolean evaluateFingerprintFilter(String filter, JsonNode fingerprint) {
+        if (filter == null || filter.isBlank()) {
+            return true;
+        }
+        try (Context context = Context.newBuilder("js")
+                .engine(Engine.newBuilder("js").option("engine.WarnInterpreterOnly", "false").build())
+                .allowExperimentalOptions(true)
+                .option("js.foreign-object-prototype", "true")
+                .option("js.global-property", "true")
+                .build()) {
+            context.enter();
+            try {
+                String jsCode = "const __fp = " + fingerprint.toString() + ";\n" +
+                        "const __filter = " + filter + ";\n" +
+                        "!!(__filter(__fp));";
+                org.graalvm.polyglot.Value result = context.eval("js", jsCode);
+                return result.asBoolean();
+            } catch (PolyglotException e) {
+                System.err.println("failed to evaluate fingerprint filter: " + e.getMessage());
+                return true;
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
     @Transactional
     public List<Value> calculateJqValues(JqNode node,Map<String,Value> sourceValues,int startingOrdinal) throws IOException {
         List<Value> rtrn = new ArrayList<>();

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.DoubleNode;
 import com.fasterxml.jackson.databind.node.LongNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import io.hyperfoil.tools.h5m.FreshDb;
 import io.hyperfoil.tools.h5m.entity.Node;
@@ -18,10 +19,7 @@ import org.junit.jupiter.api.Test;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Stream;
 
 import static io.hyperfoil.tools.h5m.entity.Node.FQDN_SEPARATOR;
@@ -730,5 +728,253 @@ public class NodeServiceTest extends FreshDb {
         List.of("uno","dos","tres","ant","bee","cat").forEach(key->{
             assertEquals(6,content.stream().filter(v->v.contains(key)).count(),"unexpected number of value with "+key);
         });
+    }
+
+    @Test
+    public void calculateFpValues_structured_json() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        tm.begin();
+        Node rootNode = new RootNode();
+        rootNode.persist();
+        JqNode platformNode = new JqNode("platform",".platform",rootNode);
+        platformNode.persist();
+        JqNode buildTypeNode = new JqNode("buildType",".buildType",rootNode);
+        buildTypeNode.persist();
+        tm.commit();
+
+        FingerprintNode fpNode = new FingerprintNode("fp","fp",List.of(platformNode, buildTypeNode));
+
+        Value platformValue = new Value(null, platformNode, new TextNode("x86"));
+        Value buildTypeValue = new Value(null, buildTypeNode, new TextNode("release"));
+
+        Map<String,Value> sourceValues = new HashMap<>();
+        sourceValues.put("platform", platformValue);
+        sourceValues.put("buildType", buildTypeValue);
+
+        List<Value> result = nodeService.calculateFpValues(fpNode, sourceValues, 0);
+
+        assertEquals(1, result.size(), "should produce exactly one fingerprint value");
+        Value fpValue = result.getFirst();
+        assertNotNull(fpValue.data);
+        assertTrue(fpValue.data instanceof ObjectNode, "fingerprint data should be an ObjectNode, not a hash: " + fpValue.data.getClass());
+        ObjectNode fpObject = (ObjectNode) fpValue.data;
+        assertTrue(fpObject.has("platform"), "fingerprint should contain 'platform' key");
+        assertTrue(fpObject.has("buildType"), "fingerprint should contain 'buildType' key");
+        assertEquals("x86", fpObject.get("platform").asText());
+        assertEquals("release", fpObject.get("buildType").asText());
+    }
+
+    @Test
+    public void calculateFpValues_sorted_keys() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        tm.begin();
+        Node rootNode = new RootNode();
+        rootNode.persist();
+        // define sources in reverse alphabetical order: platform before buildType
+        JqNode platformNode = new JqNode("platform",".platform",rootNode);
+        platformNode.persist();
+        JqNode buildTypeNode = new JqNode("buildType",".buildType",rootNode);
+        buildTypeNode.persist();
+        tm.commit();
+
+        FingerprintNode fpNode = new FingerprintNode("fp","fp",List.of(platformNode, buildTypeNode));
+
+        Value platformValue = new Value(null, platformNode, new TextNode("x86"));
+        Value buildTypeValue = new Value(null, buildTypeNode, new TextNode("release"));
+
+        Map<String,Value> sourceValues = new HashMap<>();
+        sourceValues.put("platform", platformValue);
+        sourceValues.put("buildType", buildTypeValue);
+
+        List<Value> result = nodeService.calculateFpValues(fpNode, sourceValues, 0);
+
+        assertEquals(1, result.size());
+        ObjectNode fpObject = (ObjectNode) result.getFirst().data;
+        // verify keys are sorted alphabetically: buildType before platform
+        List<String> keys = new ArrayList<>();
+        fpObject.fieldNames().forEachRemaining(keys::add);
+        assertEquals("buildType", keys.get(0), "first key should be 'buildType' (alphabetical order)");
+        assertEquals("platform", keys.get(1), "second key should be 'platform' (alphabetical order)");
+    }
+
+    @Test
+    public void evaluateFingerprintFilter_matching() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode fingerprint = mapper.readTree("{\"platform\":\"x86\",\"buildType\":\"release\"}");
+        boolean result = nodeService.evaluateFingerprintFilter("(fp) => fp.platform === \"x86\"", fingerprint);
+        assertTrue(result, "filter should match when platform is x86");
+    }
+
+    @Test
+    public void evaluateFingerprintFilter_non_matching() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode fingerprint = mapper.readTree("{\"platform\":\"x86\",\"buildType\":\"release\"}");
+        boolean result = nodeService.evaluateFingerprintFilter("(fp) => fp.platform === \"arm\"", fingerprint);
+        assertFalse(result, "filter should not match when platform is x86 but filter expects arm");
+    }
+
+    @Test
+    public void evaluateFingerprintFilter_null_passes_all() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode fingerprint = mapper.readTree("{\"platform\":\"x86\",\"buildType\":\"release\"}");
+        boolean result = nodeService.evaluateFingerprintFilter(null, fingerprint);
+        assertTrue(result, "null filter should pass all fingerprints");
+    }
+
+    @Test
+    public void evaluateFingerprintFilter_compound_filter() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode fingerprint = mapper.readTree("{\"platform\":\"x86\",\"buildType\":\"release\"}");
+        boolean result = nodeService.evaluateFingerprintFilter("(fp) => fp.platform === \"x86\" && fp.buildType === \"release\"", fingerprint);
+        assertTrue(result, "compound filter should match when both conditions are true");
+    }
+
+    @Test
+    public void calculateRelativeDifference_with_fingerprint_filter() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException, IOException {
+        tm.begin();
+        Node rootNode = new RootNode();
+        rootNode.persist();
+        Node rangeNode = new JqNode("range",".y",rootNode);
+        rangeNode.persist();
+        Node domainNode = new JqNode("domain",".domain",rootNode);
+        domainNode.persist();
+        Node fingerprintNode = new JqNode("fingerprint",".fingerprint",rootNode);
+        fingerprintNode.persist();
+
+        // create 3 root values for x86 and 3 for arm
+        Value rootX86_01 = new Value(null,rootNode,new TextNode("rootX86_1"));
+        rootX86_01.persist();
+        Value rootX86_02 = new Value(null,rootNode,new TextNode("rootX86_2"));
+        rootX86_02.persist();
+        Value rootX86_03 = new Value(null,rootNode,new TextNode("rootX86_3"));
+        rootX86_03.persist();
+
+        Value rootArm_01 = new Value(null,rootNode,new TextNode("rootArm_1"));
+        rootArm_01.persist();
+        Value rootArm_02 = new Value(null,rootNode,new TextNode("rootArm_2"));
+        rootArm_02.persist();
+        Value rootArm_03 = new Value(null,rootNode,new TextNode("rootArm_3"));
+        rootArm_03.persist();
+
+        // x86 range values
+        Value rangeX86_01 = new Value(null,rangeNode, DoubleNode.valueOf(1));
+        rangeX86_01.sources=List.of(rootX86_01);
+        rangeX86_01.persist();
+        Value rangeX86_02 = new Value(null,rangeNode, DoubleNode.valueOf(2));
+        rangeX86_02.sources=List.of(rootX86_02);
+        rangeX86_02.persist();
+        Value rangeX86_03 = new Value(null,rangeNode, DoubleNode.valueOf(3));
+        rangeX86_03.sources=List.of(rootX86_03);
+        rangeX86_03.persist();
+
+        // arm range values
+        Value rangeArm_01 = new Value(null,rangeNode, DoubleNode.valueOf(10));
+        rangeArm_01.sources=List.of(rootArm_01);
+        rangeArm_01.persist();
+        Value rangeArm_02 = new Value(null,rangeNode, DoubleNode.valueOf(20));
+        rangeArm_02.sources=List.of(rootArm_02);
+        rangeArm_02.persist();
+        Value rangeArm_03 = new Value(null,rangeNode, DoubleNode.valueOf(30));
+        rangeArm_03.sources=List.of(rootArm_03);
+        rangeArm_03.persist();
+
+        // x86 domain values
+        Value domainX86_01 = new Value(null,domainNode,DoubleNode.valueOf(10));
+        domainX86_01.sources=List.of(rootX86_01);
+        domainX86_01.persist();
+        Value domainX86_02 = new Value(null,domainNode,DoubleNode.valueOf(20));
+        domainX86_02.sources=List.of(rootX86_02);
+        domainX86_02.persist();
+        Value domainX86_03 = new Value(null,domainNode,DoubleNode.valueOf(30));
+        domainX86_03.sources=List.of(rootX86_03);
+        domainX86_03.persist();
+
+        // arm domain values
+        Value domainArm_01 = new Value(null,domainNode,DoubleNode.valueOf(100));
+        domainArm_01.sources=List.of(rootArm_01);
+        domainArm_01.persist();
+        Value domainArm_02 = new Value(null,domainNode,DoubleNode.valueOf(200));
+        domainArm_02.sources=List.of(rootArm_02);
+        domainArm_02.persist();
+        Value domainArm_03 = new Value(null,domainNode,DoubleNode.valueOf(300));
+        domainArm_03.sources=List.of(rootArm_03);
+        domainArm_03.persist();
+
+        // x86 fingerprint values (structured ObjectNode)
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode x86Fp = mapper.createObjectNode();
+        x86Fp.put("platform", "x86");
+        Value fpX86_01 = new Value(null,fingerprintNode, x86Fp);
+        fpX86_01.sources=List.of(rootX86_01);
+        fpX86_01.persist();
+        Value fpX86_02 = new Value(null,fingerprintNode, x86Fp);
+        fpX86_02.sources=List.of(rootX86_02);
+        fpX86_02.persist();
+        Value fpX86_03 = new Value(null,fingerprintNode, x86Fp);
+        fpX86_03.sources=List.of(rootX86_03);
+        fpX86_03.persist();
+
+        // arm fingerprint values (structured ObjectNode)
+        ObjectNode armFp = mapper.createObjectNode();
+        armFp.put("platform", "arm");
+        Value fpArm_01 = new Value(null,fingerprintNode, armFp);
+        fpArm_01.sources=List.of(rootArm_01);
+        fpArm_01.persist();
+        Value fpArm_02 = new Value(null,fingerprintNode, armFp);
+        fpArm_02.sources=List.of(rootArm_02);
+        fpArm_02.persist();
+        Value fpArm_03 = new Value(null,fingerprintNode, armFp);
+        fpArm_03.sources=List.of(rootArm_03);
+        fpArm_03.persist();
+        tm.commit();
+
+        // set up RelativeDifference with fingerprintFilter that only matches x86
+        RelativeDifference relDifference = new RelativeDifference();
+        relDifference.setFilter("max");
+        relDifference.setWindow(1);
+        relDifference.setMinPrevious(1);
+        relDifference.setFingerprintFilter("(fp) => fp.platform === \"x86\"");
+        relDifference.setNodes(fingerprintNode,rootNode,rangeNode,domainNode);
+
+        List<Value> found = nodeService.calculateRelativeDifferenceValues(relDifference,rootX86_01,0);
+        assertNotNull(found);
+        assertFalse(found.isEmpty(), "x86 filtered results should not be empty");
+
+        // verify that all filtered results contain x86 domain values (10, 20, 30)
+        Set<Double> x86DomainValues = Set.of(10.0, 20.0, 30.0);
+        for (Value v : found) {
+            assertNotNull(v.data, "change detection result should have data");
+            assertTrue(v.data.has("domainvalue"), "result should contain domainvalue field");
+            double domainValue = v.data.get("domainvalue").asDouble();
+            assertTrue(x86DomainValues.contains(domainValue),
+                "filtered result domainvalue " + domainValue + " should be an x86 value (10, 20, or 30)");
+        }
+
+        // run from an arm root WITHOUT filter to prove arm data produces results
+        RelativeDifference relDiffNoFilter = new RelativeDifference();
+        relDiffNoFilter.setFilter("max");
+        relDiffNoFilter.setWindow(1);
+        relDiffNoFilter.setMinPrevious(1);
+        relDiffNoFilter.setNodes(fingerprintNode,rootNode,rangeNode,domainNode);
+
+        List<Value> armNoFilter = nodeService.calculateRelativeDifferenceValues(relDiffNoFilter,rootArm_01,0);
+        assertFalse(armNoFilter.isEmpty(), "arm unfiltered results should not be empty");
+        // verify arm results contain arm domain values (100, 200, 300)
+        Set<Double> armDomainValues = Set.of(100.0, 200.0, 300.0);
+        for (Value v : armNoFilter) {
+            double domainValue = v.data.get("domainvalue").asDouble();
+            assertTrue(armDomainValues.contains(domainValue),
+                "arm unfiltered domainvalue " + domainValue + " should be an arm value (100, 200, or 300)");
+        }
+
+        // run from an arm root WITH x86 filter — filter should exclude the arm fingerprint
+        RelativeDifference relDiffArmWithX86Filter = new RelativeDifference();
+        relDiffArmWithX86Filter.setFilter("max");
+        relDiffArmWithX86Filter.setWindow(1);
+        relDiffArmWithX86Filter.setMinPrevious(1);
+        relDiffArmWithX86Filter.setFingerprintFilter("(fp) => fp.platform === \"x86\"");
+        relDiffArmWithX86Filter.setNodes(fingerprintNode,rootNode,rangeNode,domainNode);
+
+        List<Value> armWithX86Filter = nodeService.calculateRelativeDifferenceValues(relDiffArmWithX86Filter,rootArm_01,0);
+        assertTrue(armWithX86Filter.isEmpty(),
+            "arm root with x86 filter should produce no results but found " + armWithX86Filter.size());
     }
 }
