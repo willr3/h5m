@@ -18,12 +18,18 @@ public class KahnDagSort {
         if(list == null || list.isEmpty()){
             return list;
         }
+        // Pre-compute adjacency map: call getDependencies once per item instead of twice
+        Map<T, List<T>> adjacencyMap = new HashMap<>(list.size() * 2);
+        for (int i = 0, size = list.size(); i < size; i++) {
+            T item = list.get(i);
+            adjacencyMap.put(item, getDependencies.apply(item));
+        }
         Map<T, AtomicInteger> inDegrees = new HashMap<>(list.size() * 2);
         for (int i = 0, size = list.size(); i < size; i++) {
             inDegrees.put(list.get(i), new AtomicInteger(0));
         }
         for (int i = 0, size = list.size(); i < size; i++) {
-            List<T> deps = getDependencies.apply(list.get(i));
+            List<T> deps = adjacencyMap.get(list.get(i));
             for (int j = 0, dSize = deps.size(); j < dSize; j++) {
                 AtomicInteger degree = inDegrees.get(deps.get(j));
                 if (degree != null) {
@@ -42,7 +48,7 @@ public class KahnDagSort {
         while(!q.isEmpty()){
             T t = q.poll();
             rtrn.add(t);
-            List<T> deps = getDependencies.apply(t);
+            List<T> deps = adjacencyMap.get(t);
             for (int i = 0, dSize = deps.size(); i < dSize; i++) {
                 AtomicInteger degree = inDegrees.get(deps.get(i));
                 if (degree != null && degree.decrementAndGet() == 0) {
