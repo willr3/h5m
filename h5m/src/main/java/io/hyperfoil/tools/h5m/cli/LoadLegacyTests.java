@@ -7,13 +7,9 @@ import io.agroal.api.AgroalDataSource;
 import io.agroal.api.configuration.supplier.AgroalPropertiesReader;
 import io.hyperfoil.tools.h5m.entity.Folder;
 import io.hyperfoil.tools.h5m.entity.Node;
-import io.hyperfoil.tools.h5m.entity.node.JqNode;
-import io.hyperfoil.tools.h5m.entity.node.JsNode;
-import io.hyperfoil.tools.h5m.entity.node.SqlJsonpathAllNode;
-import io.hyperfoil.tools.h5m.entity.node.SqlJsonpathNode;
+import io.hyperfoil.tools.h5m.entity.node.*;
 import io.hyperfoil.tools.h5m.svc.FolderService;
 import io.hyperfoil.tools.h5m.svc.NodeService;
-import io.hyperfoil.tools.yaup.Counters;
 import io.hyperfoil.tools.yaup.HashedLists;
 import io.hyperfoil.tools.yaup.HashedSets;
 import io.hyperfoil.tools.yaup.StringUtil;
@@ -116,9 +112,67 @@ public class LoadLegacyTests implements Callable<Integer> {
             return Objects.hash(name,JsNode.isNullEmptyOrIdentityFunction(function) ? null : function,extractors);
         }
     };
+
+    public Node createNodesFromLabel(Label label,Node source,Folder folder, HashedLists<String,Node> nodesByName){
+        Node rtrn = null;
+        HashedLists<String,Node> labelNodesByName = new HashedLists<>();
+        for(Extractor extractor : label.extractors) {
+            if (nodesByName.containsKey(extractor.name)) {
+                log(8, "extractor " + extractor + "\n  conflicts with " + nodesByName.get(extractor.name));
+            }
+            Node node = extractor.isArray ?
+                    SqlJsonpathAllNode.parse(extractor.name(), extractor.jsonpath(), nodesByName::get) :
+                    SqlJsonpathNode.parse(extractor.name(), extractor.jsonpath(), nodesByName::get);
+            if (node == null) {
+                System.err.println("failed to create node for extractor " + extractor);
+                return null;
+            }
+            node.group = folder.group;
+            node.sources = List.of(source);
+            node = nodeService.create(node);
+            nodesByName.put(node.name, node);
+            labelNodesByName.put(node.name, node);
+        }
+        if(label.function==null || label.function.trim().isEmpty()){
+            //this can happen for single extractor labels?
+            if(label.extractors.size() > 1) {
+                rtrn = new JsNode(label.name(),"v=>v",labelNodesByName.values().stream().flatMap(List::stream).collect(Collectors.toList()));
+            }else if (label.extractors.size() == 1) {
+                if(label.name != label.extractors.get(0).name && !label.name.trim().isEmpty()){
+                    List<Node> extractorNodes = labelNodesByName.get(label.name);
+                    if(extractorNodes.size()==1){
+                        extractorNodes.get(0).name = label.name;
+                    }else{
+                        //This is a condition we do not expect
+                    }
+                }
+            }else{
+                //why do we have a label without an extractor or function?
+            }
+            //return 1;
+        }else {
+            rtrn = JsNode.parse(label.name, label.function, labelNodesByName::get);
+            if (rtrn == null) {
+                List<String> params = JsNode.getParameterNames(label.function);
+                if(params.size()==1) {//collect all extractors into the value
+                    rtrn = new JsNode(label.name,label.function,labelNodesByName.values().stream().flatMap(List::stream).collect(Collectors.toList()));
+                } else {
+                    rtrn = JsNode.parse(label.name, label.function, labelNodesByName::get,true);
+                    if(rtrn==null){
+                        System.err.println("Failed to make node for Label:" + label.name + "\n" + label.function + "\n  " + label.extractors.stream().map(Extractor::toString).collect(Collectors.joining("\n  ")));
+                        return null;
+                    }
+                }
+            }
+        }
+        if(rtrn!=null){
+            rtrn.group=folder.group;
+        }
+        return rtrn;
+    }
+
     @Override
     public Integer call() throws Exception {
-        Counters<String> counters = new Counters<>();
         Map<String, String> props = new HashMap<>();
         props.put(AgroalPropertiesReader.MAX_SIZE, "1");
         props.put(AgroalPropertiesReader.MIN_SIZE, "1");
@@ -178,13 +232,10 @@ public class LoadLegacyTests implements Callable<Integer> {
                 }
                 Folder folder = new Folder(test.name);
                 folderService.create(folder);
-
-                List<Node> nodes = new ArrayList<>();
                 HashedLists<String,Node> nodesByName = new HashedLists<>();
 
-                if(testToTransformer.has(test.id)){/*
+                if(testToTransformer.has(test.id)){
                     log(2,"has datasets");
-                    counters.add("dataset");
                     Set<Long> transformids = testToTransformer.get(test.id);
                     List<Transformer> transformers = new ArrayList<>();
                     for(Long transformId : transformids){
@@ -211,41 +262,12 @@ public class LoadLegacyTests implements Callable<Integer> {
 
                     if(transformers.size() > 1){
                         log("MORE THAN 1 TRANSFORMER FOR "+test);
-                        counters.add("multiple transformer");
                     }else {
                         for (Transformer transformer : transformers) {
-                            HashedLists<String, Node> transformerNodesByName = new HashedLists<>();
-                            for (Extractor extractor : transformer.extractors) {
-                                Node node = extractor.isArray ?
-                                        SqlJsonpathAllNode.parse(extractor.name(), extractor.jsonpath(), nodesByName::get) :
-                                        SqlJsonpathNode.parse(extractor.name(), extractor.jsonpath(), nodesByName::get);
-                                if (node == null) {
-                                    System.err.println("failed to create node for extractor " + extractor);
-                                    return 1;
-                                }
-                                if(node.sources.isEmpty()){
-                                    node.sources=List.of(folder.group.root);
-                                }
-                                node.group = folder.group;
-                                node = nodeService.create(node);
-                                nodes.add(node);
-                                //nodesByName.put(node.name, node);//TODO do we avoid adding this to the lookup because it is specific to the dataset calculation?
-                                transformerNodesByName.put(node.name, node);
-                            }
-
-                            Node dataset = JsNode.parse("dataset", transformer.function, transformerNodesByName::get);
-                            if (dataset == null) {
-                                //this means there is a missing parameter?
-                                System.err.println("Failed to create dataset node:\n" + transformer.function);
-                                return 1;
-                            }
-                            if(dataset.sources.isEmpty()){
-                                dataset.sources=List.of(folder.group.root);
-                            }
+                            Label l = new Label(-1,"dataset",transformer.function,transformer.extractors);
+                            Node dataset = createNodesFromLabel(l,folder.group.root,folder,nodesByName);
                             dataset.group=folder.group;
                             dataset = nodeService.create(dataset);
-
-                            nodes.add(dataset);
                             nodesByName.put(dataset.name, dataset);
 
                             List<LabelDef> labelDefs = new ArrayList<>();
@@ -260,7 +282,6 @@ public class LoadLegacyTests implements Callable<Integer> {
                             }
                             for(LabelDef labelDef : labelDefs){
                                 if(nodesByName.containsKey(labelDef.name)){
-                                    counters.add("FYI conflicting dataset label name");
                                     //conflicting name for label but ignorable
                                     System.err.println("transform label conflict for "+labelDef+"\n  conflicts with "+nodesByName.get(labelDef.name));
                                 }
@@ -277,57 +298,24 @@ public class LoadLegacyTests implements Callable<Integer> {
                             }
                             labelDefs.clear();//so we don't accidentally use it
                             for(Label label : targetSchemaLabels){
-                                HashedLists<String, Node> labelNodesByName = new HashedLists<>();
-                                for(Extractor extractor : label.extractors ){
-                                    if(nodesByName.containsKey(extractor.name)){
-                                        counters.add("conflicting extractor name");
-                                        System.err.println("extractor "+extractor+" for label["+label.id+"]\n  conflicts with:\n    "+nodesByName.get(extractor.name).stream().map(Node::toString).collect(Collectors.joining("\n    ")));
-                                    }
-                                    Node node = extractor.isArray ?
-                                            SqlJsonpathAllNode.parse(extractor.name(), extractor.jsonpath(),nodesByName::get) :
-                                            SqlJsonpathNode.parse(extractor.name(), extractor.jsonpath(),nodesByName::get);
-                                    if(node==null){
-                                        System.err.println("failed to create node for extractor "+extractor);
-                                        return 1;
-                                    }
-                                    node.group=folder.group;
-                                    node.sources=List.of(dataset);
-                                    node = nodeService.create(node);
-                                    nodes.add(node);
-                                    nodesByName.put(node.name, node);
-                                    labelNodesByName.put(node.name, node);
-                                }
-                                if(label.function==null || label.function.isEmpty()){
-                                    //this can happen for single extractor labels?
-                                    if(label.extractors.size() > 1) {
-                                        counters.add("missing transformed multi extractor function");
-                                        Node labelNode = new JsNode(label.name(),"v=>v",labelNodesByName.values().stream().flatMap(List::stream).collect(Collectors.toList()));
-                                        labelNode.group=folder.group;
-                                        labelNode = nodeService.create(labelNode);
-                                        nodes.add(labelNode);
-                                        nodesByName.put(labelNode.name, labelNode);
-                                    }
-                                    //return 1;
-                                }else {
-                                    Node labelNode = JsNode.parse(label.name, label.function, labelNodesByName::get);
-                                    if (labelNode == null) {
+                                Node labelNode = createNodesFromLabel(label,dataset,folder,nodesByName);
+                                if ( labelNode==null ) {
+                                    //this can happen if the label is missing a function and has only 1 extractor
+                                    if (label.function==null || label.function.isEmpty() || label.extractors.size()<=1) {
 
-                                        List<String> params = JsNode.getParameterNames(label.function);
-                                        if(params.size()==1) {//collect all extractors into the value
-                                            labelNode = new JsNode(label.name,label.function,labelNodesByName.values().stream().flatMap(List::stream).collect(Collectors.toList()));
-                                        } else {
-                                            System.err.println("Failed to make node for Label:" + label.name + "\n" + label.function + "\n  " + label.extractors.stream().map(Extractor::toString).collect(Collectors.joining("\n  ")));
-                                            return 1;
-                                        }
+                                    } else {
+                                        //this is the real issue
+                                        System.err.println("failed to create a node for label\n"+label);
+                                        return -1;
                                     }
+                                } else {
                                     labelNode.group=folder.group;
                                     labelNode = nodeService.create(labelNode);
-                                    nodes.add(labelNode);
                                     nodesByName.put(labelNode.name, labelNode);
                                 }
                             }
                         }
-                    }*/
+                    }
                 } else {
                     //no transform
                     HashedSets<String,String> schemaByPath = new HashedSets<>();
@@ -378,7 +366,6 @@ public class LoadLegacyTests implements Callable<Integer> {
                     for(String labelName : schemaLabelsByName.keys()){
                         Set<Label> labels = schemaLabelsByName.get(labelName);
                         if(labels.size()>1){
-                            counters.add("label name conflict for test");
                             System.out.println("CONFLICTING NAME "+labelName+":\n  "+labels.stream().map(Objects::toString).collect(Collectors.joining("\n  ")));
                         }
                     }
@@ -396,7 +383,6 @@ public class LoadLegacyTests implements Callable<Integer> {
 
                         Node sourceNode = folder.group.root;
                         if(!jsonpath.equals("$.\"$schema\"")){
-                            counters.add("nested $schema");
                             String sourcePath = jsonpath.substring(0,jsonpath.indexOf(".\"$schema\""));
                             log(4,"Creating a new source node for "+jsonpath+" -> "+sourcePath);
 
@@ -404,55 +390,13 @@ public class LoadLegacyTests implements Callable<Integer> {
                             sourceNode.group=folder.group;
                             sourceNode = nodeService.create(sourceNode);
                             nodesByName.put(sourcePath,sourceNode);
-                            nodes.add(sourceNode);
                         }
                         log(4,"creating labels");
                         for(String labelName : labelsByName.keys()){
                             log(6,"label="+labelName);
                             Set<Label> labels = labelsByName.get(labelName);
-                            //there will be onl
                             for(Label label : labels){
-                                Node labelNode = null;
-                                HashedLists<String,Node> labelNodesByName = new HashedLists<>();
-                                for(Extractor extractor : label.extractors){
-                                    if(nodesByName.containsKey(extractor.name)){
-                                        counters.add("conflicting extractor name");
-                                        log(8,"extractor "+extractor+"\n  conflicts with "+nodesByName.get(extractor.name));
-                                    }
-                                    Node node = extractor.isArray ?
-                                            SqlJsonpathAllNode.parse(extractor.name(), extractor.jsonpath(),nodesByName::get) :
-                                            SqlJsonpathNode.parse(extractor.name(), extractor.jsonpath(),nodesByName::get);
-                                    if(node==null){
-                                        System.err.println("failed to create node for extractor "+extractor);
-                                        return 1;
-                                    }
-                                    node.group=folder.group;
-                                    node.sources=List.of(sourceNode);
-                                    node = nodeService.create(node);
-                                    nodes.add(node);
-                                    nodesByName.put(node.name, node);
-                                    labelNodesByName.put(node.name, node);
-                                }
-                                if(label.function==null || label.function.isEmpty()){
-                                    //this can happen for single extractor labels?
-                                    if(label.extractors.size() > 1) {
-                                        labelNode = new JsNode(label.name(),"v=>v",labelNodesByName.values().stream().flatMap(List::stream).collect(Collectors.toList()));
-                                        labelNode.group=folder.group;
-                                    }
-                                }else {
-                                    labelNode = JsNode.parse(label.name, label.function, labelNodesByName::get);
-                                    if (labelNode == null) {
-
-                                        List<String> params = JsNode.getParameterNames(label.function);
-                                        if(params.size()==1) {//collect all extractors into the value
-                                            labelNode = new JsNode(label.name,label.function,labelNodesByName.values().stream().flatMap(List::stream).collect(Collectors.toList()));
-                                        } else {
-                                            counters.count("missing js parameter");
-                                            System.err.println("Failed to make node for Label["+label.id+"]:" + label.name + "\n" + label.function + "\n  " + label.extractors.stream().map(Extractor::toString).collect(Collectors.joining("\n  ")));
-                                            labelNode = JsNode.parse(label.name, label.function, labelNodesByName::get, true);
-                                        }
-                                    }
-                                }
+                                Node labelNode = createNodesFromLabel(label,sourceNode,folder,nodesByName);
                                 if(labelNode!=null){
                                     //if this label needs to be renamed and part of a merge group
                                     if(schemaLabelsByName.get(labelName).size()>1){
@@ -463,7 +407,6 @@ public class LoadLegacyTests implements Callable<Integer> {
                                     if(schemaLabelsByName.get(labelName).size()>1){
                                         nodesByOriginalName.put(labelName,labelNode);
                                     }
-                                    nodes.add(labelNode);
                                     nodesByName.put(labelNode.name, labelNode);
 
                                 }
@@ -476,7 +419,6 @@ public class LoadLegacyTests implements Callable<Integer> {
                         Node newNode = new JsNode(labelName,"obj=>Object.values(obj).find(v => v != null)",sourceNodes);
                         newNode.group=folder.group;
                         newNode = nodeService.create(newNode);
-                        nodes.add(newNode);
                         nodesByName.put(newNode.name, newNode);
                     }
                 }
@@ -508,22 +450,18 @@ public class LoadLegacyTests implements Callable<Integer> {
                                     List<Node> foundNodes = nodesByName.get(sourceName);
                                     if(foundNodes.size()>1){
                                         //AMBIGUOUS LABEL
-                                        counters.add("ambiguous variable label name");
                                     }else{
                                         sources.add(foundNodes.get(0));
                                     }
                                 }else{
-                                    counters.add("missing variable label");
                                     //missing
                                 }
                             }
                             Node variableNode = new JsNode(name,calculation,sources);
                             variableNode.group=folder.group;
                             variableNode = nodeService.create(variableNode);
-                            nodes.add(variableNode);
                             nodesByName.put(variableNode.name, variableNode);
                         }
-
                     }
                 }
             }
@@ -532,13 +470,31 @@ public class LoadLegacyTests implements Callable<Integer> {
 
             //fingerprints...
             try(PreparedStatement statement = connection.prepareStatement("select fingerprint_labels, fingerprint_filter, timeline_labels, timeline_function from test where id = ?")){
+                ObjectMapper mapper = new ObjectMapper();
                 statement.setLong(1,testId);
                 try(ResultSet rs = statement.executeQuery()){
                     while(rs.next()){
-                        String fingerprint_labels = rs.getString(1);
+                        ArrayNode fingerprint_labels = (ArrayNode) mapper.readTree(rs.getString(1));
                         String fingerprint_filter = rs.getString(2);
-                        String timeline_labels = rs.getString(3);
-                        String timeline_function = rs.getString(4);
+                        String timeline_labels = rs.getString(3); // not sure how this is used atm
+                        String timeline_function = rs.getString(4); // not sure how this is used atm
+
+                        List<Node> fingerprintNodes = new ArrayList<>();
+                        for(int i=0;i<fingerprint_labels.size();i++){
+                            String labelName = StringUtil.removeQuotes(fingerprint_labels.get(i).toString());
+                            if(nodesByName.containsKey(labelName)){
+                                List<Node> foundNodes = nodesByName.get(labelName);
+                                if(foundNodes.size()==1){
+                                    fingerprintNodes.add(foundNodes.get(0));
+                                } else {
+                                    // report the ambiguity?
+                                }
+                            }
+                        }
+                        Node newNode = new FingerprintNode(test.name+"_fingerprint","",fingerprintNodes);
+                        newNode.group=folder.group;
+                        newNode = nodeService.create(newNode);
+                        nodesByName.put(newNode.name, newNode);
 
                     }
                 }
@@ -546,10 +502,6 @@ public class LoadLegacyTests implements Callable<Integer> {
 
 
             }
-        }
-
-        for(String key : counters.entries()){
-            System.out.println(key+" : "+counters.count(key));
         }
         return 0;
     }
