@@ -77,6 +77,31 @@ public class NodeService {
     }
 
     @Transactional
+    public boolean functionalyEquivalent(Node a,Node b){
+        if(!Objects.equals(a.name,b.name)){
+            return false;
+        }
+        if(!Objects.equals(a.operation,b.operation)){
+            return false;
+        }
+        if(a.sources.size()!=b.sources.size()){
+            return false;
+        }
+        if(a.id!=null){
+            a = Node.findById(a.id);
+        }
+        if(b.id!=null){
+            b = Node.findById(b.id);
+        }
+        for(int i=0;i<a.sources.size();i++){
+            if(!functionalyEquivalent(a.sources.get(i),b.sources.get(i))){
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Transactional
     public long update(Node node){
         if(node.id == null || node.id == -1){
 

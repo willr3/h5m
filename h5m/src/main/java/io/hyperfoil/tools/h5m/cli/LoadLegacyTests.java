@@ -32,6 +32,44 @@ public class LoadLegacyTests implements Callable<Integer> {
     @CommandLine.Option(names = {"url"}, description = "legacy connection url",defaultValue = "jdbc:postgresql://0.0.0.0:") String url;
 
 
+    public class NodeTracking {
+
+        Map<Extractor,Node> extractorNodes = new HashMap<>();
+        Map<Label,Node> labelNodes = new HashMap<>();
+        HashedLists nodesByName = new HashedLists();
+
+        public void addNode(Extractor extractor, Node node){
+            extractorNodes.put(extractor,node);
+            nodesByName.put(node.name, node);
+        }
+        public void addNode(Label label, Node node){
+            labelNodes.put(label,node);
+            nodesByName.put(node.name, node);
+        }
+        public void addNode(Node node){
+            nodesByName.put(node.name, node);
+        }
+        public boolean hasNode(Extractor extractor){
+            return extractorNodes.containsKey(extractor);
+        }
+        public boolean hasNode(Label label){
+            return labelNodes.containsKey(label);
+        }
+        public boolean hasNode(String name){
+            return nodesByName.containsKey(name);
+        }
+        public Node getNode(Extractor extractor){
+            return extractorNodes.get(extractor);
+        }
+        public Node getNode(Label label){
+            return labelNodes.get(label);
+        }
+        public List<Node> getNodes(String name){
+            return nodesByName.get(name);
+        }
+
+    }
+
     @Inject
     FolderService folderService;
 
@@ -113,24 +151,28 @@ public class LoadLegacyTests implements Callable<Integer> {
         }
     };
 
-    public Node createNodesFromLabel(Label label,Node source,Folder folder, HashedLists<String,Node> nodesByName){
+
+    public Node createNodesFromLabel(Label label,Node source,Folder folder, NodeTracking nodeTracking){
         Node rtrn = null;
         HashedLists<String,Node> labelNodesByName = new HashedLists<>();
         for(Extractor extractor : label.extractors) {
-            if (nodesByName.containsKey(extractor.name)) {
-                log(8, "extractor " + extractor + "\n  conflicts with " + nodesByName.get(extractor.name));
-            }
             Node node = extractor.isArray ?
-                    SqlJsonpathAllNode.parse(extractor.name(), extractor.jsonpath(), nodesByName::get) :
-                    SqlJsonpathNode.parse(extractor.name(), extractor.jsonpath(), nodesByName::get);
+                    SqlJsonpathAllNode.parse(extractor.name(), extractor.jsonpath(), nodeTracking::getNodes) :
+                    SqlJsonpathNode.parse(extractor.name(), extractor.jsonpath(), nodeTracking::getNodes);
             if (node == null) {
                 System.err.println("failed to create node for extractor " + extractor);
                 return null;
             }
             node.group = folder.group;
             node.sources = List.of(source);
-            node = nodeService.create(node);
-            nodesByName.put(node.name, node);
+
+            if(nodeTracking.hasNode(extractor) && nodeService.functionalyEquivalent(node,nodeTracking.getNode(extractor))){
+                node = nodeTracking.getNode(extractor);
+            }else{
+                System.out.println("creating conflicting Node for extractor="+extractor+"\n node="+node+"\n conflicting="+nodeTracking.getNode(extractor));
+                node = nodeService.create(node);
+                nodeTracking.addNode(extractor, node);
+            }
             labelNodesByName.put(node.name, node);
         }
         if(label.function==null || label.function.trim().isEmpty()){
@@ -232,7 +274,9 @@ public class LoadLegacyTests implements Callable<Integer> {
                 }
                 Folder folder = new Folder(test.name);
                 folderService.create(folder);
-                HashedLists<String,Node> nodesByName = new HashedLists<>();
+                //HashedLists<String,Node> nodesByName = new HashedLists<>();
+                NodeTracking nodeTracking = new NodeTracking();
+
 
                 if(testToTransformer.has(test.id)){
                     log(2,"has datasets");
@@ -265,10 +309,10 @@ public class LoadLegacyTests implements Callable<Integer> {
                     }else {
                         for (Transformer transformer : transformers) {
                             Label l = new Label(-1,"dataset",transformer.function,transformer.extractors);
-                            Node dataset = createNodesFromLabel(l,folder.group.root,folder,nodesByName);
+                            Node dataset = createNodesFromLabel(l,folder.group.root,folder,nodeTracking);
                             dataset.group=folder.group;
                             dataset = nodeService.create(dataset);
-                            nodesByName.put(dataset.name, dataset);
+                            nodeTracking.addNode(dataset);
 
                             List<LabelDef> labelDefs = new ArrayList<>();
                             List<Label> targetSchemaLabels = new ArrayList<>();
@@ -281,9 +325,9 @@ public class LoadLegacyTests implements Callable<Integer> {
                                 }
                             }
                             for(LabelDef labelDef : labelDefs){
-                                if(nodesByName.containsKey(labelDef.name)){
+                                if(nodeTracking.hasNode(labelDef.name)){
                                     //conflicting name for label but ignorable
-                                    System.err.println("transform label conflict for "+labelDef+"\n  conflicts with "+nodesByName.get(labelDef.name));
+                                    System.err.println("transform label conflict for "+labelDef+"\n  conflicts with "+nodeTracking.getNodes(labelDef.name));
                                 }
                                 try(PreparedStatement statement = connection.prepareStatement("select name,jsonpath,isarray from label_extractors where label_id = ?")){
                                     statement.setLong(1,labelDef.id);
@@ -298,7 +342,7 @@ public class LoadLegacyTests implements Callable<Integer> {
                             }
                             labelDefs.clear();//so we don't accidentally use it
                             for(Label label : targetSchemaLabels){
-                                Node labelNode = createNodesFromLabel(label,dataset,folder,nodesByName);
+                                Node labelNode = createNodesFromLabel(label,dataset,folder,nodeTracking);
                                 if ( labelNode==null ) {
                                     //this can happen if the label is missing a function and has only 1 extractor
                                     if (label.function==null || label.function.isEmpty() || label.extractors.size()<=1) {
@@ -311,7 +355,7 @@ public class LoadLegacyTests implements Callable<Integer> {
                                 } else {
                                     labelNode.group=folder.group;
                                     labelNode = nodeService.create(labelNode);
-                                    nodesByName.put(labelNode.name, labelNode);
+                                    nodeTracking.addNode(labelNode);
                                 }
                             }
                         }
@@ -389,14 +433,14 @@ public class LoadLegacyTests implements Callable<Integer> {
                             sourceNode = new JqNode(sourcePath,sourcePath,sourceNode);
                             sourceNode.group=folder.group;
                             sourceNode = nodeService.create(sourceNode);
-                            nodesByName.put(sourcePath,sourceNode);
+                            nodeTracking.addNode(sourceNode);
                         }
                         log(4,"creating labels");
                         for(String labelName : labelsByName.keys()){
                             log(6,"label="+labelName);
                             Set<Label> labels = labelsByName.get(labelName);
                             for(Label label : labels){
-                                Node labelNode = createNodesFromLabel(label,sourceNode,folder,nodesByName);
+                                Node labelNode = createNodesFromLabel(label,sourceNode,folder,nodeTracking);
                                 if(labelNode!=null){
                                     //if this label needs to be renamed and part of a merge group
                                     if(schemaLabelsByName.get(labelName).size()>1){
@@ -407,7 +451,7 @@ public class LoadLegacyTests implements Callable<Integer> {
                                     if(schemaLabelsByName.get(labelName).size()>1){
                                         nodesByOriginalName.put(labelName,labelNode);
                                     }
-                                    nodesByName.put(labelNode.name, labelNode);
+                                    nodeTracking.addNode(labelNode);
 
                                 }
                             }
@@ -419,7 +463,7 @@ public class LoadLegacyTests implements Callable<Integer> {
                         Node newNode = new JsNode(labelName,"obj=>Object.values(obj).find(v => v != null)",sourceNodes);
                         newNode.group=folder.group;
                         newNode = nodeService.create(newNode);
-                        nodesByName.put(newNode.name, newNode);
+                        nodeTracking.addNode(newNode);
                     }
                 }
 
@@ -446,8 +490,8 @@ public class LoadLegacyTests implements Callable<Integer> {
                             List<Node> sources = new ArrayList<>();
                             for(int i=0;i<labels.size();i++){
                                 String sourceName = StringUtil.removeQuotes(labels.get(i).toString());
-                                if(nodesByName.containsKey(sourceName)){
-                                    List<Node> foundNodes = nodesByName.get(sourceName);
+                                if(nodeTracking.hasNode(sourceName)){
+                                    List<Node> foundNodes = nodeTracking.getNodes(sourceName);
                                     if(foundNodes.size()>1){
                                         //AMBIGUOUS LABEL
                                     }else{
@@ -460,7 +504,7 @@ public class LoadLegacyTests implements Callable<Integer> {
                             Node variableNode = new JsNode(name,calculation,sources);
                             variableNode.group=folder.group;
                             variableNode = nodeService.create(variableNode);
-                            nodesByName.put(variableNode.name, variableNode);
+                            nodeTracking.addNode(variableNode);
                         }
                     }
                 }
@@ -483,8 +527,8 @@ public class LoadLegacyTests implements Callable<Integer> {
                             List<Node> fingerprintNodes = new ArrayList<>();
                             for (int i = 0; i < fingerprint_labels.size(); i++) {
                                 String labelName = StringUtil.removeQuotes(fingerprint_labels.get(i).toString());
-                                if (nodesByName.containsKey(labelName)) {
-                                    List<Node> foundNodes = nodesByName.get(labelName);
+                                if (nodeTracking.hasNode(labelName)) {
+                                    List<Node> foundNodes = nodeTracking.getNodes(labelName);
                                     if (foundNodes.size() == 1) {
                                         fingerprintNodes.add(foundNodes.get(0));
                                     } else {
@@ -496,7 +540,7 @@ public class LoadLegacyTests implements Callable<Integer> {
                                 Node newNode = new FingerprintNode(test.name + "_fingerprint", "", fingerprintNodes);
                                 newNode.group = folder.group;
                                 newNode = nodeService.create(newNode);
-                                nodesByName.put(newNode.name, newNode);
+                                nodeTracking.addNode(newNode);
                             }else{
                                 //todo log error
                             }
