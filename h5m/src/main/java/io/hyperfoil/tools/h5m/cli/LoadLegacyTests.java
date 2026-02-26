@@ -479,22 +479,29 @@ public class LoadLegacyTests implements Callable<Integer> {
                         String timeline_labels = rs.getString(3); // not sure how this is used atm
                         String timeline_function = rs.getString(4); // not sure how this is used atm
 
-                        List<Node> fingerprintNodes = new ArrayList<>();
-                        for(int i=0;i<fingerprint_labels.size();i++){
-                            String labelName = StringUtil.removeQuotes(fingerprint_labels.get(i).toString());
-                            if(nodesByName.containsKey(labelName)){
-                                List<Node> foundNodes = nodesByName.get(labelName);
-                                if(foundNodes.size()==1){
-                                    fingerprintNodes.add(foundNodes.get(0));
-                                } else {
-                                    // report the ambiguity?
+                        if( fingerprint_labels.size() > 0) {
+                            List<Node> fingerprintNodes = new ArrayList<>();
+                            for (int i = 0; i < fingerprint_labels.size(); i++) {
+                                String labelName = StringUtil.removeQuotes(fingerprint_labels.get(i).toString());
+                                if (nodesByName.containsKey(labelName)) {
+                                    List<Node> foundNodes = nodesByName.get(labelName);
+                                    if (foundNodes.size() == 1) {
+                                        fingerprintNodes.add(foundNodes.get(0));
+                                    } else {
+                                        // report the ambiguity?
+                                    }
                                 }
                             }
+                            if(fingerprintNodes.size()>1){
+                                Node newNode = new FingerprintNode(test.name + "_fingerprint", "", fingerprintNodes);
+                                newNode.group = folder.group;
+                                newNode = nodeService.create(newNode);
+                                nodesByName.put(newNode.name, newNode);
+                            }else{
+                                //todo log error
+                            }
+
                         }
-                        Node newNode = new FingerprintNode(test.name+"_fingerprint","",fingerprintNodes);
-                        newNode.group=folder.group;
-                        newNode = nodeService.create(newNode);
-                        nodesByName.put(newNode.name, newNode);
 
                     }
                 }
