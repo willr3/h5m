@@ -3,6 +3,7 @@ package io.hyperfoil.tools.h5m.cli;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.agroal.api.AgroalDataSource;
 import io.agroal.api.configuration.supplier.AgroalPropertiesReader;
 import io.hyperfoil.tools.h5m.entity.Folder;
@@ -16,10 +17,7 @@ import io.hyperfoil.tools.yaup.StringUtil;
 import jakarta.inject.Inject;
 import picocli.CommandLine;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.Statement;
+import java.sql.*;
 import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
@@ -467,91 +465,140 @@ public class LoadLegacyTests implements Callable<Integer> {
                     }
                 }
 
-            //at this point the test should have all the nodes from schemas, time to create nodes from variables
-            Map<String,String> aliasToLabelName = new HashMap<>();
-            try(PreparedStatement statement = connection.prepareStatement("select id,name,labels,calculation from variable where testid=?")) {
-                statement.setLong(1, testId);
-                ObjectMapper mapper = new ObjectMapper();
-                try(ResultSet rs = statement.executeQuery()){
-                    while(rs.next()){
-                        Long id = rs.getLong("id");
-                        String name = rs.getString("name");
-                        ArrayNode labels = (ArrayNode) mapper.readTree(rs.getString("labels"));
-                        String calculation = rs.getString("calculation");
-                        //if this node is just an alias
-                        if(calculation==null || calculation.isEmpty()){
-                            if(labels.size()==1){
-                                aliasToLabelName.put(name,StringUtil.removeQuotes( labels.get(0).toString() ));
-                            }else{
-                                //THIS IS NOT EXPECTED
-                            }
-                        }else{
-                            //create a new Node
-                            List<Node> sources = new ArrayList<>();
-                            for(int i=0;i<labels.size();i++){
-                                String sourceName = StringUtil.removeQuotes(labels.get(i).toString());
-                                if(nodeTracking.hasNode(sourceName)){
-                                    List<Node> foundNodes = nodeTracking.getNodes(sourceName);
-                                    if(foundNodes.size()>1){
-                                        //AMBIGUOUS LABEL
-                                    }else{
-                                        sources.add(foundNodes.get(0));
+                //at this point the test should have all the nodes from schemas, time to create nodes from variables
+                //Map<String,String> aliasToLabelName = new HashMap<>();
+                Map<Long,Node> variableIdToNode = new HashMap<>();
+                try(PreparedStatement statement = connection.prepareStatement("select id,name,labels,calculation from variable where testid=?")) {
+                    statement.setLong(1, testId);
+                    ObjectMapper mapper = new ObjectMapper();
+                    try(ResultSet rs = statement.executeQuery()){
+                        while(rs.next()){
+                            Long id = rs.getLong("id");
+
+                            String name = rs.getString("name");
+                            ArrayNode labels = (ArrayNode) mapper.readTree(rs.getString("labels"));
+                            String calculation = rs.getString("calculation");
+                            //if this node is just an alias
+                            if(calculation==null || calculation.isEmpty()){
+                                if(labels.size()==1){
+                                    List<Node> found = nodeTracking.getNodes(labels.get(0).toString());
+                                    if(found.size()==1){
+                                        variableIdToNode.put(id,found.get(0));
                                     }
                                 }else{
-                                    //missing
+                                    //THIS IS NOT EXPECTED
                                 }
-                            }
-                            Node variableNode = new JsNode(name,calculation,sources);
-                            variableNode.group=folder.group;
-                            variableNode = nodeService.create(variableNode);
-                            nodeTracking.addNode(variableNode);
-                        }
-                    }
-                }
-            }
-            //all variables are either aliases (when there isn't a calculation) or a Node
-
-
-            //fingerprints...
-            try(PreparedStatement statement = connection.prepareStatement("select fingerprint_labels, fingerprint_filter, timeline_labels, timeline_function from test where id = ?")){
-                ObjectMapper mapper = new ObjectMapper();
-                statement.setLong(1,testId);
-                try(ResultSet rs = statement.executeQuery()){
-                    while(rs.next()){
-                        ArrayNode fingerprint_labels = (ArrayNode) mapper.readTree(rs.getString(1));
-                        String fingerprint_filter = rs.getString(2);
-                        String timeline_labels = rs.getString(3); // not sure how this is used atm
-                        String timeline_function = rs.getString(4); // not sure how this is used atm
-
-                        if( fingerprint_labels.size() > 0) {
-                            List<Node> fingerprintNodes = new ArrayList<>();
-                            for (int i = 0; i < fingerprint_labels.size(); i++) {
-                                String labelName = StringUtil.removeQuotes(fingerprint_labels.get(i).toString());
-                                if (nodeTracking.hasNode(labelName)) {
-                                    List<Node> foundNodes = nodeTracking.getNodes(labelName);
-                                    if (foundNodes.size() == 1) {
-                                        fingerprintNodes.add(foundNodes.get(0));
-                                    } else {
-                                        // report the ambiguity?
+                            }else{
+                                //create a new Node
+                                List<Node> sources = new ArrayList<>();
+                                for(int i=0;i<labels.size();i++){
+                                    String sourceName = StringUtil.removeQuotes(labels.get(i).toString());
+                                    if(nodeTracking.hasNode(sourceName)){
+                                        List<Node> foundNodes = nodeTracking.getNodes(sourceName);
+                                        if(foundNodes.size()>1){
+                                            //AMBIGUOUS LABEL
+                                        }else{
+                                            sources.add(foundNodes.get(0));
+                                        }
+                                    }else{
+                                        //missing
                                     }
                                 }
+                                Node variableNode = new JsNode(name,calculation,sources);
+                                variableNode.group=folder.group;
+                                variableNode = nodeService.create(variableNode);
+                                nodeTracking.addNode(variableNode);
+                                variableIdToNode.put(id,variableNode);
                             }
-                            if(fingerprintNodes.size()>1){
-                                Node newNode = new FingerprintNode(test.name + "_fingerprint", "", fingerprintNodes);
-                                newNode.group = folder.group;
-                                newNode = nodeService.create(newNode);
-                                nodeTracking.addNode(newNode);
-                            }else{
-                                //todo log error
+                        }
+                    }
+                }
+                //all variables are either aliases (when there isn't a calculation) or a Node
+
+
+                //fingerprints...
+                String fingerprint_filter = "";
+                try(PreparedStatement statement = connection.prepareStatement("select fingerprint_labels, fingerprint_filter, timeline_labels, timeline_function from test where id = ?")){
+                    ObjectMapper mapper = new ObjectMapper();
+                    statement.setLong(1,testId);
+                    try(ResultSet rs = statement.executeQuery()){
+                        while(rs.next()){
+                            ArrayNode fingerprint_labels = (ArrayNode) mapper.readTree(rs.getString(1));
+                            fingerprint_filter = rs.getString(2);
+                            String timeline_labels = rs.getString(3); // not sure how this is used atm
+                            String timeline_function = rs.getString(4); // not sure how this is used atm
+
+                            if( fingerprint_labels.size() > 0) {
+                                List<Node> fingerprintNodes = new ArrayList<>();
+                                for (int i = 0; i < fingerprint_labels.size(); i++) {
+                                    String labelName = StringUtil.removeQuotes(fingerprint_labels.get(i).toString());
+                                    if (nodeTracking.hasNode(labelName)) {
+                                        List<Node> foundNodes = nodeTracking.getNodes(labelName);
+                                        if (foundNodes.size() == 1) {
+                                            fingerprintNodes.add(foundNodes.get(0));
+                                        } else {
+                                            // report the ambiguity?
+                                        }
+                                    }
+                                }
+                                if(fingerprintNodes.size()>1){
+                                    Node newNode = new FingerprintNode(test.name + "_fingerprint", "", fingerprintNodes);
+                                    newNode.group = folder.group;
+                                    newNode = nodeService.create(newNode);
+                                    nodeTracking.addNode(newNode);
+                                }else{
+                                    //todo log error
+                                }
+
                             }
 
                         }
-
                     }
                 }
-            }
+                //create change detections with fingerprints and nodeIds
+                try(PreparedStatement statement = connection.prepareStatement("select id,variable_id,model,config from changedetection where variable_id in (?)")){
+                    Array array = connection.createArrayOf("integer",variableIdToNode.keySet().toArray());
+                    statement.setArray(1,array);
+                    ObjectMapper mapper = new ObjectMapper();
+                    try(ResultSet rs = statement.executeQuery()){
+                        while(rs.next()){
+                            Long id = rs.getLong("id");
+                            Long variableId = rs.getLong("variable_id");
+                            Node  variableNode = variableIdToNode.get(variableId);
+                            Node fingerprintNode = nodeTracking.hasNode(test.name + "_fingerprint") ? nodeTracking.getNodes(test.name + "_fingerprint").get(0) : null;
+                            Node groupBy = nodeTracking.hasNode("dataset") ? nodeTracking.getNodes("dataset").get(0) : folder.group.root;
+                            String model = rs.getString("model");
+                            ObjectNode config = (ObjectNode) mapper.readTree(rs.getString("config"));
 
+                            Node changeNode = switch (model) {
+                                case "relativeDifference"-> {
+                                    RelativeDifference difference = new RelativeDifference();
+                                    difference.name="rd"+id;
+                                    difference.setFilter(config.get("filter").asText());
+                                    difference.setWindow(config.get("window").asInt());
+                                    difference.setThreshold(config.get("threshold").asDouble());
+                                    difference.setNodes(fingerprintNode,groupBy,variableNode,null);
+                                    yield difference;
+                                }
+                                case "fixedThreshold" -> {
+                                    yield null;
+                                }
+                                case "eDivisive" -> {
+                                    yield null;
+                                }
+                                default -> null;
+                            };
 
+                            if(changeNode!=null){
+                                changeNode.group=folder.group;
+                                changeNode = nodeService.create(changeNode);
+                                nodeTracking.addNode(changeNode);
+                            }
+
+                        }
+                    }
+
+                }
             }
         }
         return 0;
