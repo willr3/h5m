@@ -556,9 +556,10 @@ public class LoadLegacyTests implements Callable<Integer> {
                     }
                 }
                 //create change detections with fingerprints and nodeIds
-                try(PreparedStatement statement = connection.prepareStatement("select id,variable_id,model,config from changedetection where variable_id in (?)")){
+                try(PreparedStatement statement = connection.prepareStatement("select id,variable_id,model,config from changedetection where variable_id in (select id from variable where testid = ?)")){
                     Array array = connection.createArrayOf("integer",variableIdToNode.keySet().toArray());
-                    statement.setArray(1,array);
+                    //statement.setArray(1,array);
+                    statement.setLong(1,testId);
                     ObjectMapper mapper = new ObjectMapper();
                     try(ResultSet rs = statement.executeQuery()){
                         while(rs.next()){
@@ -577,7 +578,11 @@ public class LoadLegacyTests implements Callable<Integer> {
                                     difference.setFilter(config.get("filter").asText());
                                     difference.setWindow(config.get("window").asInt());
                                     difference.setThreshold(config.get("threshold").asDouble());
+                                    difference.setMinPrevious(config.get("minPrevious").asInt());
                                     difference.setNodes(fingerprintNode,groupBy,variableNode,null);
+                                    if(fingerprint_filter!=null && !fingerprint_filter.isEmpty()){
+                                        difference.setFingerprintFilter(fingerprint_filter);
+                                    }
                                     yield difference;
                                 }
                                 case "fixedThreshold" -> {
