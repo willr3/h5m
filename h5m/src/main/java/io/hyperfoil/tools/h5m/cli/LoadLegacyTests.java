@@ -586,10 +586,26 @@ public class LoadLegacyTests implements Callable<Integer> {
                                     yield difference;
                                 }
                                 case "fixedThreshold" -> {
-                                    yield null;
+                                    ObjectNode max = (ObjectNode) config.get("max");
+                                    ObjectNode min = (ObjectNode) config.get("min");
+                                    FixedThreshold fixedThreshold = new FixedThreshold();
+                                    fixedThreshold.name="ft"+id;
+                                    fixedThreshold.setMaxEnabled(max.get("enabled").asBoolean());
+                                    fixedThreshold.setMinEnabled(min.get("enabled").asBoolean());
+                                    fixedThreshold.setMaxInclusive(max.get("inclusive").asBoolean());
+                                    fixedThreshold.setMinInclusive(min.get("inclusive").asBoolean());
+                                    if(max.get("value") != null) {
+                                        fixedThreshold.setMaxValue(max.get("value").asInt());
+                                    }
+                                    if(min.get("value") != null) {
+                                        fixedThreshold.setMinValue(min.get("value").asInt());
+                                    }
+                                    yield fixedThreshold;
                                 }
                                 case "eDivisive" -> {
-                                    yield null;
+                                    EDivisive divisive = new EDivisive();
+                                    divisive.name="ed"+id;
+                                    yield divisive;
                                 }
                                 default -> null;
                             };
@@ -598,6 +614,8 @@ public class LoadLegacyTests implements Callable<Integer> {
                                 changeNode.group=folder.group;
                                 changeNode = nodeService.create(changeNode);
                                 nodeTracking.addNode(changeNode);
+                            }else{
+                                //this should not happen and is an error
                             }
 
                         }
