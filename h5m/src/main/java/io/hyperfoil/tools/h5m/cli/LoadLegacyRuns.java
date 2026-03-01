@@ -57,6 +57,7 @@ public class LoadLegacyRuns implements Callable<Integer> {
             System.out.println("loaded "+tests.size()+" legacy tests");
 
             tests.clear();
+            tests.put(113L,"quarkus-spring-boot-comparison");
             for(Long testId : tests.keySet()){
                 String name = tests.get(testId);
                 Folder folder = folderService.byName(name);
@@ -69,14 +70,15 @@ public class LoadLegacyRuns implements Callable<Integer> {
                     try (ResultSet rs = ps.executeQuery()) {
                         while(rs.next()){
                             Long id = rs.getLong(1);
+                            System.out.println(name+" "+id);
                             JsonNode data = mapper.readTree(rs.getString(2));
                             folderService.upload(folder,null,data);
                         }
                     }
                 }
             }
-
-
+        }finally {
+            ds.close();
         }
         return 0;
     }

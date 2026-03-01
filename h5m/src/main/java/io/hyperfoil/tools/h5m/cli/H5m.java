@@ -124,7 +124,7 @@ public class H5m implements QuarkusApplication {
     CommandLine.IFactory factory;
 
     @Override
-    public int run(String... args) throws Exception {
+    public int  run(String... args) throws Exception {
         //because no @Inject if we implement QuarkusApplication :(
         this.folderService = CDI.current().select(FolderService.class).get();
         this.nodeGroupService = CDI.current().select(NodeGroupService.class).get();

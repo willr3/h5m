@@ -262,6 +262,7 @@ public class LoadLegacyTests implements Callable<Integer> {
             }
             List<Long> testids = new ArrayList<>(allTests.keySet());
             testids.sort(Comparator.naturalOrder());
+            testids = List.of(113L);
             for(Long testId : testids){
                 Test test = allTests.get(testId);
                 log(String.format("%3d - %s",test.id,test.name));
@@ -640,6 +641,9 @@ public class LoadLegacyTests implements Callable<Integer> {
 
                 }
             }
+        }
+        finally {
+            ds.close();
         }
         return 0;
     }
