@@ -213,6 +213,11 @@ public abstract class Node extends PanacheEntity implements Comparable<Node> {
     }
 
     private Set<Long> computeAncestorIds() {
+        System.out.println(this.name+"("+this.id+").computeAncestorIds()\n  sources="+sources);
+        if(sources == null || sources.isEmpty()) {
+            return Collections.emptySet();
+        }
+
         Set<Long> ancestors = new HashSet<>();
         Queue<Node> queue = new ArrayDeque<>(sources);
         while (!queue.isEmpty()) {

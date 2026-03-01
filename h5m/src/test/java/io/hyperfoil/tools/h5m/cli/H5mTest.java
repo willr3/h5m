@@ -44,6 +44,12 @@ public class H5mTest {
         System.out.println("exitCode="+result.exitCode());
         assertEquals(0,result.exitCode());
     }
+    @Test @Disabled
+    public void loadLegacyRuns(QuarkusMainLauncher launcher){
+        LaunchResult result = launcher.launch("load-legacy-runs","username=horreum","password=horreum","url=jdbc:postgresql://0.0.0.0:6000/horreum");
+        System.out.println("exitCode="+result.exitCode());
+        assertEquals(0,result.exitCode());
+    }
 
     @Test
     public void list(QuarkusMainLauncher launcher) {

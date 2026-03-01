@@ -167,7 +167,6 @@ public class LoadLegacyTests implements Callable<Integer> {
             if(nodeTracking.hasNode(extractor) && nodeService.functionalyEquivalent(node,nodeTracking.getNode(extractor))){
                 node = nodeTracking.getNode(extractor);
             }else{
-                System.out.println("creating conflicting Node for extractor="+extractor+"\n node="+node+"\n conflicting="+nodeTracking.getNode(extractor));
                 node = nodeService.create(node);
                 nodeTracking.addNode(extractor, node);
             }
@@ -178,10 +177,14 @@ public class LoadLegacyTests implements Callable<Integer> {
             if(label.extractors.size() > 1) {
                 rtrn = new JsNode(label.name(),"v=>v",labelNodesByName.values().stream().flatMap(List::stream).collect(Collectors.toList()));
             }else if (label.extractors.size() == 1) {
-                if(label.name != label.extractors.get(0).name && !label.name.trim().isEmpty()){
-                    List<Node> extractorNodes = labelNodesByName.get(label.name);
+                if(label.name!=null && !label.name.equals(label.extractors.get(0).name) && !label.name.trim().isEmpty()){
+                    List<Node> extractorNodes = labelNodesByName.get(label.extractors.get(0).name);
                     if(extractorNodes.size()==1){
-                        extractorNodes.get(0).name = label.name;
+                        Node extractorNode = extractorNodes.get(0);
+                        extractorNode.name = label.name;
+                        nodeTracking.addNode(extractorNode);//to capture the rename
+                        nodeService.update(extractorNode);
+
                     }else{
                         //This is a condition we do not expect
                     }
@@ -306,7 +309,15 @@ public class LoadLegacyTests implements Callable<Integer> {
                         log("MORE THAN 1 TRANSFORMER FOR "+test);
                     }else {
                         for (Transformer transformer : transformers) {
-                            Label l = new Label(-1,"dataset",transformer.function,transformer.extractors);
+                            List<Extractor> renamedExtractors = new ArrayList<>();
+                            Map<String,String> extractorAliases = new HashMap<>();
+                            transformer.extractors.forEach(e->{
+                                Extractor newE = new Extractor("_"+e.name,e.jsonpath,e.isArray);
+                                renamedExtractors.add(newE);
+                                extractorAliases.put(e.name,newE.name);
+                            });
+                            String function = NodeService.renameParameters(transformer.function,extractorAliases);
+                            Label l = new Label(-1,"dataset",function,renamedExtractors);
                             Node dataset = createNodesFromLabel(l,folder.group.root,folder,nodeTracking);
                             dataset.group=folder.group;
                             dataset = nodeService.create(dataset);
@@ -340,6 +351,7 @@ public class LoadLegacyTests implements Callable<Integer> {
                             }
                             labelDefs.clear();//so we don't accidentally use it
                             for(Label label : targetSchemaLabels){
+                                log(6,"label="+label);
                                 Node labelNode = createNodesFromLabel(label,dataset,folder,nodeTracking);
                                 if ( labelNode==null ) {
                                     //this can happen if the label is missing a function and has only 1 extractor
@@ -405,14 +417,7 @@ public class LoadLegacyTests implements Callable<Integer> {
                             }
                         }
                     }
-                    for(String labelName : schemaLabelsByName.keys()){
-                        Set<Label> labels = schemaLabelsByName.get(labelName);
-                        if(labels.size()>1){
-                            System.out.println("CONFLICTING NAME "+labelName+":\n  "+labels.stream().map(Objects::toString).collect(Collectors.joining("\n  ")));
-                        }
-                    }
                     HashedLists<String,Node> nodesByOriginalName = new HashedLists<>();
-
                     for(String jsonpath : schemaByPath.keys()){
                         Set<String> schemas = schemaByPath.get(jsonpath);
                         List<Label> allLabelsForJsonpath = schemas.stream().filter(schemaLabels::containsKey).flatMap(s->schemaLabels.get(s).stream()).toList();
@@ -481,7 +486,8 @@ public class LoadLegacyTests implements Callable<Integer> {
                             //if this node is just an alias
                             if(calculation==null || calculation.isEmpty()){
                                 if(labels.size()==1){
-                                    List<Node> found = nodeTracking.getNodes(labels.get(0).toString());
+                                    String labelName = StringUtil.removeQuotes(labels.get(0).asText());
+                                    List<Node> found = nodeTracking.getNodes(labelName);
                                     if(found.size()==1){
                                         variableIdToNode.put(id,found.get(0));
                                     }
@@ -539,6 +545,8 @@ public class LoadLegacyTests implements Callable<Integer> {
                                         } else {
                                             // report the ambiguity?
                                         }
+                                    }else{
+                                        System.out.println("missing node "+labelName+" for Fingerprint_label on test "+testId+"="+test.name);
                                     }
                                 }
                                 if(fingerprintNodes.size()>1){
@@ -549,7 +557,6 @@ public class LoadLegacyTests implements Callable<Integer> {
                                 }else{
                                     //todo log error
                                 }
-
                             }
 
                         }
@@ -566,15 +573,26 @@ public class LoadLegacyTests implements Callable<Integer> {
                             Long id = rs.getLong("id");
                             Long variableId = rs.getLong("variable_id");
                             Node  variableNode = variableIdToNode.get(variableId);
-                            Node fingerprintNode = nodeTracking.hasNode(test.name + "_fingerprint") ? nodeTracking.getNodes(test.name + "_fingerprint").get(0) : null;
+                            String fingerPrintName = test.name + "_fingerprint";
+                            Node fingerprintNode = nodeTracking.hasNode(fingerPrintName) ? nodeTracking.getNodes(fingerPrintName).get(0) : null;
                             Node groupBy = nodeTracking.hasNode("dataset") ? nodeTracking.getNodes("dataset").get(0) : folder.group.root;
                             String model = rs.getString("model");
                             ObjectNode config = (ObjectNode) mapper.readTree(rs.getString("config"));
 
+                            if(variableNode == null || fingerprintNode == null){
+                                if(variableNode == null){
+                                    System.out.println("FAILED TO FIND VARIABLE "+variableId);
+                                }
+                                if(fingerprintNode == null){
+                                    System.out.println("FAILED TO FIND FINGERPRINT "+fingerPrintName);
+                                }
+                                continue;
+                            }
+
                             Node changeNode = switch (model) {
                                 case "relativeDifference"-> {
                                     RelativeDifference difference = new RelativeDifference();
-                                    difference.name="rd"+id;
+                                    difference.name="rd."+variableNode.name+"."+id;
                                     difference.setFilter(config.get("filter").asText());
                                     difference.setWindow(config.get("window").asInt());
                                     difference.setThreshold(config.get("threshold").asDouble());
@@ -609,7 +627,6 @@ public class LoadLegacyTests implements Callable<Integer> {
                                 }
                                 default -> null;
                             };
-
                             if(changeNode!=null){
                                 changeNode.group=folder.group;
                                 changeNode = nodeService.create(changeNode);

@@ -39,7 +39,7 @@ public class ExecutorConfiguration {
 
     @Inject @ConfigProperty(name = "h5m.work.maximumPoolSize",defaultValue = "1")
     int maximumPoolSize;
-    @Inject @ConfigProperty(name = "h5m.work.keepAlive",defaultValue = "10")
+    @Inject @ConfigProperty(name = "h5m.work.keepAlive",defaultValue = "1")
     int keepAlive;
     @Inject @ConfigProperty(name = "h5m.work.KeepAliveUnit",defaultValue = "seconds")
     String keepAliveUnit;

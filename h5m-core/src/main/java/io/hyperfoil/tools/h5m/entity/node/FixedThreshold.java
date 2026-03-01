@@ -22,20 +22,16 @@ public class FixedThreshold extends Node {
     private static final String MAX = "max";
     private static final String INCLUSIVE = "inclusive";
     private static final Boolean DEFAULT_INCLUSIVE = true;
-
     private static final String EMPTY_OPERATION = """
             { "max": { "enabled":false, "inclusive":true, "value": 0},
               "min": { "enabled":false, "inclusive":true, "value": 0},
             }
             """;
-
     @Transient
     private Json config;
-
     public FixedThreshold(){
         config = Json.fromString(EMPTY_OPERATION);
     }
-
     public FixedThreshold(String name,String operation){
         super(name,operation);
         config = Json.fromString(operation);
@@ -59,38 +55,32 @@ public class FixedThreshold extends Node {
         }
         this.sources = sources;
     }
-
     @Transient
     public Node getRangeNode(){
         return sources.get(2);
     }
-
     //domain node can be null
     @Transient
     public Node getDomainNode(){
         return sources.size() > 3 ? sources.get(3) : null;
     }
-
     @Transient
     public Node getGroupByNode(){return sources.get(1);}
-
     @Transient
     public Node getFingerprintNode(){
         return sources.get(0);
     }
-
     @Transient
     public List<Node> getFingerprintNodes(){
         return sources.get(0).sources;
     }
-
     @Override
     protected Node shallowCopy() {
         return new FixedThreshold(name,operation);
     }
-
     public void setMaxEnabled(boolean enabled){
         Json.chainSet(config,MAX+"."+ENABLED,enabled);
+        operation=config.toString();
     }
     @Transient
     public boolean isMaxEnabled(){
@@ -98,6 +88,7 @@ public class FixedThreshold extends Node {
     }
     public void setMinEnabled(boolean enabled){
         Json.chainSet(config,MIN+"."+ENABLED,enabled);
+        operation=config.toString();
     }
     @Transient
     public boolean isMinEnabled(){
@@ -106,6 +97,7 @@ public class FixedThreshold extends Node {
 
     public void setMaxInclusive(boolean inclusive){
         Json.chainSet(config,MAX+"."+INCLUSIVE,inclusive);
+        operation=config.toString();
     }
     @Transient
     public boolean isMaxInclusive(){
@@ -114,6 +106,7 @@ public class FixedThreshold extends Node {
 
     public void setMinInclusive(boolean inclusive){
         Json.chainSet(config,MIN+"."+INCLUSIVE,inclusive);
+        operation=config.toString();
     }
     @Transient
     public boolean isMinInclusive(){
@@ -122,6 +115,7 @@ public class FixedThreshold extends Node {
 
     public void setMaxValue(int value){
         Json.chainSet(config,MAX+"."+VALUE,value);
+        operation=config.toString();
     }
     @Transient
     public int getMaxValue(){
@@ -130,6 +124,7 @@ public class FixedThreshold extends Node {
 
     public void setMinValue(int value){
         Json.chainSet(config,MIN+"."+VALUE,value);
+        operation=config.toString();
     }
     @Transient
     public int getMinValue(){
