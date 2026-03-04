@@ -1,6 +1,6 @@
 package io.hyperfoil.tools.h5m.entity.node;
 
-import io.hyperfoil.tools.h5m.entity.Node;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
 import jakarta.persistence.DiscriminatorValue;
 import jakarta.persistence.Entity;
 
@@ -12,7 +12,7 @@ import static io.hyperfoil.tools.h5m.entity.node.JqNode.*;
 
 @Entity
 @DiscriminatorValue("split")
-public class SplitNode extends Node {
+public class SplitNode extends NodeEntity {
 
     public SplitNode() {
         this.type = "split";
@@ -22,18 +22,18 @@ public class SplitNode extends Node {
         super(name);
         this.type = "split";
     }
-    public SplitNode(String name, String operation, List<Node> sources){
+    public SplitNode(String name, String operation, List<NodeEntity> sources){
         super(name, operation, sources);
         this.type = "split";
     }
 
     @Override
-    protected Node shallowCopy() {
+    protected NodeEntity shallowCopy() {
         return new SplitNode(name, operation, sources);
     }
 
 
-    public SplitNode parse(String name, String input, Function<String,List<Node>> nodeFn){
+    public SplitNode parse(String name, String input, Function<String,List<NodeEntity>> nodeFn){
         if(input==null || input.isBlank()){
             System.err.println("missing sqlpath node input");
             return null;
@@ -47,11 +47,11 @@ public class SplitNode extends Node {
             prefix =  input.substring(SOURCE_PREFIX.length(),input.indexOf(SOURCE_SUFFIX));
             input = input.substring(input.indexOf(SOURCE_SUFFIX)+SOURCE_SUFFIX.length());
         }
-        List<Node> sources = new ArrayList<>();
+        List<NodeEntity> sources = new ArrayList<>();
         boolean ok = true;
         if(!prefix.isBlank()) {
             for (String s : prefix.split(SOURCE_SEPARATOR)) {
-                List<Node> found = nodeFn.apply(s);
+                List<NodeEntity> found = nodeFn.apply(s);
                 if (found.isEmpty()) {
                     System.err.println("failed to find source node " + s);
                     ok = false;

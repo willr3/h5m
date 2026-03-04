@@ -1,8 +1,8 @@
 package io.hyperfoil.tools.h5m.cli;
 
-import io.hyperfoil.tools.h5m.entity.Folder;
-import io.hyperfoil.tools.h5m.entity.Node;
-import io.hyperfoil.tools.h5m.entity.NodeGroup;
+import io.hyperfoil.tools.h5m.entity.FolderEntity;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
+import io.hyperfoil.tools.h5m.entity.NodeGroupEntity;
 import io.hyperfoil.tools.h5m.svc.FolderService;
 import io.hyperfoil.tools.h5m.svc.NodeGroupService;
 import io.hyperfoil.tools.h5m.svc.NodeService;
@@ -33,9 +33,9 @@ public class RemoveCmd implements Callable<Integer> {
             cmd.usage(System.out);
             return 0;
         }
-        Folder folder = folderService.byName(name);
-        NodeGroup nodeGroup = nodeGroupService.byName(name);
-        List<Node> nodes = nodeService.findNodeByFqdn(name);
+        FolderEntity folder = folderService.byName(name);
+        NodeGroupEntity nodeGroup = nodeGroupService.byName(name);
+        List<NodeEntity> nodes = nodeService.findNodeByFqdn(name);
 
         if (folder != null) {
             if(!nodes.isEmpty()) {

@@ -8,8 +8,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.*;
-import io.hyperfoil.tools.h5m.entity.Node;
-import io.hyperfoil.tools.h5m.entity.Value;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
+import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.entity.node.*;
 import io.hyperfoil.tools.h5m.pasted.ProxyJacksonArray;
 import io.hyperfoil.tools.h5m.pasted.ProxyJacksonObject;
@@ -81,11 +81,11 @@ public class NodeService {
 
 
     @Transactional
-    public Node create(Node node){
+    public NodeEntity create(NodeEntity node){
 
         if(!node.isPersistent()){
             node.id = null;
-            Node merged = em.merge(node);
+            NodeEntity merged = em.merge(node);
             em.flush();
             node.id = merged.id;
             return merged;
@@ -94,22 +94,22 @@ public class NodeService {
     }
 
     @Transactional
-    public Node read(long id){
-        return Node.findById(id);
+    public NodeEntity read(long id){
+        return NodeEntity.findById(id);
     }
 
     @Transactional
-    public long update(Node node){
+    public long update(NodeEntity node){
         if(node.id == null || node.id == -1){
 
         }else{
-            Node existing = Node.findById(node.id);
+            NodeEntity existing = NodeEntity.findById(node.id);
             if(!existing.name.equals(node.name)){
-                List<Node> toChange = em.createNativeQuery(
+                List<NodeEntity> toChange = em.createNativeQuery(
                         "select n.* from node n join node_edge ne on n.id = ne.child_id where ne.parent_id=? and n.type='ecma'"
-                ,Node.class).setParameter(1,node.id).getResultList();
+                , NodeEntity.class).setParameter(1,node.id).getResultList();
                 Map<String,String> changes = Map.of(existing.name,node.name);
-                for(Node n : toChange){
+                for(NodeEntity n : toChange){
                     n.operation = renameParameters(n.operation, changes);
                     em.merge(n);
                 }
@@ -120,20 +120,20 @@ public class NodeService {
     }
 
     @Transactional
-    public List<Node> getDependentNodes(Node n){
+    public List<NodeEntity> getDependentNodes(NodeEntity n){
         return em.createQuery(
-                "SELECT DISTINCT n FROM Node n LEFT JOIN FETCH n.sources JOIN n.sources s WHERE s.id = :sourceId",
-                Node.class
+                "SELECT DISTINCT n FROM node n LEFT JOIN FETCH n.sources JOIN n.sources s WHERE s.id = :sourceId",
+                NodeEntity.class
         ).setParameter("sourceId", n.id).getResultList();
     }
 
 
     @Transactional
-    public void delete(Node node){
+    public void delete(NodeEntity node){
         if(node.id!=null) {
             //remove nodes that depend on this or just remove the reference?
             getDependentNodes(node).forEach(this::delete);
-            Node.deleteById(node.id);
+            NodeEntity.deleteById(node.id);
         }
     }
 
@@ -146,14 +146,14 @@ public class NodeService {
      * @return
      */
     @Transactional
-    public List<Map<String,Value>> calculateSourceValuePermutations(Node node, Value root) {
-        List<Map<String,Value>> rtrn = new ArrayList<>();
+    public List<Map<String, ValueEntity>> calculateSourceValuePermutations(NodeEntity node, ValueEntity root) {
+        List<Map<String, ValueEntity>> rtrn = new ArrayList<>();
         // Batch-fetch descendant values for all source nodes in a single query instead of N separate queries
-        Map<Long, List<Value>> descendantsByNode = valueService.getDescendantValuesByNodes(root, node.sources);
-        Map<String,List<Value>> nodeValues = new HashMap<>();
+        Map<Long, List<ValueEntity>> descendantsByNode = valueService.getDescendantValuesByNodes(root, node.sources);
+        Map<String,List<ValueEntity>> nodeValues = new HashMap<>();
         for (int i = 0, size = node.sources.size(); i < size; i++) {
-            Node source = node.sources.get(i);
-            List<Value> found = descendantsByNode.getOrDefault(source.getId(), List.of());
+            NodeEntity source = node.sources.get(i);
+            List<ValueEntity> found = descendantsByNode.getOrDefault(source.getId(), List.of());
             if (found.isEmpty() && source.sources.isEmpty()) {
                 found = List.of(root);
             }
@@ -167,9 +167,9 @@ public class NodeService {
             //to ensure sequence
             for(int i=0; i< maxNodeValuesLength; i++) {
                 int idx = i;
-                Map<String,Value> sourceValuesAtIndex = node.sources.stream()
-                        .filter(n->nodeValues.get(n.name).size()>idx)
-                        .collect(Collectors.toMap(n->n.name,n->nodeValues.get(n.name).get(idx)));
+                Map<String, ValueEntity> sourceValuesAtIndex = node.sources.stream()
+                                                                           .filter(n->nodeValues.get(n.name).size()>idx)
+                                                                           .collect(Collectors.toMap(n->n.name,n->nodeValues.get(n.name).get(idx)));
                 //TODO splitting?
                 rtrn.add(sourceValuesAtIndex);
             }
@@ -178,14 +178,14 @@ public class NodeService {
                 case Length -> {
                     //I think this is functionally equivalent
                     for(int i=0; i< maxNodeValuesLength; i++){
-                        Map<String,Value> sourceValuesAtIndex = new HashMap<>();
+                        Map<String, ValueEntity> sourceValuesAtIndex = new HashMap<>();
                         int idx = i;//thanks java
-                        for(Node n : node.sources){
-                            List<Value> nValues = nodeValues.get(n.name);
+                        for(NodeEntity n : node.sources){
+                            List<ValueEntity> nValues = nodeValues.get(n.name);
                             if(nValues.size()==1){
                                 if(idx == 0){
                                     sourceValuesAtIndex.put(n.name,nValues.get(idx));
-                                }else if (n.scalarMethod.equals(Node.ScalarVariableMethod.All)){
+                                }else if (n.scalarMethod.equals(NodeEntity.ScalarVariableMethod.All)){
                                     sourceValuesAtIndex.put(n.name,nValues.getFirst());
                                 }
                             }else if(nValues.size()>idx){
@@ -198,7 +198,7 @@ public class NodeService {
                     }
                 }
                 case NxN -> {
-                    List<Map<String,Value>> valuePermutations = new ArrayList<>();
+                    List<Map<String, ValueEntity>> valuePermutations = new ArrayList<>();
                     List<String> multiNodes = nodeValues.entrySet().stream().filter(e->e.getValue().size()>1).map(Map.Entry::getKey).toList();
                     List<String> scalarNodes = nodeValues.entrySet().stream().filter(e->e.getValue().size()==1).map(Map.Entry::getKey).toList();
                     int permutations = nodeValues.values().stream().map(List::size).reduce(1,(a,b)-> b > 0 ? a*b : a );
@@ -206,11 +206,11 @@ public class NodeService {
                         valuePermutations.add(new HashMap<>());
                     }
                     int loopCount = 1;
-                    for( Node sourceNode : node.sources ){
-                        List<Value> valueList = nodeValues.get(sourceNode.name);
+                    for( NodeEntity sourceNode : node.sources ){
+                        List<ValueEntity> valueList = nodeValues.get(sourceNode.name);
                         if( !valueList.isEmpty() ){
                             if ( valueList.size() == 1 ) {
-                                if ( sourceNode.scalarMethod.equals(Node.ScalarVariableMethod.First) ){
+                                if ( sourceNode.scalarMethod.equals(NodeEntity.ScalarVariableMethod.First) ){
                                     valuePermutations.getFirst().put(sourceNode.name, valueList.getFirst());
                                 }else{
                                     valuePermutations.forEach(m->m.put(sourceNode.name, valueList.getFirst()));
@@ -248,20 +248,21 @@ public class NodeService {
      * @throws IOException
      */
     @Transactional
-    public List<Value> calculateValues(Node node, List<Value> roots) throws IOException {
+    public List<ValueEntity> calculateValues(NodeEntity node, List<ValueEntity> roots) throws IOException {
         // Re-attach any detached root values to the current persistence context
         // so that lazy fields (e.g. Value.data) can be loaded within this session
-        List<Value> managedRoots = new ArrayList<>(roots.size());
+        List<ValueEntity> managedRoots = new ArrayList<>(roots.size());
         for (int i = 0; i < roots.size(); i++) {
-            Value root = roots.get(i);
+            ValueEntity root = roots.get(i);
             if (root.id != null && !em.contains(root)) {
-                managedRoots.add(em.find(Value.class, root.id));
+                managedRoots.add(em.find(ValueEntity.class, root.id));
             } else {
                 managedRoots.add(root);
             }
         }
         roots = managedRoots;
-        List<Value> rtrn = new ArrayList<>();
+        List<ValueEntity> rtrn = new ArrayList<>();
+
         switch (node.type){
             //nodes that operate one root at a time
             case "ecma":
@@ -272,12 +273,12 @@ public class NodeService {
             case "split":
             case "fp":
                 for(int vIdx=0; vIdx<roots.size(); vIdx++){
-                    Value root =  roots.get(vIdx);
+                    ValueEntity root =  roots.get(vIdx);
                     try {
-                        List<Map<String,Value>> combinations = calculateSourceValuePermutations(node,root);
+                        List<Map<String, ValueEntity>> combinations = calculateSourceValuePermutations(node,root);
                         for(int i=0;i<combinations.size();i++){
-                            Map<String,Value> combination =  combinations.get(i);
-                            List<Value> createdValues = calculateNodeValues(node,combination,rtrn.size());
+                            Map<String, ValueEntity> combination =  combinations.get(i);
+                            List<ValueEntity> createdValues = calculateNodeValues(node,combination,rtrn.size());
                             rtrn.addAll(createdValues);
                         }
                     } catch (IOException e) {
@@ -288,20 +289,20 @@ public class NodeService {
             case "rd":
                 RelativeDifference relDiff = (RelativeDifference) node;
                 for(int rIdx=0; rIdx<roots.size(); rIdx++){
-                    Value root =  roots.get(rIdx);
-                    List<Value> found = calculateRelativeDifferenceValues(relDiff,root,rtrn.size());
+                    ValueEntity root =  roots.get(rIdx);
+                    List<ValueEntity> found = calculateRelativeDifferenceValues(relDiff,root,rtrn.size());
                     rtrn.addAll(found);
                 }
                 break;
             default:
                 System.err.println("calculateValues unknown node type: " + node.type);
         }
-        rtrn.forEach(Value::getPath);//forcing entities to be loaded is so dirty
+        rtrn.forEach(ValueEntity::getPath);//forcing entities to be loaded is so dirty
         return rtrn;
     }
 
     @Transactional
-    public List<Value> calculateNodeValues(Node node,Map<String,Value> sourceValues,int startingOrdinal) throws IOException {
+    public List<ValueEntity> calculateNodeValues(NodeEntity node,Map<String, ValueEntity> sourceValues,int startingOrdinal) throws IOException {
         return switch(node.type){
             case "jq" -> calculateJqValues((JqNode)node,sourceValues,startingOrdinal+1);
             case "ecma" -> calculateJsValues((JsNode)node,sourceValues,startingOrdinal+1);
@@ -318,15 +319,15 @@ public class NodeService {
     }
     //this performs change detection across all values, not just recent
     @Transactional
-    public List<Value> calculateRelativeDifferenceValues(RelativeDifference relDiff, Value  root,int startingOrdinal) throws IOException {
-        List<Value> rtrn = new ArrayList<>();
+    public List<ValueEntity> calculateRelativeDifferenceValues(RelativeDifference relDiff, ValueEntity root,int startingOrdinal) throws IOException {
+        List<ValueEntity> rtrn = new ArrayList<>();
         try{
             long minPrevious = relDiff.getWindow() > relDiff.getMinPrevious() ? relDiff.getWindow() : relDiff.getMinPrevious();
-            Node groupBy = Node.findById(relDiff.getGroupByNode().getId());
-            List<Value> fingerprintValues = valueService.getDescendantValues(root,relDiff.getFingerprintNode());
+            NodeEntity groupBy = NodeEntity.findById(relDiff.getGroupByNode().getId());
+            List<ValueEntity> fingerprintValues = valueService.getDescendantValues(root,relDiff.getFingerprintNode());
             String fpFilter = relDiff.getFingerprintFilter();
             for(int fIdx=0; fIdx<fingerprintValues.size(); fIdx++){
-                Value fingerprintValue = fingerprintValues.get(fIdx);
+                ValueEntity fingerprintValue = fingerprintValues.get(fIdx);
                 if (fpFilter != null && !evaluateFingerprintFilter(fpFilter, fingerprintValue.data)) {
                     continue;
                 }
@@ -334,7 +335,7 @@ public class NodeService {
 
                     //when would this have more than 1 value?
                     /*
-                    List<Value> domainValueFromRoot = valueService.findMatchingFingerprint(
+                    List<ValueEntity> domainValueFromRoot = valueService.findMatchingFingerprint(
                             relDiff.getDomainNode(),
                             groupBy,
                             fingerprintValue,
@@ -346,9 +347,9 @@ public class NodeService {
                             true
                     );
                     for(int dIdx=0; dIdx<domainValueFromRoot.size(); dIdx++){
-                        Value domainValue = domainValueFromRoot.get(dIdx);
+                        ValueEntity domainValue = domainValueFromRoot.get(dIdx);
                         //todo this does not look for values after previous relDiff observation :(
-                        List<Value> rangeValues = valueService.findMatchingFingerprint(
+                        List<ValueEntity> rangeValues = valueService.findMatchingFingerprint(
                                 relDiff.getRangeNode(),
                                 groupBy,
                                 fingerprintValue,
@@ -366,16 +367,16 @@ public class NodeService {
                     //but that would only work if values are added sequentially to the domain value (or we delay relative difference calculation to the end of the work queue.
                     //perhaps we check if root introduced the maximum domainValue then only calculate new changes for that last window
                     //or get the domainValues greater than domain values from root and calculate all those changes?
-                    List<Value> domainValues = valueService.findMatchingFingerprint(
+                    List<ValueEntity> domainValues = valueService.findMatchingFingerprint(
                             relDiff.getDomainNode(),
                             groupBy,
                             fingerprintValue,
                             relDiff.getDomainNode()
                     );
                     for(int dIdx=0; dIdx<domainValues.size(); dIdx++){
-                        Value domainValue = domainValues.get(dIdx);
+                        ValueEntity domainValue = domainValues.get(dIdx);
                         //todo this does not look for values after previous relDiff observation :(
-                        List<Value> rangeValues = valueService.findMatchingFingerprint(
+                        List<ValueEntity> rangeValues = valueService.findMatchingFingerprint(
                                 relDiff.getRangeNode(),
                                 groupBy,
                                 fingerprintValue,
@@ -449,9 +450,9 @@ public class NodeService {
                                 data.set("domainvalue",domainValue.data);
                                 //skip domain values due to a detection
                                 dIdx+=minPrevious;
-                                Value changeValue = new Value(root.folder,relDiff,data);
+                                ValueEntity changeValue = new ValueEntity(root.folder,relDiff,data);
                                 changeValue.idx=startingOrdinal;
-                                List<Value> foundParents = valueService.getAncestor(fingerprintValue,groupBy);
+                                List<ValueEntity> foundParents = valueService.getAncestor(fingerprintValue,groupBy);
                                 if(foundParents.size()==1){
                                     changeValue.sources=foundParents;
                                 }
@@ -468,15 +469,15 @@ public class NodeService {
     }
 
     @Transactional
-    public List<Value> calculateSqlJsonpathValues(SqlJsonpathNode node, Map<String,Value> sourceValues, int startingOrdinal) throws IOException {
+    public List<ValueEntity> calculateSqlJsonpathValues(SqlJsonpathNode node, Map<String, ValueEntity> sourceValues, int startingOrdinal) throws IOException {
         return calculateSqlJsonpathValuesFirstOrAll(node,sourceValues,startingOrdinal,"jsonb_path_query_first");
     }
     @Transactional
-    public List<Value> calculateSqlAllJsonpathValues(SqlJsonpathAllNode node, Map<String,Value> sourceValues, int startingOrdinal) throws IOException {
+    public List<ValueEntity> calculateSqlAllJsonpathValues(SqlJsonpathAllNode node, Map<String, ValueEntity> sourceValues, int startingOrdinal) throws IOException {
         return calculateSqlJsonpathValuesFirstOrAll(node,sourceValues,startingOrdinal,"jsonb_path_query_array");
     }
-    private List<Value> calculateSqlJsonpathValuesFirstOrAll(Node node, Map<String,Value> sourceValues, int startingOrdinal,String psqlFunction) throws IOException {
-        List<Value> rtrn = new ArrayList<>();
+    private List<ValueEntity> calculateSqlJsonpathValuesFirstOrAll(NodeEntity node, Map<String, ValueEntity> sourceValues, int startingOrdinal,String psqlFunction) throws IOException {
+        List<ValueEntity> rtrn = new ArrayList<>();
         if(sourceValues.isEmpty()){//end early when there isn't input
             return rtrn;
         }
@@ -485,11 +486,11 @@ public class NodeService {
             System.err.println("sql jsonpath only supports one input at a time");
             return Collections.emptyList();
         }
-        Value input = sourceValues.get(node.sources.getFirst().name);
-        Value tempV = new Value(null,node,null);
+        ValueEntity input = sourceValues.get(node.sources.getFirst().name);
+        ValueEntity tempV = new ValueEntity(null,node,null);
         tempV.sources=List.of(input);
         tempV.idx=startingOrdinal;
-        Value newValue = valueService.create(tempV);
+        ValueEntity newValue = valueService.create(tempV);
         Session session = em.unwrap(Session.class);
         session.doWork(conn -> {
             try(PreparedStatement statement = conn.prepareStatement(
@@ -537,8 +538,8 @@ public class NodeService {
         return rtrn;
     }
     @Transactional
-    public List<Value> calculateSplitValues(SplitNode node, Map<String,Value> sourceValues, int startingOrdinal) throws IOException {
-        List<Value> rtrn = new ArrayList<>();
+    public List<ValueEntity> calculateSplitValues(SplitNode node, Map<String, ValueEntity> sourceValues, int startingOrdinal) throws IOException {
+        List<ValueEntity> rtrn = new ArrayList<>();
         if(sourceValues.isEmpty()){
             return rtrn;
         }
@@ -547,19 +548,19 @@ public class NodeService {
         }
         //this will naively do the split with entities but using json_each would be good
         //TODO should this be done in db with json_each?
-        Value v = sourceValues.get(node.sources.getFirst().name);
+        ValueEntity v = sourceValues.get(node.sources.getFirst().name);
         if(v!=null){
             if(v.data.isArray()){
                 ArrayNode arrayNode = (ArrayNode) v.data;
                 for(int i=0;i<arrayNode.size();i++){
                     JsonNode entry = arrayNode.get(i);
-                    Value newValue = new Value(null,node,entry);
+                    ValueEntity newValue = new ValueEntity(null,node,entry);
                     newValue.idx=i;
                     newValue.sources = List.of(v);
                     rtrn.add(newValue);
                 }
             }else{
-                Value newValue = new Value(null,node,v.data);
+                ValueEntity newValue = new ValueEntity(null,node,v.data);
                 newValue.idx=0;
                 newValue.sources = List.of(v);
                 rtrn.add(newValue);
@@ -570,21 +571,21 @@ public class NodeService {
 
 
     //jsonata cannot operate on multiple inputs at once so source
-    public List<Value> calculateJsonataValues(JsonataNode node,Map<String,Value> sourceValues,int startingOrdinal) throws IOException {
+    public List<ValueEntity> calculateJsonataValues(JsonataNode node,Map<String, ValueEntity> sourceValues,int startingOrdinal) throws IOException {
         if(sourceValues.size()>1 || node.sources.size()>1){
             System.err.println("jsonata only supports one input at a time");
             return Collections.emptyList();
         }
 
-        Value input = sourceValues.isEmpty() ? null : sourceValues.values().iterator().next();
+        ValueEntity input = sourceValues.isEmpty() ? null : sourceValues.values().iterator().next();
 
-        List<Value> rtrn = new ArrayList<>();
+        List<ValueEntity> rtrn = new ArrayList<>();
 
         try {
             Expressions expr = Expressions.parse(node.operation);
             JsonNode result = expr.evaluate(input.data);
 
-            Value newValue = new Value();
+            ValueEntity newValue = new ValueEntity();
             newValue.idx = startingOrdinal+1;
             newValue.node = node;
             newValue.data = result;
@@ -642,8 +643,8 @@ public class NodeService {
     }
 
     @Transactional
-    public List<Value> calculateJsValues(JsNode node,Map<String,Value> sourceValues,int startingOrdinal) throws IOException {
-        List<Value> rtrn = new ArrayList<>();
+    public List<ValueEntity> calculateJsValues(JsNode node,Map<String, ValueEntity> sourceValues,int startingOrdinal) throws IOException {
+        List<ValueEntity> rtrn = new ArrayList<>();
         List<String> params = JsNode.getParameterNames(node.operation);
         if(params == null){
             System.err.println("Error occurred reading parameters from js function\n"+node.operation);
@@ -702,7 +703,7 @@ public class NodeService {
 
                         //File valuePath = JqNode.outputPath().resolve(node.name + "." + (startingOrdinal+1)+".jq").toFile();
                         if(data!=null) {
-                            Value newValue = new Value();
+                            ValueEntity newValue = new ValueEntity();
                             newValue.idx = startingOrdinal+rtrn.size()+1;
                             newValue.node = node;
                             newValue.data = data;
@@ -770,7 +771,7 @@ public class NodeService {
         if (value == null) {
             return null;
         } else if (value.isNull()) {
-            // Value api cannot differentiate null and undefined from javascript
+            // ValueEntity api cannot differentiate null and undefined from javascript
             if (value.toString().contains("undefined")) {
                 return TextNode.valueOf(""); //no return is the same as returning a missing key from a ProxyObject?
             } else {
@@ -805,7 +806,7 @@ public class NodeService {
         } else if (value.hasMembers()) {
             return convertMapping(value);
         } else {
-            //TODO log error wtf is Value?
+            //TODO log error wtf is ValueEntity?
             return TextNode.valueOf("");
         }
     }
@@ -869,17 +870,17 @@ public class NodeService {
 
 
     @Transactional
-    public List<Value> calculateFpValues(FingerprintNode node, Map<String,Value> sourceValues, int startingOrdinal) throws IOException {
+    public List<ValueEntity> calculateFpValues(FingerprintNode node, Map<String, ValueEntity> sourceValues, int startingOrdinal) throws IOException {
         ObjectMapper mapper = new ObjectMapper();
         ObjectNode fpObject = mapper.createObjectNode();
         TreeMap<String, JsonNode> sorted = new TreeMap<>();
-        for (Node source : node.sources) {
+        for (NodeEntity source : node.sources) {
             if (sourceValues.containsKey(source.name)) {
                 sorted.put(source.name, sourceValues.get(source.name).data);
             }
         }
         sorted.forEach(fpObject::set);
-        Value newValue = new Value();
+        ValueEntity newValue = new ValueEntity();
         newValue.idx = startingOrdinal+1;
         newValue.node = node;
         newValue.data = fpObject;
@@ -913,8 +914,8 @@ public class NodeService {
     }
 
     @Transactional
-    public List<Value> calculateJqValues(JqNode node,Map<String,Value> sourceValues,int startingOrdinal) throws IOException {
-        List<Value> rtrn = new ArrayList<>();
+    public List<ValueEntity> calculateJqValues(JqNode node,Map<String, ValueEntity> sourceValues,int startingOrdinal) throws IOException {
+        List<ValueEntity> rtrn = new ArrayList<>();
 
         // Compile the jq filter expression
         JsonQuery query;
@@ -983,7 +984,7 @@ public class NodeService {
 
             for (JsonNode jsNode : results) {
                 if (!jsNode.isNull()) {
-                    Value newValue = new Value();
+                    ValueEntity newValue = new ValueEntity();
                     newValue.idx = order++;
                     newValue.node = node;
                     newValue.data = jsNode;
@@ -1006,53 +1007,53 @@ public class NodeService {
     }
 
     /**
-     * find a Node based on the groupName:nodeName
+     * find a NodeEntity based on the groupName:nodeName
      * @param name
      * @param groupId
      * @return
      */
     @Transactional
-    public List<Node> findNodeByFqdn(String name,Long groupId){
-        List<Node> rtrn = new ArrayList<>();
+    public List<NodeEntity> findNodeByFqdn(String name,Long groupId){
+        List<NodeEntity> rtrn = new ArrayList<>();
         if(name==null || name.isBlank()){
             return List.of();
         }
-        String split[] = name.split(Node.FQDN_SEPARATOR);
+        String split[] = name.split(NodeEntity.FQDN_SEPARATOR);
         if(split.length==1){
             if(split[0].matches("[0-9]+")){
-                rtrn.add(Node.findById(Long.parseLong(split[0])));
+                rtrn.add(NodeEntity.findById(Long.parseLong(split[0])));
             } else {
-                rtrn.addAll(Node.find("from Node n where n.group.id=?1 and n.name=?2", groupId, split[0]).list());
+                rtrn.addAll(NodeEntity.find("from node n where n.group.id=?1 and n.name=?2", groupId, split[0]).list());
             }
         }else if (split.length==2){
-            rtrn.addAll(Node.find("from Node n where n.group.id=?1 and n.originalGroup.name = ?2 n.name=?3",groupId,split[0],split[1]).list());
+            rtrn.addAll(NodeEntity.find("from node n where n.group.id=?1 and n.originalGroup.name = ?2 n.name=?3",groupId,split[0],split[1]).list());
         }
         return rtrn;
     }
 
     @Transactional
-    public List<Node> findNodeByFqdn(String fqdn){
-        List<Node> rtrn = new ArrayList<>();
+    public List<NodeEntity> findNodeByFqdn(String fqdn){
+        List<NodeEntity> rtrn = new ArrayList<>();
         if(fqdn==null || fqdn.isBlank()){
             return List.of();
         }
-        if(fqdn.contains(Node.FQDN_SEPARATOR)){
-            String split[] = fqdn.split(Node.FQDN_SEPARATOR);
+        if(fqdn.contains(NodeEntity.FQDN_SEPARATOR)){
+            String split[] = fqdn.split(NodeEntity.FQDN_SEPARATOR);
             if(split.length==1){
                 if(split[0].matches("[0-9]+")){
-                    rtrn.add(Node.findById(Long.parseLong(split[0])));
+                    rtrn.add(NodeEntity.findById(Long.parseLong(split[0])));
                 }
             }else if(split.length==2){
                 String groupName = split[0];
                 String nodeName = split[1];
-                rtrn.addAll(Node.find("from Node n where n.group.name=?1 and n.name=?2",groupName,nodeName).list());
+                rtrn.addAll(NodeEntity.find("from node n where n.group.name=?1 and n.name=?2",groupName,nodeName).list());
                 rtrn.addAll(em.createNativeQuery(
                     """
                     select c.* 
                     from node c join node_edge ne on c.id = ne.child_id join node p on p.id = ne.parent_id 
                     where c.name=:nodeName and p.name=:parentName
                     """
-                    ,Node.class)
+                    , NodeEntity.class)
                     .setParameter("nodeName",nodeName)
                     .setParameter("parentName",groupName).getResultList()
                 );
@@ -1060,7 +1061,7 @@ public class NodeService {
                 String groupName = split[0];
                 String originalGroupName = split[1];
                 String nodeName = split[2];
-                rtrn.addAll(Node.find("from Node n where n.group.name=?1 and n.originalGroup.name = ?2 and n.name=?3",groupName,originalGroupName,nodeName).list());
+                rtrn.addAll(NodeEntity.find("from node n where n.group.name=?1 and n.originalGroup.name = ?2 and n.name=?3",groupName,originalGroupName,nodeName).list());
             }else{
                 //This shouldn't happen
             }

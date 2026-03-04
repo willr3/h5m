@@ -3,32 +3,29 @@ package io.hyperfoil.tools.h5m.entity;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import jakarta.persistence.*;
 
-@Entity
-@Table(
-    name="folder"
-)
-public class Folder extends PanacheEntity {
+@Entity(name="folder")
+public class FolderEntity extends PanacheEntity {
 
     @Column(unique = true)
     public String name;
 
     @OneToOne(cascade = {CascadeType.ALL})
-    public NodeGroup group;
+    public NodeGroupEntity group;
 
-    public Folder(){}
-    public Folder(String name){
+    public FolderEntity(){}
+    public FolderEntity(String name){
         this.name = name;
         //TODO do we auto-create a nodeGroup?
-        this.group = new NodeGroup(name);
+        this.group = new NodeGroupEntity(name);
     }
-    public Folder(String name, NodeGroup group){
+    public FolderEntity(String name, NodeGroupEntity group){
         this.name = name;
         this.group = group;
     }
 
     @Override
     public String toString() {
-        return "Folder<"+id+">[ name="+name+" ]";
+        return "FolderEntity<"+id+">[ name="+name+" ]";
 
     }
 }

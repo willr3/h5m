@@ -1,6 +1,6 @@
 package io.hyperfoil.tools.h5m.svc;
 
-import io.hyperfoil.tools.h5m.entity.Work;
+import io.hyperfoil.tools.h5m.entity.work.Work;
 import io.hyperfoil.tools.h5m.queue.WorkQueueExecutor;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;

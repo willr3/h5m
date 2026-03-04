@@ -5,6 +5,7 @@ import io.hyperfoil.tools.h5m.entity.node.FingerprintNode;
 import io.hyperfoil.tools.h5m.entity.node.JqNode;
 import io.hyperfoil.tools.h5m.entity.node.RelativeDifference;
 import io.hyperfoil.tools.h5m.entity.node.RootNode;
+import io.hyperfoil.tools.h5m.entity.work.Work;
 import io.quarkus.test.junit.QuarkusTest;
 import org.junit.jupiter.api.Test;
 
@@ -18,10 +19,10 @@ public class WorkTest {
 
     @Test
     public void hashCode_relativeDifference(){
-        Node rootNode = new JqNode("root",".root");
-        Node relativeDifference = new RelativeDifference();
-        Value rootValue1 = new Value(null,rootNode,new TextNode("text1"));
-        Value rootValue2 = new Value(null,rootNode,new TextNode("text2"));
+        NodeEntity rootNode = new JqNode("root",".root");
+        NodeEntity relativeDifference = new RelativeDifference();
+        ValueEntity rootValue1 = new ValueEntity(null,rootNode,new TextNode("text1"));
+        ValueEntity rootValue2 = new ValueEntity(null,rootNode,new TextNode("text2"));
 
         Work work1 = new Work(relativeDifference,List.of(rootNode),List.of(rootValue1));
         Work work2 = new Work(relativeDifference,List.of(rootNode),List.of(rootValue2));
@@ -32,11 +33,11 @@ public class WorkTest {
 
     @Test
     public void hashCode_jqNode_same_parameters(){
-        Node rootNode = new RootNode();
-        Node activeNode = new JqNode("active");
+        NodeEntity rootNode = new RootNode();
+        NodeEntity activeNode = new JqNode("active");
         activeNode.sources=List.of(rootNode);
 
-        Value rootValue = new Value(null,rootNode,new TextNode("root"));
+        ValueEntity rootValue = new ValueEntity(null,rootNode,new TextNode("root"));
 
         Work work1 = new Work(activeNode,activeNode.sources,List.of(rootValue));
         Work work2 = new Work(activeNode,activeNode.sources,List.of(rootValue));
@@ -46,17 +47,17 @@ public class WorkTest {
 
     @Test
     public void hashCode_relativedifference_same_parameters(){
-        Node rootNode = new RootNode();
-        Node fingerprint1 = new JqNode("fingerprint");
+        NodeEntity rootNode = new RootNode();
+        NodeEntity fingerprint1 = new JqNode("fingerprint");
         fingerprint1.sources = List.of(rootNode);
-        Node fingerprint2 = new JqNode("fingerprint");
+        NodeEntity fingerprint2 = new JqNode("fingerprint");
         fingerprint2.sources = List.of(rootNode);
-        Node domain = new JqNode("domain");
+        NodeEntity domain = new JqNode("domain");
         domain.sources = List.of(rootNode);
-        Node range = new JqNode("range");
+        NodeEntity range = new JqNode("range");
         range.sources = List.of(rootNode);
 
-        Value rootValue = new Value(null,rootNode,new TextNode("root"));
+        ValueEntity rootValue = new ValueEntity(null,rootNode,new TextNode("root"));
 
         FingerprintNode fingerprintNode = new FingerprintNode();
         fingerprintNode.sources = List.of(fingerprint1,fingerprint2);
@@ -72,8 +73,8 @@ public class WorkTest {
 
     @Test
     public void dependsOn_node_dependency_no_value(){
-        Node one = new JqNode("one");
-        Node two = new JqNode("two");
+        NodeEntity one = new JqNode("one");
+        NodeEntity two = new JqNode("two");
         two.sources = List.of(one);
 
         Work wOne = new Work(one,null, null);
@@ -83,12 +84,12 @@ public class WorkTest {
     }
     @Test
     public void dependsOn_node_dependency_same_value(){
-        Node root = new JqNode("root");
-        Node one = new JqNode("one");
-        Node two = new JqNode("two");
+        NodeEntity root = new JqNode("root");
+        NodeEntity one = new JqNode("one");
+        NodeEntity two = new JqNode("two");
         two.sources = List.of(one);
 
-        Value value = new Value(null,root);
+        ValueEntity value = new ValueEntity(null,root);
 
         Work wOne = new Work(one,null, List.of(value));
         Work wTwo = new Work(two,null, List.of(value));
@@ -97,13 +98,13 @@ public class WorkTest {
     }
     @Test
     public void dependsOn_node_dependency_different_value(){
-        Node root = new JqNode("root");
-        Node one = new JqNode("one");
-        Node two = new JqNode("two");
+        NodeEntity root = new JqNode("root");
+        NodeEntity one = new JqNode("one");
+        NodeEntity two = new JqNode("two");
         two.sources = List.of(one);
 
-        Value value1 = new Value(null,root);
-        Value value2 = new Value(null,one);
+        ValueEntity value1 = new ValueEntity(null,root);
+        ValueEntity value2 = new ValueEntity(null,one);
 
         Work wOne = new Work(one,null, List.of(value1));
         Work wTwo = new Work(two,null, List.of(value2));

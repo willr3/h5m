@@ -2,9 +2,9 @@ package io.hyperfoil.tools.h5m.queue;
 
 import com.fasterxml.jackson.databind.node.TextNode;
 import io.hyperfoil.tools.h5m.FreshDb;
-import io.hyperfoil.tools.h5m.entity.Node;
-import io.hyperfoil.tools.h5m.entity.Value;
-import io.hyperfoil.tools.h5m.entity.Work;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
+import io.hyperfoil.tools.h5m.entity.ValueEntity;
+import io.hyperfoil.tools.h5m.entity.work.Work;
 import io.hyperfoil.tools.h5m.entity.node.JqNode;
 import io.hyperfoil.tools.h5m.entity.node.RelativeDifference;
 import io.hyperfoil.tools.h5m.entity.node.RootNode;
@@ -30,10 +30,10 @@ public class WorkQueueTest extends FreshDb {
 
     @Test
     public void reject_relativedifference_as_duplicate(){
-        Node rootNode = new JqNode("root",".root");
-        Node relativeDifference = new RelativeDifference();
-        Value rootValue1 = new Value(null,rootNode,new TextNode("text1"));
-        Value rootValue2 = new Value(null,rootNode,new TextNode("text2"));
+        NodeEntity rootNode = new JqNode("root",".root");
+        NodeEntity relativeDifference = new RelativeDifference();
+        ValueEntity rootValue1 = new ValueEntity(null,rootNode,new TextNode("text1"));
+        ValueEntity rootValue2 = new ValueEntity(null,rootNode,new TextNode("text2"));
 
         Work work1 = new Work(relativeDifference,List.of(rootNode),List.of(rootValue1));
         Work work2 = new Work(relativeDifference,List.of(rootNode),List.of(rootValue2));
@@ -55,9 +55,9 @@ public class WorkQueueTest extends FreshDb {
         tm.begin();
         RootNode root = new RootNode();
         root.persist();
-        Node aNode = new JqNode("a",".a",root);
+        NodeEntity aNode = new JqNode("a",".a",root);
         aNode.persist();
-        Value rootValue = new Value(null,aNode,new TextNode("found"));
+        ValueEntity rootValue = new ValueEntity(null,aNode,new TextNode("found"));
         rootValue.persist();
 
 
@@ -79,9 +79,9 @@ public class WorkQueueTest extends FreshDb {
         WorkQueue q = new WorkQueue(null,null,null);
 
         tm.begin();
-        Node aNode = new JqNode("a");
+        NodeEntity aNode = new JqNode("a");
         aNode.persist();
-        Node bNode = new JqNode("b");
+        NodeEntity bNode = new JqNode("b");
         bNode.sources= List.of(aNode);
         bNode.persist();
 
@@ -115,12 +115,12 @@ public class WorkQueueTest extends FreshDb {
         WorkQueue q = new WorkQueue(null,null,null);
 
         tm.begin();
-        Node aNode = new JqNode("a");
+        NodeEntity aNode = new JqNode("a");
         aNode.persist();
-        Node bNode = new JqNode("b");
+        NodeEntity bNode = new JqNode("b");
         bNode.sources= List.of(aNode);
         bNode.persist();
-        Node cNode = new JqNode("c");
+        NodeEntity cNode = new JqNode("c");
         cNode.persist();
 
         Work aWork = new Work(aNode,null,null);

@@ -211,7 +211,7 @@ public class H5mTest {
     }
     @Test //not yet working because relativedifference doesn't know about the "datsaet" node
     //need to tell relativedifference which node is the dataset. either detect it with CTE (is that possible)
-    //or make it an attribute on the Folder / NodeGroup
+    //or make it an attribute on the FolderEntity / NodeGroupEntity
     public void calculate_relativedifference_dataset_node(QuarkusMainLauncher launcher) throws IOException {
         String testName = StackWalker.getInstance()
                 .walk(s -> s.skip(0).findFirst())

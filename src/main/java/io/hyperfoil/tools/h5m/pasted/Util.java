@@ -100,7 +100,7 @@ public class Util {
         if (value == null) {
             return null;
         } else if (value.isNull()) {
-            // Value api cannot differentiate null and undefined from javascript
+            // ValueEntity api cannot differentiate null and undefined from javascript
             if (value.toString().contains("undefined")) {
                 return ""; //no return is the same as returning a missing key from a ProxyObject?
             } else {
@@ -133,7 +133,7 @@ public class Util {
         } else if (value.hasMembers()) {
             return convertMapping(value);
         } else {
-            //TODO log error wtf is Value?
+            //TODO log error wtf is ValueEntity?
             return "";
         }
     }

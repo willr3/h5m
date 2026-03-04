@@ -1,12 +1,12 @@
 package io.hyperfoil.tools.h5m.entity.node;
 
-import io.hyperfoil.tools.h5m.entity.Node;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
 import jakarta.persistence.DiscriminatorValue;
 import jakarta.persistence.Entity;
 
 @Entity
 @DiscriminatorValue("user")
-public class UserInputNode extends Node {
+public class UserInputNode extends NodeEntity {
 
     public UserInputNode(){}
     public UserInputNode(String name,String operation){
@@ -14,7 +14,7 @@ public class UserInputNode extends Node {
     }
 
     @Override
-    protected Node shallowCopy() {
+    protected NodeEntity shallowCopy() {
         return new UserInputNode(name,operation);
     }
 }

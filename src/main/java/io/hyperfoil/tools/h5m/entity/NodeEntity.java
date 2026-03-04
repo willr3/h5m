@@ -11,14 +11,10 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-@Entity
-@Table(
-        name = "node"
-
-)
+@Entity(name = "node")
 @Inheritance(strategy = InheritanceType.SINGLE_TABLE)
 @DiscriminatorColumn(name = "type", discriminatorType =  DiscriminatorType.STRING)
-public abstract class Node extends PanacheEntity implements Comparable<Node> {
+public abstract class NodeEntity extends PanacheEntity implements Comparable<NodeEntity> {
 
     public static String FQDN_SEPARATOR = ":";
     public static String NAME_SEPARATOR = "=";
@@ -41,7 +37,7 @@ public abstract class Node extends PanacheEntity implements Comparable<Node> {
     @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "group_id")
 //    @JsonIdentityReference(alwaysAsId = true)
     @JsonBackReference
-    public NodeGroup group;
+    public NodeGroupEntity group;
 
     //making this eager causes too many joins
     //cannot cascade delete because this entity "owns" the reference to the parent values
@@ -54,9 +50,9 @@ public abstract class Node extends PanacheEntity implements Comparable<Node> {
     )
     @OrderColumn(name = "idx")
     @BatchSize(size = 25)
-    public List<Node> sources;
+    public List<NodeEntity> sources;
 
-    public List<Node> getSources() {return sources;}
+    public List<NodeEntity> getSources() {return sources;}
 
     @Transient
     @JsonIgnore
@@ -65,61 +61,61 @@ public abstract class Node extends PanacheEntity implements Comparable<Node> {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "previous_version_id")
-    Node previousVersion;
+    NodeEntity previousVersion;
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "original_node_id")
-    Node originalNode;
+    NodeEntity originalNode;
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "original_group_id")
-    NodeGroup originalGroup;
+    NodeGroupEntity originalGroup;
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "target_group_id")
-    NodeGroup targetGroup;
+    NodeGroupEntity targetGroup;
 
-    public NodeGroup getOriginalGroup() {
+    public NodeGroupEntity getOriginalGroup() {
         return originalGroup;
     }
 
-    public void setOriginalGroup(NodeGroup originalGroup) {
+    public void setOriginalGroup(NodeGroupEntity originalGroup) {
         this.originalGroup = originalGroup;
     }
 
-    public Node getOriginalNode() {
+    public NodeEntity getOriginalNode() {
         return originalNode;
     }
 
-    public void setOriginalNode(Node originalNode) {
+    public void setOriginalNode(NodeEntity originalNode) {
         this.originalNode = originalNode;
     }
 
-    public Node getPreviousVersion() {
+    public NodeEntity getPreviousVersion() {
         return previousVersion;
     }
 
-    public void setPreviousVersion(Node previousVersion) {
+    public void setPreviousVersion(NodeEntity previousVersion) {
         this.previousVersion = previousVersion;
     }
 
     @PreUpdate
     @PrePersist
     public void sortSources(){
-        this.sources = KahnDagSort.sort(sources,Node::getSources);
+        this.sources = KahnDagSort.sort(sources, NodeEntity::getSources);
     }
 
 
-    public Node(){
+    public NodeEntity(){
         this.sources = new ArrayList<>();
     }
-    public Node(String name){
+    public NodeEntity(String name){
         this.sources = new ArrayList<>();
         this.name = name;
     }
-    public Node(String name,String operation){
+    public NodeEntity(String name,String operation){
         this.sources = new ArrayList<>();
         this.name = name;
         this.operation = operation;
     }
-    public Node(String name,String operation,List<Node> sources){
+    public NodeEntity(String name,String operation,List<NodeEntity> sources){
         this.sources = new ArrayList<>(sources);
         this.name = name;
         this.operation = operation;
@@ -134,15 +130,15 @@ public abstract class Node extends PanacheEntity implements Comparable<Node> {
         return operation;
     }
 
-    protected abstract Node shallowCopy();
+    protected abstract NodeEntity shallowCopy();
 
     public boolean hasNonRootSource(){
         return sources.stream().anyMatch(s->!s.type.equals("root"));
     }
 
-    public Node copy(){
-        Node rtrn = shallowCopy();
-        rtrn.sources = sources.stream().map(Node::shallowCopy).toList();
+    public NodeEntity copy(){
+        NodeEntity rtrn = shallowCopy();
+        rtrn.sources = sources.stream().map(NodeEntity::shallowCopy).toList();
         return rtrn;
     }
 
@@ -153,16 +149,16 @@ public abstract class Node extends PanacheEntity implements Comparable<Node> {
 
     @Override
     public boolean equals(Object o){
-        if(o instanceof Node){
-            Node n = (Node)o;
+        if(o instanceof NodeEntity){
+            NodeEntity n = (NodeEntity)o;
             if(id == null && n.id == null){
                 if(!Objects.equals(name,n.name) || !Objects.equals(operation,n.operation) || sources.size() != n.sources.size()){
                     return false;
                 }
                 // compare sources by id (one level deep, no recursion)
                 for(int i = 0, size = sources.size(); i < size; i++){
-                    Node s1 = sources.get(i);
-                    Node s2 = n.sources.get(i);
+                    NodeEntity s1 = sources.get(i);
+                    NodeEntity s2 = n.sources.get(i);
                     if(!Objects.equals(s1.id, s2.id)){
                         return false;
                     }
@@ -191,7 +187,7 @@ public abstract class Node extends PanacheEntity implements Comparable<Node> {
         return Objects.hash(name, operation, sourcesHash);
     }
 
-    public boolean dependsOn(Node source) {
+    public boolean dependsOn(NodeEntity source) {
         if (source == null || this.sources == null) return false;
         if (source.id != null) {
             if (ancestorCache == null) {
@@ -200,10 +196,10 @@ public abstract class Node extends PanacheEntity implements Comparable<Node> {
             return ancestorCache.contains(source.id);
         }
         // fallback for unpersisted nodes (no id)
-        Queue<Node> queue = new ArrayDeque<>(sources);
-        Set<Node> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        Queue<NodeEntity> queue = new ArrayDeque<>(sources);
+        Set<NodeEntity> visited = Collections.newSetFromMap(new IdentityHashMap<>());
         while (!queue.isEmpty()) {
-            Node node = queue.poll();
+            NodeEntity node = queue.poll();
             if (node.equals(source)) return true;
             if (visited.add(node)) {
                 queue.addAll(node.sources);
@@ -214,9 +210,9 @@ public abstract class Node extends PanacheEntity implements Comparable<Node> {
 
     private Set<Long> computeAncestorIds() {
         Set<Long> ancestors = new HashSet<>();
-        Queue<Node> queue = new ArrayDeque<>(sources);
+        Queue<NodeEntity> queue = new ArrayDeque<>(sources);
         while (!queue.isEmpty()) {
-            Node node = queue.poll();
+            NodeEntity node = queue.poll();
             if (node.id != null && ancestors.add(node.id)) {
                 queue.addAll(node.sources);
             }
@@ -225,21 +221,21 @@ public abstract class Node extends PanacheEntity implements Comparable<Node> {
     }
 
     /**
-     * copy a NodeGroup into this node's NodeGroup as though this node is the RootNode for the copied group.
+     * copy a NodeGroupEntity into this node's NodeGroupEntity as though this node is the RootNode for the copied group.
      * @param group
      */
-    public boolean loadGroup(NodeGroup group){
+    public boolean loadGroup(NodeGroupEntity group){
         return loadGroup(group,this.group);
     }
-    public boolean loadGroup(NodeGroup group, NodeGroup thisGroup){
+    public boolean loadGroup(NodeGroupEntity group, NodeGroupEntity thisGroup){
         if(thisGroup == null) return false;
         //TODO do we track the sourceGroup when loading a group
-        Map<Node,Node> fromGroupToThis = new HashMap<>();
-        List<Node> clones = new  ArrayList<>();
-        for( Node node : group.sources){
-            Node cloned = node.shallowCopy();
+        Map<NodeEntity, NodeEntity> fromGroupToThis = new HashMap<>();
+        List<NodeEntity> clones = new  ArrayList<>();
+        for( NodeEntity node : group.sources){
+            NodeEntity cloned = node.shallowCopy();
             fromGroupToThis.put(node, cloned);
-            List<Node> clonedSources = node.sources.stream().map(source->{
+            List<NodeEntity> clonedSources = node.sources.stream().map(source->{
                 if(source instanceof RootNode){
                     return this; //current node replaces the root node
                 }else if (fromGroupToThis.containsKey(source)){
@@ -258,7 +254,7 @@ public abstract class Node extends PanacheEntity implements Comparable<Node> {
     }
 
     @Override
-    public int compareTo(Node n1){
+    public int compareTo(NodeEntity n1){
         int rtrn = 0;
         if(!n1.sources.isEmpty() && this.sources.isEmpty()){
             rtrn = -1;//o1 comes before this one
@@ -280,13 +276,13 @@ public abstract class Node extends PanacheEntity implements Comparable<Node> {
 
 
     //based on https://github.com/williamfiset/Algorithms/blob/master/src/main/java/com/williamfiset/algorithms/graphtheory/Kahns.java
-    public static List<Node> kahnDagSort(Node... nodes){
+    public static List<NodeEntity> kahnDagSort(NodeEntity... nodes){
         return kahnDagSort(Arrays.asList(nodes));
     }
-    public static List<Node> kahnDagSort(List<Node> nodes){
-        return KahnDagSort.sort(nodes,Node::getSources);
+    public static List<NodeEntity> kahnDagSort(List<NodeEntity> nodes){
+        return KahnDagSort.sort(nodes, NodeEntity::getSources);
     }
-    public static List<Node> old_kahnDagSort(List<Node> nodes){
+    public static List<NodeEntity> old_kahnDagSort(List<NodeEntity> nodes){
         Map<String, AtomicInteger> inDegrees = new HashMap<>();
         if(nodes == null || nodes.isEmpty()){
             return nodes;
@@ -302,16 +298,16 @@ public abstract class Node extends PanacheEntity implements Comparable<Node> {
                         }
                     });
         });
-        Queue<Node> q = new ArrayDeque<>();
+        Queue<NodeEntity> q = new ArrayDeque<>();
         //using reveresed to preserve order
         nodes.reversed().forEach(n->{
             if(inDegrees.get(n.getFqdn()).get()==0){
                 q.offer(n);
             }
         });
-        List<Node> rtrn = new ArrayList<>();
+        List<NodeEntity> rtrn = new ArrayList<>();
         while(!q.isEmpty()){
-            Node n = q.poll();
+            NodeEntity n = q.poll();
             rtrn.add(n);
             n.sources.stream()
                     .forEach(s->{
@@ -339,7 +335,7 @@ public abstract class Node extends PanacheEntity implements Comparable<Node> {
     }
 
     public boolean isCircular(){
-        return KahnDagSort.isCircular(this,Node::getSources);
+        return KahnDagSort.isCircular(this, NodeEntity::getSources);
     }
 
 

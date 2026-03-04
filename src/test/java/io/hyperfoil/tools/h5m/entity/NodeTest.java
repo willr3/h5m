@@ -18,9 +18,9 @@ public class NodeTest {
 
     @Test
     public void compareTo(){
-        Node n1 = new JqNode("n1",".");
-        Node n2 = new JqNode("n2",".",n1);
-        Node n3 = new JqNode("n3",".'");
+        NodeEntity n1 = new JqNode("n1",".");
+        NodeEntity n2 = new JqNode("n2",".",n1);
+        NodeEntity n3 = new JqNode("n3",".'");
 
         assertEquals(-1,n1.compareTo(n2),"n1 is before n2 because n2 depends on 1");
         assertEquals(1,n2.compareTo(n1),"n2 is after n1 because n2 depends on n1");
@@ -32,13 +32,13 @@ public class NodeTest {
 
     @Test
     public void khanDagSort(){
-        Node n1 = new JqNode("n1",".");
-        Node n11 = new JqNode("n1.1",".",n1);
-        Node n12 = new JqNode("n1.2",".",n1);
-        Node n2 = new JqNode("n2",".");
-        Node n121 = new JqNode("n1.2.1",".",n12,n2);
+        NodeEntity n1 = new JqNode("n1",".");
+        NodeEntity n11 = new JqNode("n1.1",".",n1);
+        NodeEntity n12 = new JqNode("n1.2",".",n1);
+        NodeEntity n2 = new JqNode("n2",".");
+        NodeEntity n121 = new JqNode("n1.2.1",".",n12,n2);
 
-        List<Node> sorted = Node.kahnDagSort(List.of(n121,n12,n2,n1,n11));
+        List<NodeEntity> sorted = NodeEntity.kahnDagSort(List.of(n121,n12,n2,n1,n11));
         int n1Index = sorted.indexOf(n1);
         int n11Index = sorted.indexOf(n11);
         int n12Index = sorted.indexOf(n12);
@@ -56,15 +56,15 @@ public class NodeTest {
     //we want the sorting to be stable so user control the order
     @Test
     public void khanDagSort_is_stable(){
-        Node n1 = new JqNode("n1");
-        Node n2 = new JqNode("n2");
-        Node n3 = new JqNode("n3");
-        Node n4 = new JqNode("n4");
-        Node n5 = new JqNode("n5");
-        Node n6 = new JqNode("n6");
+        NodeEntity n1 = new JqNode("n1");
+        NodeEntity n2 = new JqNode("n2");
+        NodeEntity n3 = new JqNode("n3");
+        NodeEntity n4 = new JqNode("n4");
+        NodeEntity n5 = new JqNode("n5");
+        NodeEntity n6 = new JqNode("n6");
 
-        List<Node> input = List.of(n4,n3,n5,n1,n6,n2);
-        List<Node> sorted = Node.kahnDagSort(input);
+        List<NodeEntity> input = List.of(n4,n3,n5,n1,n6,n2);
+        List<NodeEntity> sorted = NodeEntity.kahnDagSort(input);
 
         assertEquals(input.size(), sorted.size(),"sorting should return the same number of elements");
         for(int i=0; i<input.size();i++){
@@ -75,11 +75,11 @@ public class NodeTest {
 
     @Test
     public void isCircular_not_circular(){
-        Node n1 = new JqNode("n1");
-        Node n11 = new JqNode("n1.1",".",n1);
-        Node n12 = new JqNode("n1.2",".",n1);
-        Node n2 = new JqNode("n2");
-        Node n121 = new JqNode("n1.2.1",".",n12,n2);
+        NodeEntity n1 = new JqNode("n1");
+        NodeEntity n11 = new JqNode("n1.1",".",n1);
+        NodeEntity n12 = new JqNode("n1.2",".",n1);
+        NodeEntity n2 = new JqNode("n2");
+        NodeEntity n121 = new JqNode("n1.2.1",".",n12,n2);
 
         assertFalse(n1.isCircular(),"a tree should not be considered circular");
         assertFalse(n11.isCircular(),"a tree should not be considered circular");
@@ -87,9 +87,9 @@ public class NodeTest {
     }
     @Test
     public void isCircular_circular_three_nodes(){
-        Node n1 = new JqNode("n1",".");
-        Node n2 = new JqNode("n2",".",n1);
-        Node n3 = new JqNode("n3",".",n2);
+        NodeEntity n1 = new JqNode("n1",".");
+        NodeEntity n2 = new JqNode("n2",".",n1);
+        NodeEntity n3 = new JqNode("n3",".",n2);
         n1.sources=List.of(n3);
 
         assertTrue(n1.isCircular(),"n1 should be circular");
@@ -98,7 +98,7 @@ public class NodeTest {
     }
     @Test
     public void isCircular_circular_self(){
-        Node n1 = new JqNode("n1");
+        NodeEntity n1 = new JqNode("n1");
         n1.sources=List.of(n1);
         assertTrue(n1.isCircular(),"n1 should be circular");
     }

@@ -33,7 +33,7 @@ public class FreshDb {
                     stmt.executeUpdate("TRUNCATE TABLE value_edge CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE value CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE folder CASCADE");
-                    stmt.executeUpdate("TRUNCATE TABLE nodegroup CASCADE");
+                    stmt.executeUpdate("TRUNCATE TABLE node_group CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE node_edge CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE node CASCADE");
                 }else if (dbKind.equals("sqlite")){
@@ -43,7 +43,7 @@ public class FreshDb {
                     stmt.executeUpdate("DELETE from value_edge");
                     stmt.executeUpdate("DELETE from value");
                     stmt.executeUpdate("DELETE from folder");
-                    stmt.executeUpdate("DELETE from nodegroup");
+                    stmt.executeUpdate("DELETE from node_group");
                     stmt.executeUpdate("DELETE from node_edge");
                     stmt.executeUpdate("DELETE from node");
                 }

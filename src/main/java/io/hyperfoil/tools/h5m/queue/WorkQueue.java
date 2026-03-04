@@ -1,6 +1,6 @@
 package io.hyperfoil.tools.h5m.queue;
 
-import io.hyperfoil.tools.h5m.entity.Work;
+import io.hyperfoil.tools.h5m.entity.work.Work;
 import io.hyperfoil.tools.h5m.svc.NodeService;
 import io.hyperfoil.tools.h5m.svc.ValueService;
 import io.hyperfoil.tools.h5m.svc.WorkService;
@@ -26,7 +26,7 @@ public class WorkQueue implements BlockingQueue<Runnable> {
 
     private static final Logger log = LoggerFactory.getLogger(WorkQueue.class);
     //TODO using counters blocks work on different values, change to set of active work
-    //private Counters<Node> counters = new Counters<>();
+    //private Counters<NodeEntity> counters = new Counters<>();
     private Set<Work> activeWork = new ConcurrentHashSet<>();
     private Set<Work> pendingWork = new ConcurrentHashSet<>();
 
@@ -551,7 +551,3 @@ public class WorkQueue implements BlockingQueue<Runnable> {
         return 0;
     }
 }
-
-
-
-

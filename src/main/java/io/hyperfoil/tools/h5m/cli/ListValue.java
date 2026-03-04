@@ -5,9 +5,9 @@ import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.NumericNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
-import io.hyperfoil.tools.h5m.entity.Node;
-import io.hyperfoil.tools.h5m.entity.NodeGroup;
-import io.hyperfoil.tools.h5m.entity.Value;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
+import io.hyperfoil.tools.h5m.entity.NodeGroupEntity;
+import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.svc.NodeGroupService;
 import io.hyperfoil.tools.h5m.svc.NodeService;
 import io.hyperfoil.tools.h5m.svc.ValueService;
@@ -61,14 +61,14 @@ public class ListValue implements Callable<Integer> {
             cmd.usage(System.err);
             return 1;
         }
-        NodeGroup nodeGroup = nodeGroupService.byName(groupName);
+        NodeGroupEntity nodeGroup = nodeGroupService.byName(groupName);
         if(nodeGroup == null){
-            System.err.println("Node group "+groupName+" not found");
+            System.err.println("NodeEntity group "+groupName+" not found");
             return 1;
         }
 
         if(groupBy!=null){
-            List<Node> foundNodes = nodeService.findNodeByFqdn(groupBy,nodeGroup.id);
+            List<NodeEntity> foundNodes = nodeService.findNodeByFqdn(groupBy,nodeGroup.id);
             if(foundNodes.isEmpty()){
                 System.err.println(groupBy+" not found");
                 return 1;
@@ -79,7 +79,7 @@ public class ListValue implements Callable<Integer> {
                 }
                 return 1;
             }else{
-                Node foundNode = foundNodes.get(0);
+                NodeEntity foundNode = foundNodes.get(0);
                 List<JsonNode> jsons = valueService.getGroupedValues(foundNode);
                 if(Format.raw.equals(format)){
                     System.out.println("Count: " + jsons.size());
@@ -120,7 +120,7 @@ public class ListValue implements Callable<Integer> {
 
             }
         }else {
-            List<Value> values = valueService.getDescendantValues(nodeGroup.root);
+            List<ValueEntity> values = valueService.getDescendantValues(nodeGroup.root);
             System.out.println("Count: " + values.size());
             System.out.println(ListCmd.table(80, values,
                     List.of("id", "data", "node.id"),

@@ -1,6 +1,6 @@
 package io.hyperfoil.tools.h5m.entity.node;
 
-import io.hyperfoil.tools.h5m.entity.Node;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
 import io.hyperfoil.tools.yaup.json.Json;
 import jakarta.persistence.DiscriminatorValue;
 import jakarta.persistence.Entity;
@@ -12,7 +12,7 @@ import java.util.List;
 
 @Entity
 @DiscriminatorValue("rd")
-public class RelativeDifference extends Node {
+public class RelativeDifference extends NodeEntity {
 
     private static final String THRESHOLD = "threshold";
     public static final double DEFAULT_THRESHOLD = 0.2;
@@ -48,8 +48,8 @@ public class RelativeDifference extends Node {
         }
     }
 
-    public void setNodes(Node fingerprint,Node groupBy,Node range,Node domain){
-        List<Node> sources = new ArrayList<>();
+    public void setNodes(NodeEntity fingerprint, NodeEntity groupBy, NodeEntity range, NodeEntity domain){
+        List<NodeEntity> sources = new ArrayList<>();
         sources.add(fingerprint);
         sources.add(groupBy);
         sources.add(range);
@@ -60,26 +60,26 @@ public class RelativeDifference extends Node {
     }
 
     @Transient
-    public Node getRangeNode(){
+    public NodeEntity getRangeNode(){
         return sources.get(2);
     }
 
     //domain node can be null
     @Transient
-    public Node getDomainNode(){
+    public NodeEntity getDomainNode(){
         return sources.size() > 3 ? sources.get(3) : null;
     }
 
     @Transient
-    public Node getGroupByNode(){return sources.get(1);}
+    public NodeEntity getGroupByNode(){return sources.get(1);}
 
     @Transient
-    public Node getFingerprintNode(){
+    public NodeEntity getFingerprintNode(){
         return sources.get(0);
     }
 
     @Transient
-    public List<Node> getFingerprintNodes(){
+    public List<NodeEntity> getFingerprintNodes(){
         return sources.get(0).sources;
     }
 
@@ -126,7 +126,7 @@ public class RelativeDifference extends Node {
     }
 
     @Override
-    protected Node shallowCopy() {
+    protected NodeEntity shallowCopy() {
         return new RelativeDifference(name,operation);
     }
 

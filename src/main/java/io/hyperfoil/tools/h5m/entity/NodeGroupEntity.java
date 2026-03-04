@@ -1,7 +1,7 @@
 package io.hyperfoil.tools.h5m.entity;
 
 import io.hyperfoil.tools.h5m.entity.node.RootNode;
-import io.hyperfoil.tools.h5m.valid.ValidNode;
+import io.hyperfoil.tools.h5m.entity.validation.ValidNode;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
@@ -9,36 +9,33 @@ import jakarta.validation.constraints.NotNull;
 import java.util.*;
 import java.util.stream.Collectors;
 
-@Entity
-@Table(
-        name = "nodegroup"
-)
-public class NodeGroup extends PanacheEntity {
+@Entity(name = "node_group")
+public class NodeGroupEntity extends PanacheEntity {
 
     public String name;
 
     @OneToOne(cascade = {CascadeType.ALL}, fetch = FetchType.LAZY)
     @NotNull
-    public Node root;
+    public NodeEntity root;
 
     @OneToMany(cascade = { CascadeType.PERSIST,
             CascadeType.MERGE }, fetch = FetchType.LAZY, orphanRemoval = false, mappedBy = "group")
     //@OnDelete(action = OnDeleteAction.CASCADE)
-    public List<@NotNull @ValidNode Node> sources;
+    public List<@NotNull @ValidNode NodeEntity> sources;
 
-    public NodeGroup(){
+    public NodeGroupEntity(){
         this.sources = new ArrayList<>();
         this.root = new RootNode();
         //this.root.group = this;
 
     }
-    public NodeGroup(String name){
+    public NodeGroupEntity(String name){
         this();
         this.name = name;
     }
 
 
-    public List<Node> getTopLevelNodes(){
+    public List<NodeEntity> getTopLevelNodes(){
         return sources.stream().filter(node -> node.sources.size() == 1 && node.sources.contains(root)).collect(Collectors.toList());
     }
 
@@ -49,7 +46,7 @@ public class NodeGroup extends PanacheEntity {
      * @param group
      * @return
      */
-    public boolean canLoad(NodeGroup group){
+    public boolean canLoad(NodeGroupEntity group){
         Set<String> fqdn = sources.stream().map(n->n.getFqdn()).collect(Collectors.toSet());
         return group.sources.stream().noneMatch(n->fqdn.contains(n.getFqdn()));
     }
@@ -58,7 +55,7 @@ public class NodeGroup extends PanacheEntity {
      * Loads the node group into the current group using this groups root as the replacement for the root in the copied group
      * @param group
      */
-    public void loadGroup(NodeGroup group){
+    public void loadGroup(NodeGroupEntity group){
         root.loadGroup(group);
     }
 
@@ -79,7 +76,7 @@ public class NodeGroup extends PanacheEntity {
         });
         boolean hasSources = sources.stream().anyMatch(n->!n.sources.isEmpty());
         if(hasSources){
-            this.sources = Node.kahnDagSort(sources);
+            this.sources = NodeEntity.kahnDagSort(sources);
         }
     }
 

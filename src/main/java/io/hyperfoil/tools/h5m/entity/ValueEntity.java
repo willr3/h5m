@@ -16,37 +16,31 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
-@Entity
-@Table(
-        name = "value"
-)
-public class Value extends PanacheEntity {
+@Entity(name = "value")
+public class ValueEntity extends PanacheEntity {
 
-    @Column(name = "data", columnDefinition = "JSONB")
+    @Column(columnDefinition = "JSONB")
     @JdbcTypeCode(SqlTypes.JSON)
     @Basic(fetch = FetchType.LAZY)
     public JsonNode data;
 
     //not yet used but the idea is to sort multiple values based on idx to preserve node output order for next nodes input
-    @Column(name = "idx")
     public int idx;
-
 
     @ManyToOne(fetch = FetchType.LAZY   )
     @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "node_id")
     @JsonIdentityReference(alwaysAsId = true)
-    public Node node;
+    public NodeEntity node;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "folder_id")
     @JsonIdentityReference(alwaysAsId = true)
-    public Folder folder;
+    public FolderEntity folder;
 
     @CreationTimestamp
-    @Column(name = "created_at", updatable = false) // updatable = false ensures it's set only once
+    @Column(updatable = false) // updatable = false ensures it's set only once
     private LocalDateTime createdAt;
 
-    @Column(name = "last_updated")
     private LocalDateTime lastUpdated;
 
 
@@ -56,7 +50,7 @@ public class Value extends PanacheEntity {
 
     public Long getId(){return id;}
 
-    //cannot cascade delete becasue this entity "owns" the reference to the parent values
+    //cannot cascade delete because this entity "owns" the reference to the parent values
     @ManyToMany(cascade = { CascadeType.PERSIST, CascadeType.MERGE }, fetch = FetchType.LAZY )
     @JoinTable(
             name="value_edge",
@@ -66,17 +60,17 @@ public class Value extends PanacheEntity {
     )
     @OrderColumn(name = "idx")
     @BatchSize(size = 25)
-    public List<Value> sources;
+    public List<ValueEntity> sources;
 
-    public Value(){
+    public ValueEntity(){
         this.sources = new ArrayList<>();
     }
-    public Value(Folder folder, Node node){
+    public ValueEntity(FolderEntity folder, NodeEntity node){
         this();
         this.folder = folder;
         this.node = node;
     }
-    public Value(Folder folder, Node node,JsonNode data){
+    public ValueEntity(FolderEntity folder, NodeEntity node,JsonNode data){
         this();
         this.folder = folder;
         this.node = node;
@@ -100,10 +94,10 @@ public class Value extends PanacheEntity {
         this.lastUpdated =  LocalDateTime.now();
     }
 
-    public List<Value> getSources() {return this.sources;}
+    public List<ValueEntity> getSources() {return this.sources;}
 
     @Override
-    public String toString(){return "Value< id="+id+" node.id="+node.id+" idx="+idx+" >";}
+    public String toString(){return "ValueEntity< id="+id+" node.id="+node.id+" idx="+idx+" >";}
 
 
     @Override
@@ -113,7 +107,7 @@ public class Value extends PanacheEntity {
 
     @Override
     public boolean equals(Object o){
-        if(o instanceof Value v){
+        if(o instanceof ValueEntity v){
             if(this.id!=null && v.id!=null) {
                 return Objects.equals(v.id, this.id);
             }
@@ -124,12 +118,12 @@ public class Value extends PanacheEntity {
         return false;
     }
 
-    public boolean dependsOn(Value source){
+    public boolean dependsOn(ValueEntity source){
         if(source == null) return false;
-        Queue<Value> queue = new ArrayDeque<>(sources);
+        Queue<ValueEntity> queue = new ArrayDeque<>(sources);
         boolean result = false;
         while(!queue.isEmpty() && !result){
-            Value value = queue.poll();
+            ValueEntity value = queue.poll();
             result = value.equals(source);
             if(!result){
                 queue.addAll(value.sources);

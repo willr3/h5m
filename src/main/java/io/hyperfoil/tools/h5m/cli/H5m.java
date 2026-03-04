@@ -2,7 +2,7 @@ package io.hyperfoil.tools.h5m.cli;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.hyperfoil.tools.h5m.entity.Folder;
+import io.hyperfoil.tools.h5m.entity.FolderEntity;
 import io.hyperfoil.tools.h5m.queue.WorkQueueExecutor;
 import io.hyperfoil.tools.h5m.svc.*;
 import io.hyperfoil.tools.yaup.json.Json;
@@ -63,7 +63,7 @@ public class H5m implements QuarkusApplication {
 
     @CommandLine.Command(name="structure",description = "use yaup to compute the structure of a folder",aliases = {"shape"}, mixinStandardHelpOptions = true)
     public int structure(String folderName){
-        Folder found = folderService.byName(folderName);
+        FolderEntity found = folderService.byName(folderName);
         if(found == null){
             System.err.println("could not find folder "+folderName);
             return 1;
@@ -74,7 +74,7 @@ public class H5m implements QuarkusApplication {
     }
     @CommandLine.Command(name="recalculate",description = "recalculate values for all entries in folder")
     public int recalculate(String folderName) throws InterruptedException {
-        Folder folder = folderService.byName(folderName);
+        FolderEntity folder = folderService.byName(folderName);
         if(folder == null){
             System.err.println("could not find folder "+folderName);
             return 1;
@@ -89,7 +89,7 @@ public class H5m implements QuarkusApplication {
             @CommandLine.Option(names = {"to"},description = "grouping node" ,arity = "1")
             String folderName
     ){
-        Folder folder = folderService.byName(folderName);
+        FolderEntity folder = folderService.byName(folderName);
         if(folder == null){
             System.err.println("could not find folder "+folderName);
             return 1;

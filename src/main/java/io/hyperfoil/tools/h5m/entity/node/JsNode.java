@@ -3,8 +3,8 @@ package io.hyperfoil.tools.h5m.entity.node;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.hyperfoil.tools.h5m.entity.Node;
-import io.hyperfoil.tools.h5m.entity.Value;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
+import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import jakarta.persistence.DiscriminatorValue;
 import jakarta.persistence.Entity;
 
@@ -16,7 +16,7 @@ import java.util.stream.Stream;
 
 @Entity
 @DiscriminatorValue("ecma")
-public class JsNode extends Node {
+public class JsNode extends NodeEntity {
 
     /*
      * function(a,b,c){}
@@ -29,7 +29,7 @@ public class JsNode extends Node {
      * source node names would stop working if this node is edited. The name a,b,c must exist whenever this node calculates
      * its sources.
      */
-    public static JsNode parse(String name, String input, Function<String,List<Node>> nodeFn){
+    public static JsNode parse(String name, String input, Function<String,List<NodeEntity>> nodeFn){
         if(input==null || input.isBlank()){
             System.err.println("missing js node input");
             return null;
@@ -41,9 +41,9 @@ public class JsNode extends Node {
             return null;
         }
         boolean ok = true;
-        List<Node> sourceNodes = new ArrayList<>();
+        List<NodeEntity> sourceNodes = new ArrayList<>();
         for (String param : parameters) {
-            List<Node> foundNodes = nodeFn.apply(param);
+            List<NodeEntity> foundNodes = nodeFn.apply(param);
             if (foundNodes.isEmpty()) {
                 System.err.println("Could not find node for " + param);
                 ok = false;
@@ -63,7 +63,7 @@ public class JsNode extends Node {
         return rtrn;
     }
 
-    public static List<JsonNode> createParameters(String function, Map<String,Value> sourceValues){
+    public static List<JsonNode> createParameters(String function, Map<String, ValueEntity> sourceValues){
         List<String> params = JsNode.getParameterNames(function,false);
         List<JsonNode> rtrn = new ArrayList<>();
         ObjectMapper mapper = new ObjectMapper();
@@ -158,13 +158,13 @@ public class JsNode extends Node {
         super(name,operation);
         this.type="ecma";
     }
-    public JsNode(String name,String operation,List<Node> sources){
+    public JsNode(String name,String operation,List<NodeEntity> sources){
         super(name,operation,sources);
         this.type="ecma";
     }
 
     @Override
-    protected Node shallowCopy() {
+    protected NodeEntity shallowCopy() {
         return new JsNode(name,operation);
     }
 }

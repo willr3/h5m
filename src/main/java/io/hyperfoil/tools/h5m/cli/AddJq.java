@@ -1,7 +1,7 @@
 package io.hyperfoil.tools.h5m.cli;
 
-import io.hyperfoil.tools.h5m.entity.Node;
-import io.hyperfoil.tools.h5m.entity.NodeGroup;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
+import io.hyperfoil.tools.h5m.entity.NodeGroupEntity;
 import io.hyperfoil.tools.h5m.entity.node.JqNode;
 import io.hyperfoil.tools.h5m.svc.NodeGroupService;
 import io.hyperfoil.tools.h5m.svc.NodeService;
@@ -33,7 +33,7 @@ public class AddJq implements Callable<Integer> {
             System.out.printf("Enter name: ");
             name = sc.nextLine();
         }
-        NodeGroup foundGroup = null;
+        NodeGroupEntity foundGroup = null;
         do{
             if(groupName == null && H5m.consoleAttached()){
                 System.out.printf("Enter target group / folder name: ");
@@ -66,8 +66,8 @@ public class AddJq implements Callable<Integer> {
             System.out.printf("Enter jq filter: ");
             jq = sc.nextLine();
         }
-        NodeGroup staticFoundGroup = foundGroup;
-        Node node = JqNode.parse(name,jq, n->nodeService.findNodeByFqdn(n,staticFoundGroup.id));
+        NodeGroupEntity staticFoundGroup = foundGroup;
+        NodeEntity node = JqNode.parse(name,jq, n->nodeService.findNodeByFqdn(n,staticFoundGroup.id));
         if(node == null){
             System.err.println("cannot create node from jq="+jq);
             return 1;

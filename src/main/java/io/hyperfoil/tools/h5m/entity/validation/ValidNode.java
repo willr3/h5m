@@ -1,4 +1,4 @@
-package io.hyperfoil.tools.h5m.valid;
+package io.hyperfoil.tools.h5m.entity.validation;
 
 import jakarta.validation.Constraint;
 import jakarta.validation.Payload;
@@ -13,7 +13,7 @@ import java.lang.annotation.Target;
 @Constraint(validatedBy = {NodeValidator.class})
 public @interface ValidNode {
 
-    String message() default "Node's cannot have sources that loop back onto themselves";
+    String message() default "NodeEntity's cannot have sources that loop back onto themselves";
 
     Class<?>[] groups() default {};
 

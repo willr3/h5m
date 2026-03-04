@@ -1,6 +1,6 @@
 package io.hyperfoil.tools.h5m.cli;
 
-import io.hyperfoil.tools.h5m.entity.Node;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
 import io.hyperfoil.tools.h5m.svc.NodeService;
 import jakarta.inject.Inject;
 import picocli.CommandLine;
@@ -22,9 +22,9 @@ public class RemoveNode implements Callable<Integer> {
     public Integer call() throws Exception {
 
         if(groupName != null){
-            name = groupName+ Node.FQDN_SEPARATOR+name;
+            name = groupName + NodeEntity.FQDN_SEPARATOR + name;
         }
-        List<Node> found = nodeService.findNodeByFqdn(name);
+        List<NodeEntity> found = nodeService.findNodeByFqdn(name);
         if(found==null || found.isEmpty()) {
             System.err.println("could not find " + name);
             return 1;

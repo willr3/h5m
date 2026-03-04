@@ -1,8 +1,8 @@
 package io.hyperfoil.tools.h5m.svc;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import io.hyperfoil.tools.h5m.entity.Node;
-import io.hyperfoil.tools.h5m.entity.Value;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
+import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.entity.node.RootNode;
 import io.hyperfoil.tools.h5m.queue.KahnDagSort;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
@@ -45,9 +45,9 @@ public class ValueService {
     }
 
     @Transactional
-    public Value create(Value value){
+    public ValueEntity create(ValueEntity value){
         if(!value.isPersistent()){
-            Value merged = em.merge(value);
+            ValueEntity merged = em.merge(value);
             em.flush();
             value.id = merged.id;
             return merged;
@@ -58,28 +58,28 @@ public class ValueService {
     }
 
     @Transactional
-    public List<Value> getDependentNodes(Value v){
-        return Node.list("SELECT DISTINCT v FROM Value v JOIN v.sources s WHERE s.id = ?1",v.id);
+    public List<ValueEntity> getDependentNodes(ValueEntity v){
+        return NodeEntity.list("SELECT DISTINCT v FROM value v JOIN v.sources s WHERE s.id = ?1",v.id);
     }
 
 
     @Transactional
-    public void delete(Value value){
+    public void delete(ValueEntity value){
         if(value.id != null){
             //remove values that depend on this or just remove the reference?
             getDependentNodes(value).forEach(this::delete);
-            Value.deleteById(value.id);
+            ValueEntity.deleteById(value.id);
         }
     }
 
     @Transactional
-    public Value byId(Long id){
-        return Value.findById(id);
+    public ValueEntity byId(Long id){
+        return ValueEntity.findById(id);
     }
 
     @Transactional
-    public Value byPath(String path){
-        return Value.find("path",path).firstResult();
+    public ValueEntity byPath(String path){
+        return ValueEntity.find("path",path).firstResult();
     }
 
     /**
@@ -87,8 +87,8 @@ public class ValueService {
      * @param root
      * @return
      */
-    public List<Value> getDescendantValues(Value root){
-        List<Value> rtrn = new ArrayList<>();
+    public List<ValueEntity> getDescendantValues(ValueEntity root){
+        List<ValueEntity> rtrn = new ArrayList<>();
         //noinspection unchecked
         rtrn.addAll(em.createNativeQuery(
                 """
@@ -99,14 +99,14 @@ public class ValueService {
                     ON ve.parent_id = sr.v_id
                 )
                 SELECT * FROM value v JOIN sourceRecursive sr ON v.id = sr.v_id
-                """, Value.class
+                """, ValueEntity.class
         ).setParameter("rootId", root.id).getResultList());
         return rtrn;
     }
 
 
-    public List<Value> getDirectDescendantValues(Value root, Node node){
-        List<Value> rtrn = new ArrayList<>();
+    public List<ValueEntity> getDirectDescendantValues(ValueEntity root, NodeEntity node){
+        List<ValueEntity> rtrn = new ArrayList<>();
         rtrn.addAll(em.createNativeQuery(
         """
            SELECT * from Value v RIGHT JOIN value_edge ve ON ve.child_id = v.id WHERE v.node_id = :nodeId AND ve.parent_id = :rootId
@@ -119,8 +119,8 @@ public class ValueService {
      * Finds the values for an ancestor or relative node Source where a relative created the expected fingerprint value
      */
     @Transactional
-    public List<Value> findMatchingFingerprint(Node source,Value fingerprint){
-        source = Node.findById(source.id);
+    public List<ValueEntity> findMatchingFingerprint(NodeEntity source, ValueEntity fingerprint){
+        source = NodeEntity.findById(source.id);
         return findMatchingFingerprint(source,source.group.root,fingerprint,null,null,-1,-1,true);
     }
     /*
@@ -129,8 +129,8 @@ public class ValueService {
      * sorting by a value is useful if that value is our timestamp but we also need that value
      */
     @Transactional
-    public List<Value> findMatchingFingerprint_unused(Node source, Value fingerprint, Node sort){
-        List<Value> rtrn = new ArrayList<>(em.createNativeQuery(
+    public List<ValueEntity> findMatchingFingerprint_unused(NodeEntity source, ValueEntity fingerprint, NodeEntity sort){
+        List<ValueEntity> rtrn = new ArrayList<>(em.createNativeQuery(
             switch(dbKind){
                 case "sqlite"->
                     """
@@ -183,12 +183,12 @@ public class ValueService {
                     select * from value v join descendant d on v.id=d.vid where v.node_id=:sourceId order by sortable asc;                    
                     """;
                 default -> "";
-            },Value.class)
-                .setParameter("nodeId", fingerprint.node.id)
-                .setParameter("data", fingerprint.data.toString())
-                .setParameter("sourceId", source.id)
-                .setParameter("sortId",sort.id)
-                .getResultList());
+            }, ValueEntity.class)
+                                                   .setParameter("nodeId", fingerprint.node.id)
+                                                   .setParameter("data", fingerprint.data.toString())
+                                                   .setParameter("sourceId", source.id)
+                                                   .setParameter("sortId",sort.id)
+                                                   .getResultList());
         return rtrn;
     }
 
@@ -196,21 +196,21 @@ public class ValueService {
 
     //this is to support getting the necessary values for change detection across all values
     @Transactional
-    public List<Value> findMatchingFingerprint(Node source,Value fingerprint, Node sort){
+    public List<ValueEntity> findMatchingFingerprint(NodeEntity source, ValueEntity fingerprint, NodeEntity sort){
         return findMatchingFingerprint(source,source.group.root,fingerprint,sort,null,-1,-1,true);
     }
-    public List<Value> findMatchingFingerprint(Node source,Node groupBy,Value fingerprint, Node sort){
+    public List<ValueEntity> findMatchingFingerprint(NodeEntity source, NodeEntity groupBy, ValueEntity fingerprint, NodeEntity sort){
         return findMatchingFingerprint(source,groupBy,fingerprint,sort,null,-1,-1,true);
     }
 
     //TODO I want a way to specify a required ancestor value for the resulting values
     @Transactional
-    public List<Value> findMatchingFingerprint(Node rangeNode,Node groupBy,Value fingerprint,Node domainNode, Value domainValue,int limit,int offset,boolean preceedingValues){
+    public List<ValueEntity> findMatchingFingerprint(NodeEntity rangeNode, NodeEntity groupBy, ValueEntity fingerprint, NodeEntity domainNode, ValueEntity domainValue,int limit,int offset,boolean preceedingValues){
         return findMatchingFingerprint(rangeNode,groupBy,fingerprint,domainNode,domainValue,null,limit,offset,preceedingValues);
     }
 
     @Transactional
-    public List<Value> findMatchingFingerprint(Node rangeNode,Node groupBy,Value fingerprint,Node domainNode, Value domainValue,Value ancestorValue,int limit,int offset,boolean preceedingValues){
+    public List<ValueEntity> findMatchingFingerprint(NodeEntity rangeNode, NodeEntity groupBy, ValueEntity fingerprint, NodeEntity domainNode, ValueEntity domainValue, ValueEntity ancestorValue,int limit,int offset,boolean preceedingValues){
 
         assert rangeNode!=null && groupBy!=null && fingerprint!=null;
         String sql = "";
@@ -341,7 +341,7 @@ public class ValueService {
             sql+=" limit :limit";
         }
         //noinspection unchecked
-        NativeQuery<Value> query = (NativeQuery<Value>) em.createNativeQuery(sql,Value.class);
+        NativeQuery<ValueEntity> query = (NativeQuery<ValueEntity>) em.createNativeQuery(sql, ValueEntity.class);
         query
                 .setParameter("nodeId", fingerprint.node.id)
                 .setParameter("fingerprint", fingerprint.data.toString())
@@ -363,14 +363,14 @@ public class ValueService {
         if(limit > 0){
             query.setParameter("limit",limit);
         }
-        List<Value> rtrn = query
+        List<ValueEntity> rtrn = query
                 .getResultList();
         //reversed
         return rtrn.reversed();
     }
 
-    public List<Value> getAncestor(Value value,Node node){
-        List<Value> rtrn = new ArrayList<>();
+    public List<ValueEntity> getAncestor(ValueEntity value, NodeEntity node){
+        List<ValueEntity> rtrn = new ArrayList<>();
         rtrn.addAll(em.createNativeQuery("""
             with recursive ancestor(vid) as (
                 select v.id as vid 
@@ -380,7 +380,7 @@ public class ValueService {
                     from value v join value_edge ve on v.id = ve.parent_id join ancestor a on a.vid = ve.child_id
             )
             select v.* from Value v join ancestor a on v.id = a.vid where v.node_id = :nodeId
-        """,Value.class).setParameter("nodeId", node.id).setParameter("valueId",value.id).getResultList());
+        """, ValueEntity.class).setParameter("nodeId", node.id).setParameter("valueId",value.id).getResultList());
         return rtrn;
     }
 
@@ -393,7 +393,7 @@ public class ValueService {
      */
     @Transactional
     //TODO here thar be dragons
-    public List<JsonNode> getGroupedValues(Node groupBy){
+    public List<JsonNode> getGroupedValues(NodeEntity groupBy){
         return em.unwrap(Session.class).createNativeQuery(
             switch(dbKind) {
                 case "sqlite" ->
@@ -438,8 +438,8 @@ public class ValueService {
      * @return
      */
     @Transactional
-    public List<Value> getDescendantValues(Node node){
-        List<Value> rtrn = new ArrayList<>();
+    public List<ValueEntity> getDescendantValues(NodeEntity node){
+        List<ValueEntity> rtrn = new ArrayList<>();
         rtrn.addAll(em.createNativeQuery(
                 """
                 WITH RECURSIVE sourceRecursive (v_id) AS (
@@ -448,7 +448,7 @@ public class ValueService {
                      SELECT ve.child_id from value_edge ve JOIN sourceRecursive sr ON ve.parent_id = sr.v_id
                 )
                 SELECT distinct * FROM value v JOIN sourceRecursive sr ON v.id = sr.v_id
-                """, Value.class
+                """, ValueEntity.class
         ).setParameter("nodeId",node.id).getResultList());
         return rtrn;
     }
@@ -459,9 +459,9 @@ public class ValueService {
      * @return
      */
     @Transactional
-    public List<Value> getDescendantValues(Value root, Node node){
+    public List<ValueEntity> getDescendantValues(ValueEntity root, NodeEntity node){
 
-        List<Value> rtrn = new ArrayList<>();
+        List<ValueEntity> rtrn = new ArrayList<>();
         //noinspection unchecked
         rtrn.addAll(em.createNativeQuery(
                 """
@@ -472,27 +472,27 @@ public class ValueService {
                     ON ve.parent_id = sr.v_id
                 )
                 SELECT distinct * FROM value v JOIN sourceRecursive sr ON v.id = sr.v_id WHERE v.node_id = :nodeId
-                """, Value.class
+                """, ValueEntity.class
         ).setParameter("rootId", root.id).setParameter("nodeId",node.id).getResultList());
         return rtrn;
     }
 
     //get the values from node that descend from root with the associated value source path (nodeId and index for each source value)
     @Transactional
-    public Map<String,Value> getDescendantValueByPath(Value root,Node node){
-        List<Value> found = getDescendantValues(root,node);
+    public Map<String, ValueEntity> getDescendantValueByPath(ValueEntity root, NodeEntity node){
+        List<ValueEntity> found = getDescendantValues(root,node);
         if (!found.isEmpty()) {
             // Re-fetch with sources eagerly loaded in a single query instead of N+1 lazy inits
             found = em.createQuery(
-                    "SELECT DISTINCT v FROM Value v LEFT JOIN FETCH v.sources WHERE v IN :values",
-                    Value.class
+                    "SELECT DISTINCT v FROM value v LEFT JOIN FETCH v.sources WHERE v IN :values",
+                    ValueEntity.class
             ).setParameter("values", found).getResultList();
             // Initialize lazy data field while session is still open
             for (int i = 0; i < found.size(); i++) {
                 Hibernate.initialize(found.get(i).data);
             }
         }
-        return found.stream().collect(Collectors.toMap(Value::getPath,v->v));
+        return found.stream().collect(Collectors.toMap(ValueEntity::getPath,v->v));
     }
 
     /**
@@ -501,7 +501,7 @@ public class ValueService {
      */
     @Transactional
     @SuppressWarnings("unchecked")
-    public Map<Long, List<Value>> getDescendantValuesByNodes(Value root, List<Node> nodes) {
+    public Map<Long, List<ValueEntity>> getDescendantValuesByNodes(ValueEntity root, List<NodeEntity> nodes) {
         if (nodes == null || nodes.isEmpty()) {
             return Collections.emptyMap();
         }
@@ -509,52 +509,52 @@ public class ValueService {
         for (int i = 0, size = nodes.size(); i < size; i++) {
             nodeIds.add(nodes.get(i).getId());
         }
-        List<Value> all = em.createNativeQuery("""
+        List<ValueEntity> all = em.createNativeQuery("""
                 WITH RECURSIVE sourceRecursive (v_id) AS (
                     SELECT ve.child_id from value_edge ve where ve.parent_id = :rootId OR ve.child_id = :rootId
                     UNION ALL
                     SELECT ve.child_id from value_edge ve JOIN sourceRecursive sr ON ve.parent_id = sr.v_id
                 )
                 SELECT distinct v.* FROM value v JOIN sourceRecursive sr ON v.id = sr.v_id WHERE v.node_id IN (:nodeIds)
-                """, Value.class)
-                .setParameter("rootId", root.id)
-                .setParameter("nodeIds", nodeIds)
-                .getResultList();
-        Map<Long, List<Value>> result = new HashMap<>();
+                """, ValueEntity.class)
+                                  .setParameter("rootId", root.id)
+                                  .setParameter("nodeIds", nodeIds)
+                                  .getResultList();
+        Map<Long, List<ValueEntity>> result = new HashMap<>();
         for (int i = 0, size = all.size(); i < size; i++) {
-            Value v = all.get(i);
+            ValueEntity v = all.get(i);
             result.computeIfAbsent(v.node.getId(), k -> new ArrayList<>()).add(v);
         }
         return result;
     }
 
     @Transactional
-    public List<Value> getValues(Node node){
-        return Value.find("node.id",node.id).list();
+    public List<ValueEntity> getValues(NodeEntity node){
+        return ValueEntity.find("node.id",node.id).list();
     }
 
 
     @Transactional
-    public int deleteDescendantValues(Value root,Node node){
-        List<Value> descendants = getDescendantValues(root,node);
+    public int deleteDescendantValues(ValueEntity root, NodeEntity node){
+        List<ValueEntity> descendants = getDescendantValues(root,node);
         descendants = KahnDagSort.sort(descendants,v->v.getSources()).reversed();
         descendants.forEach(PanacheEntityBase::delete);
         return descendants.size();
     }
 
     @Transactional
-    public int purge(Value root){
+    public int purge(ValueEntity root){
         if(root.node instanceof RootNode){
             return 0;//don't want to support deleting uploads just yet
         }
-        List<Value> descendants = getDescendantValues(root);
-        descendants.forEach(Value::delete);
+        List<ValueEntity> descendants = getDescendantValues(root);
+        descendants.forEach(ValueEntity::delete);
         root.delete();
         return 1+descendants.size();
     }
 
-    //TODO getHash(Value value) to see if a new value is different than the persisted one
-    public String getHash(Value value) throws NoSuchAlgorithmException {
+    //TODO getHash(ValueEntity value) to see if a new value is different than the persisted one
+    public String getHash(ValueEntity value) throws NoSuchAlgorithmException {
         MessageDigest md = MessageDigest.getInstance("MD5");
         try(
             DigestOutputStream out = new DigestOutputStream(OutputStream.nullOutputStream(), md);

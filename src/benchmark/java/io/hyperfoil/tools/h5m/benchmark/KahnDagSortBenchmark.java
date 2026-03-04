@@ -1,6 +1,5 @@
 package io.hyperfoil.tools.h5m.benchmark;
 
-import io.hyperfoil.tools.h5m.entity.Node;
 import io.hyperfoil.tools.h5m.entity.node.JqNode;
 import io.hyperfoil.tools.h5m.queue.KahnDagSort;
 import org.openjdk.jmh.annotations.*;

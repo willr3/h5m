@@ -1,7 +1,7 @@
 package io.hyperfoil.tools.h5m.cli;
 
-import io.hyperfoil.tools.h5m.entity.Node;
-import io.hyperfoil.tools.h5m.entity.NodeGroup;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
+import io.hyperfoil.tools.h5m.entity.NodeGroupEntity;
 import io.hyperfoil.tools.h5m.entity.node.JsNode;
 import io.hyperfoil.tools.h5m.svc.NodeGroupService;
 import io.hyperfoil.tools.h5m.svc.NodeService;
@@ -54,13 +54,13 @@ public class AddJs implements Callable<Integer> {
             return 1;
         }
 
-        NodeGroup foundGroup = nodeGroupService.byName(groupName);
+        NodeGroupEntity foundGroup = nodeGroupService.byName(groupName);
         if(foundGroup == null){
             System.err.println("unable to find group: "+groupName);
             return 1;
         }
 
-        Node node = JsNode.parse(name,function, n->nodeService.findNodeByFqdn(n,foundGroup.id));
+        NodeEntity node = JsNode.parse(name,function, n->nodeService.findNodeByFqdn(n,foundGroup.id));
         if(node == null){
             System.err.println("unable to create node from function:\n"+function);
             return 1;

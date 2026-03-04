@@ -82,7 +82,7 @@ public class ShimFetch implements ShimThenable {
     }
 //    @HostAccess.Export
 //    @Override
-//    public void onPromiseCreation(Value onResolve, Value onReject){
+//    public void onPromiseCreation(ValueEntity onResolve, ValueEntity onReject){
 //
 //        then(onResolve,onReject);
 //    }

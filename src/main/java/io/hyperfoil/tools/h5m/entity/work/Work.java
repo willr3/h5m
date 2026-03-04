@@ -1,5 +1,7 @@
-package io.hyperfoil.tools.h5m.entity;
+package io.hyperfoil.tools.h5m.entity.work;
 
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
+import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.entity.node.RelativeDifference;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import jakarta.persistence.*;
@@ -9,15 +11,11 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 
-@Entity
-@Table(
-        name = "work"
-)
+@Entity(name = "work")
 @DiscriminatorColumn(name = "type")
 @DiscriminatorValue("node")
 //cross test comparison could use sourceNodes and not have an activeNode?
 //custom post nodegroup actions could have sourceNodes without activeNode
-
 public class Work  extends PanacheEntity implements Comparable<Work>{
 
     @BatchSize(size=10)
@@ -27,7 +25,7 @@ public class Work  extends PanacheEntity implements Comparable<Work>{
             joinColumns = @JoinColumn(name = "work_id"),
             inverseJoinColumns = @JoinColumn(name = "value_id")
     )
-    public List<Value> sourceValues;//multiple values could happen for cross test comparisons and
+    public List<ValueEntity> sourceValues;//multiple values could happen for cross test comparisons and
 
     @BatchSize(size=10)
     @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY)
@@ -36,13 +34,13 @@ public class Work  extends PanacheEntity implements Comparable<Work>{
             joinColumns = @JoinColumn(name = "work_id"),
             inverseJoinColumns = @JoinColumn(name = "node_id")
     )
-    public List<Node> sourceNodes; //what is going to use a list of sources that are not already listed for the activeNode?
+    public List<NodeEntity> sourceNodes; //what is going to use a list of sources that are not already listed for the activeNode?
 
     public int retryCount;
 
     @ManyToOne
     @JoinColumn(name = "active_node_id")
-    public Node activeNode;
+    public NodeEntity activeNode;
 
     boolean cumulative = false;
 
@@ -50,7 +48,7 @@ public class Work  extends PanacheEntity implements Comparable<Work>{
     public Work(){
         retryCount = 0;
     }
-    public Work(Node activeNode,List<Node> sourceNodes,List<Value> sourceValues){
+    public Work(NodeEntity activeNode,List<NodeEntity> sourceNodes,List<ValueEntity> sourceValues){
         this();
         this.activeNode = activeNode;
         if(this.activeNode instanceof RelativeDifference){
@@ -60,11 +58,11 @@ public class Work  extends PanacheEntity implements Comparable<Work>{
         this.sourceNodes = sourceNodes == null ? Collections.emptyList() : new ArrayList(sourceNodes);
     }
 
-    public Node getActiveNode() {
+    public NodeEntity getActiveNode() {
         return activeNode;
     }
 
-    public void setActiveNode(Node activeNode) {
+    public void setActiveNode(NodeEntity activeNode) {
         this.activeNode = activeNode;
         if(activeNode instanceof RelativeDifference){
             this.cumulative = true;
@@ -81,7 +79,7 @@ public class Work  extends PanacheEntity implements Comparable<Work>{
             return false;
         }
         for (int i = 0, size = sourceValues.size(); i < size; i++) {
-            Value sourceValue = sourceValues.get(i);
+            ValueEntity sourceValue = sourceValues.get(i);
             if (sourceValue.node.dependsOn(work.activeNode)) {
                 for (int j = 0, wSize = work.sourceValues.size(); j < wSize; j++) {
                     if (sourceValue.dependsOn(work.sourceValues.get(j))) {

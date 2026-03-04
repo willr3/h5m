@@ -1,7 +1,7 @@
 package io.hyperfoil.tools.h5m.benchmark;
 
-import io.hyperfoil.tools.h5m.entity.Node;
-import io.hyperfoil.tools.h5m.entity.Value;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
+import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.entity.node.JqNode;
 
 import java.util.ArrayList;
@@ -23,8 +23,8 @@ public class GraphBuilder {
         return node;
     }
 
-    private static Value newValue(Node node) {
-        Value v = new Value();
+    private static ValueEntity newValue(NodeEntity node) {
+        ValueEntity v = new ValueEntity();
         v.id = idGen.getAndIncrement();
         v.node = node;
         return v;
@@ -90,11 +90,11 @@ public class GraphBuilder {
     }
 
     /**
-     * Build a Value chain mirroring a node chain.
+     * Build a ValueEntity chain mirroring a node chain.
      * v[i] has v[i-1] as its source.
      */
-    public static Value[] buildValueChain(JqNode[] nodeChain) {
-        Value[] values = new Value[nodeChain.length];
+    public static ValueEntity[] buildValueChain(JqNode[] nodeChain) {
+        ValueEntity[] values = new ValueEntity[nodeChain.length];
         values[0] = newValue(nodeChain[0]);
         for (int i = 1; i < nodeChain.length; i++) {
             values[i] = newValue(nodeChain[i]);

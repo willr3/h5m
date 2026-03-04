@@ -1,6 +1,6 @@
 package io.hyperfoil.tools.h5m.entity.node;
 
-import io.hyperfoil.tools.h5m.entity.Node;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
 import jakarta.persistence.DiscriminatorValue;
 import jakarta.persistence.Entity;
 
@@ -12,7 +12,7 @@ import java.util.List;
  */
 @Entity
 @DiscriminatorValue("fp")
-public class FingerprintNode extends Node {
+public class FingerprintNode extends NodeEntity {
 
     public FingerprintNode() {
 
@@ -20,12 +20,12 @@ public class FingerprintNode extends Node {
     public FingerprintNode(String name, String operation){
         super(name,operation);
     }
-    public FingerprintNode(String name, String operation, List<Node> sources) {
+    public FingerprintNode(String name, String operation, List<NodeEntity> sources) {
         super(name,operation,sources);
     }
 
     @Override
-    protected Node shallowCopy() {
+    protected NodeEntity shallowCopy() {
         return new FingerprintNode(name,operation);
     }
 }

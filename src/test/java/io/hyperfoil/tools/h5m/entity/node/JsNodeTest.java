@@ -4,8 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.hyperfoil.tools.h5m.entity.Node;
-import io.hyperfoil.tools.h5m.entity.Value;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
+import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
@@ -123,10 +123,10 @@ public class JsNodeTest {
     @Test
     public void createFunctionParameters_destructure() throws JsonProcessingException {
         ObjectMapper mapper = new ObjectMapper();
-        Map<String, Value> values = Map.of(
-                "a",new Value(null,null,mapper.readTree("1")),
-                "b",new Value(null,null,mapper.readTree("2")),
-                "c",new Value(null,null,mapper.readTree("3"))
+        Map<String, ValueEntity> values = Map.of(
+                "a",new ValueEntity(null,null,mapper.readTree("1")),
+                "b",new ValueEntity(null,null,mapper.readTree("2")),
+                "c",new ValueEntity(null,null,mapper.readTree("3"))
         );
         List<JsonNode> params = JsNode.createParameters("function({a,b},c){}",values);
         assertNotNull(params,"return should not be null");
@@ -145,18 +145,18 @@ public class JsNodeTest {
 
     @Test
     public void parse_sources(){
-        Map<String, Node> existing = Map.of("a",new JqNode("a",".a"),
+        Map<String, NodeEntity> existing = Map.of("a",new JqNode("a",".a"),
                 "b",new JqNode("b",".b"));
 
-        Function<String,List<Node>> getExisting = new Function<String,List<Node>>(){
+        Function<String,List<NodeEntity>> getExisting = new Function<String,List<NodeEntity>>(){
             @Override
-            public List<Node> apply(String s) {
+            public List<NodeEntity> apply(String s) {
                 return existing.containsKey(s) ? List.of(existing.get(s)) : Collections.emptyList();
             }
         };
         JsNode node = JsNode.parse("node","(a,b)=>a+b",getExisting);
         assertNotNull(node,"node should not be null");
-        List<Node> sources = node.sources;
+        List<NodeEntity> sources = node.sources;
         assertNotNull(sources,"sources should not be null");
         assertEquals(2,sources.size(),"expected 2 values: "+sources);
         assertEquals(existing.get("a"),sources.get(0),"expected a value");

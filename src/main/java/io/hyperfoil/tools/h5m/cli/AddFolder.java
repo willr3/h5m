@@ -1,7 +1,7 @@
 package io.hyperfoil.tools.h5m.cli;
 
-import io.hyperfoil.tools.h5m.entity.Folder;
-import io.hyperfoil.tools.h5m.entity.NodeGroup;
+import io.hyperfoil.tools.h5m.entity.FolderEntity;
+import io.hyperfoil.tools.h5m.entity.NodeGroupEntity;
 import io.hyperfoil.tools.h5m.svc.FolderService;
 import io.hyperfoil.tools.h5m.svc.NodeGroupService;
 import jakarta.inject.Inject;
@@ -29,12 +29,12 @@ public class AddFolder implements Callable<Integer> {
             System.out.printf("Enter name: ");
             name = sc.nextLine();
         }
-        NodeGroup existingGroup =  nodeGroupService.byName(name);
+        NodeGroupEntity existingGroup =  nodeGroupService.byName(name);
         if(existingGroup != null){
             System.err.println(name+" conflicts with an existing node group");
             return 1;
         }
-        Folder newFolder = new Folder(name);
+        FolderEntity newFolder = new FolderEntity(name);
         folderService.create(newFolder);
         return 0;
     }

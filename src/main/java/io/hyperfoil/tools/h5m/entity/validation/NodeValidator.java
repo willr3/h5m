@@ -1,11 +1,11 @@
-package io.hyperfoil.tools.h5m.valid;
+package io.hyperfoil.tools.h5m.entity.validation;
 
-import io.hyperfoil.tools.h5m.entity.Node;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 
 
-public class NodeValidator implements ConstraintValidator<ValidNode, Node> {
+public class NodeValidator implements ConstraintValidator<ValidNode, NodeEntity> {
 
     @Override
     public void initialize(ValidNode constraintAnnotation) {
@@ -14,10 +14,10 @@ public class NodeValidator implements ConstraintValidator<ValidNode, Node> {
 
 
     @Override
-    public boolean isValid(Node node, ConstraintValidatorContext constraintValidatorContext) {
+    public boolean isValid(NodeEntity node, ConstraintValidatorContext constraintValidatorContext) {
         boolean rtrn = true;
         if(node == null){
-            constraintValidatorContext.buildConstraintViolationWithTemplate("null nodes are not valid")
+            constraintValidatorContext.buildConstraintViolationWithTemplate("null nodes are not validation")
                     .addConstraintViolation();
             return false;
         }
@@ -38,9 +38,9 @@ public class NodeValidator implements ConstraintValidator<ValidNode, Node> {
             ).addConstraintViolation();
             rtrn = false;
         }
-        if(node.name.contains(Node.FQDN_SEPARATOR)){
+        if(node.name.contains(NodeEntity.FQDN_SEPARATOR)){
             constraintValidatorContext.buildConstraintViolationWithTemplate(
-                    "node names cannot contain "+Node.FQDN_SEPARATOR+" characters"
+                    "node names cannot contain " + NodeEntity.FQDN_SEPARATOR + " characters"
             ).addConstraintViolation();
             rtrn = false;
         }

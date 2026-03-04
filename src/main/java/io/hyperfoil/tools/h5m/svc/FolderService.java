@@ -1,10 +1,10 @@
 package io.hyperfoil.tools.h5m.svc;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import io.hyperfoil.tools.h5m.entity.Folder;
-import io.hyperfoil.tools.h5m.entity.Node;
-import io.hyperfoil.tools.h5m.entity.Value;
-import io.hyperfoil.tools.h5m.entity.Work;
+import io.hyperfoil.tools.h5m.entity.FolderEntity;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
+import io.hyperfoil.tools.h5m.entity.ValueEntity;
+import io.hyperfoil.tools.h5m.entity.work.Work;
 import io.hyperfoil.tools.h5m.queue.WorkQueue;
 import io.hyperfoil.tools.h5m.queue.WorkQueueExecutor;
 import io.hyperfoil.tools.yaup.json.Json;
@@ -36,30 +36,30 @@ public class FolderService {
     WorkService workService;
 
     @Transactional
-    public long create(Folder folder){
+    public long create(FolderEntity folder){
         if(!folder.isPersistent()){
-            Folder.persist(folder);
+            FolderEntity.persist(folder);
         }
         return folder.id;
     }
 
     @Transactional
-    public Folder read(long id){
-        return Folder.findById(id);
+    public FolderEntity read(long id){
+        return FolderEntity.findById(id);
     }
 
     @Transactional
-    public Folder byName(String name){
-        return (Folder) Folder.find("name",name).firstResult();
+    public FolderEntity byName(String name){
+        return (FolderEntity) FolderEntity.find("name",name).firstResult();
     }
     @Transactional
-    public Folder byPath(String path){
-        return (Folder) Folder.find("path",path).firstResult();
+    public FolderEntity byPath(String path){
+        return (FolderEntity) FolderEntity.find("path",path).firstResult();
     }
 
     @Transactional
-    public List<Folder> list(){
-        return Folder.listAll();
+    public List<FolderEntity> list(){
+        return FolderEntity.listAll();
     }
 
     @Transactional
@@ -69,7 +69,7 @@ public class FolderService {
         NativeQuery query = (NativeQuery) em.createNativeQuery(
             """
             select f.name as name, count(v.id) as count
-            from folder f join nodegroup g on f.group_id = g.id join node r on r.id = g.root_id left join value v on v.node_id = r.id 
+            from folder f join node_group g on f.group_id = g.id join node r on r.id = g.root_id left join value v on v.node_id = r.id 
             group by f.name 
             """
         );
@@ -86,24 +86,24 @@ public class FolderService {
 
 
     @Transactional
-    public long update(Folder folder){
-        Folder.persist(folder);
+    public long update(FolderEntity folder){
+        FolderEntity.persist(folder);
         return folder.id;
     }
 
     @Transactional
-    public void delete(Folder folder){
+    public void delete(FolderEntity folder){
         folder.delete();
     }
 
 
     @Transactional
-    public Json structure(Folder folder) {
+    public Json structure(FolderEntity folder) {
         Json fullStructure = Json.typeStructure(new Json(false));
-        folder = Folder.findById(folder.id); // deal with detached entity
-        Node root = folder.group.root;
-        List<Value> uploads = valueService.getValues(root);
-        for(Value upload : uploads){
+        folder = FolderEntity.findById(folder.id); // deal with detached entity
+        NodeEntity root = folder.group.root;
+        List<ValueEntity> uploads = valueService.getValues(root);
+        for(ValueEntity upload : uploads){
             Json json = Json.fromJsonNode(upload.data);
             fullStructure.add(json);
         }
@@ -112,22 +112,22 @@ public class FolderService {
 
 
     /**
-     * Schedules recalculation of all Values in the Folder.
+     * Schedules recalculation of all Values in the FolderEntity.
      * At the moment that means replacing all calculated values (no equality checking).
      * @param folder
      */
     @Transactional
-    public void recalculate(Folder folder){
+    public void recalculate(FolderEntity folder){
         folder = em.createQuery(
-                "SELECT f FROM Folder f JOIN FETCH f.group g LEFT JOIN FETCH g.sources LEFT JOIN FETCH g.root WHERE f.id = :folderId",
-                Folder.class
+                "SELECT f FROM folder f JOIN FETCH f.group g LEFT JOIN FETCH g.sources LEFT JOIN FETCH g.root WHERE f.id = :folderId",
+                FolderEntity.class
         ).setParameter("folderId", folder.id).getSingleResult();
-        Node root = folder.group.root;
-        List<Value> rootValues = valueService.getValues(root);
-        rootValues.forEach(Value::getPath); // this fixes the LazyException, por que?
+        NodeEntity root = folder.group.root;
+        List<ValueEntity> rootValues = valueService.getValues(root);
+        rootValues.forEach(ValueEntity::getPath); // this fixes the LazyException, por que?
         List<Work> newWorks = new ArrayList<>();
-        for(Value rootValue: rootValues){
-            for(Node source : List.copyOf(folder.group.sources)){
+        for(ValueEntity rootValue: rootValues){
+            for(NodeEntity source : List.copyOf(folder.group.sources)){
                 Work newWork = new Work(source,new ArrayList<>(source.sources),List.of(rootValue));
                 workService.create(newWork);
                 newWorks.add(newWork);
@@ -136,12 +136,12 @@ public class FolderService {
         workExecutor.getWorkQueue().addWorks(newWorks);
     }
     @Transactional
-    public void upload(Folder folder,String path,JsonNode data){
+    public void upload(FolderEntity folder,String path,JsonNode data){
         folder = em.createQuery(
-                "SELECT f FROM Folder f JOIN FETCH f.group g LEFT JOIN FETCH g.sources LEFT JOIN FETCH g.root WHERE f.id = :folderId",
-                Folder.class
+                "SELECT f FROM folder f JOIN FETCH f.group g LEFT JOIN FETCH g.sources LEFT JOIN FETCH g.root WHERE f.id = :folderId",
+                FolderEntity.class
         ).setParameter("folderId", folder.id).getSingleResult();
-        Value newValue = new Value(folder,folder.group.root,data);
+        ValueEntity newValue = new ValueEntity(folder,folder.group.root,data);
         valueService.create(newValue);
         WorkQueue workQueue = workExecutor.getWorkQueue();
 

@@ -1,6 +1,6 @@
 package io.hyperfoil.tools.h5m.cli;
 
-import io.hyperfoil.tools.h5m.entity.NodeGroup;
+import io.hyperfoil.tools.h5m.entity.NodeGroupEntity;
 import io.hyperfoil.tools.h5m.svc.NodeGroupService;
 import io.hyperfoil.tools.h5m.svc.NodeService;
 import jakarta.inject.Inject;
@@ -32,7 +32,7 @@ public class AddSplit  implements Callable<Integer> {
             System.err.println("missing group name");
             return 1;
         }
-        NodeGroup foundGroup = nodeGroupService.byName(groupName);
+        NodeGroupEntity foundGroup = nodeGroupService.byName(groupName);
         if(foundGroup == null){
             System.err.println("could not find target group/test "+groupName);
             return 1;

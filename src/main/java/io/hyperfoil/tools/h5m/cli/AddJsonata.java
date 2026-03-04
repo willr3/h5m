@@ -1,7 +1,7 @@
 package io.hyperfoil.tools.h5m.cli;
 
-import io.hyperfoil.tools.h5m.entity.Node;
-import io.hyperfoil.tools.h5m.entity.NodeGroup;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
+import io.hyperfoil.tools.h5m.entity.NodeGroupEntity;
 import io.hyperfoil.tools.h5m.entity.node.JsonataNode;
 import io.hyperfoil.tools.h5m.svc.NodeGroupService;
 import io.hyperfoil.tools.h5m.svc.NodeService;
@@ -61,13 +61,13 @@ public class AddJsonata implements Callable<Integer> {
             System.err.println("missing group name");
             return 1;
         }
-        NodeGroup foundGroup =  nodeGroupService.byName(groupName);
+        NodeGroupEntity foundGroup =  nodeGroupService.byName(groupName);
         if(foundGroup == null){
             System.err.println("group not found");
             return 1;
         }
 
-        Node node = JsonataNode.parse(name,jsonata, n->nodeService.findNodeByFqdn(n, foundGroup.id));
+        NodeEntity node = JsonataNode.parse(name,jsonata, n->nodeService.findNodeByFqdn(n, foundGroup.id));
         if(node == null){
             System.err.println("cannot create node from jsonata\n"+jsonata);
             return 1;

@@ -1,9 +1,8 @@
 package io.hyperfoil.tools.h5m.queue;
 
-import io.hyperfoil.tools.h5m.entity.Node;
-import io.hyperfoil.tools.h5m.entity.Value;
-import io.hyperfoil.tools.h5m.entity.Work;
-import io.hyperfoil.tools.h5m.svc.*;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
+import io.hyperfoil.tools.h5m.entity.ValueEntity;
+import io.hyperfoil.tools.h5m.entity.work.Work;
 import io.hyperfoil.tools.h5m.svc.NodeGroupService;
 import io.hyperfoil.tools.h5m.svc.NodeService;
 import io.hyperfoil.tools.h5m.svc.ValueService;
@@ -69,22 +68,22 @@ public class WorkRunner implements Runnable {
         try {
             if(work.activeNode==null || work.sourceValues == null || work.sourceValues.isEmpty()){
                 //error conditions?
-                //work.activeNode == null is not yet a valid condition but it could be for post processing tasks?
+                //work.activeNode == null is not yet a validation condition but it could be for post processing tasks?
             }
             //looping over values works for Jq / Js nodes but what about cross test comparison
             //calculateValue should probably accept all sourceValues and leave it to the node function to decide
-            List<Value> calculated = nodeService.calculateValues(work.activeNode,work.sourceValues);
+            List<ValueEntity> calculated = nodeService.calculateValues(work.activeNode,work.sourceValues);
 
             //if the activeNode is a sqlpath then the entity is already persisted
             boolean allPersisted = calculated.stream().allMatch(v->v.getId()!=null);
-            List<Value> newOrUpdated = new ArrayList<>();
-            for(Value v : work.sourceValues) {
-                Map<String, Value> descendants = valueService.getDescendantValueByPath(v, work.activeNode);
-                for(Iterator<Value> iter =  calculated.iterator(); iter.hasNext();){
-                    Value newValue = iter.next();
+            List<ValueEntity> newOrUpdated = new ArrayList<>();
+            for(ValueEntity v : work.sourceValues) {
+                Map<String, ValueEntity> descendants = valueService.getDescendantValueByPath(v, work.activeNode);
+                for(Iterator<ValueEntity> iter = calculated.iterator(); iter.hasNext();){
+                    ValueEntity newValue = iter.next();
                     String path = newValue.getPath();
                     if(descendants.containsKey(path)){
-                        Value existingValue = descendants.get(path);
+                        ValueEntity existingValue = descendants.get(path);
                         //existingValue.getId() should not be null because it was fetched from persistence
                         if(existingValue.getId().equals(newValue.getId())) {
                             //if it's the same value we don't have to work with it
@@ -92,7 +91,7 @@ public class WorkRunner implements Runnable {
                             if(newValue.id != null){
                                 valueService.delete(newValue);
                             }
-                            iter.remove();//we don't need this new Value
+                            iter.remove();//we don't need this new ValueEntity
                         }else{
                             //update the new value
                             existingValue.data = newValue.data;
@@ -116,7 +115,7 @@ public class WorkRunner implements Runnable {
             //we need to trigger more calculations? perhaps for a recalculation we do?
             if(!newOrUpdated.isEmpty()){
                 if(work.activeNode!=null){
-                    List<Node> dependentNodes = nodeService.getDependentNodes(work.activeNode);
+                    List<NodeEntity> dependentNodes = nodeService.getDependentNodes(work.activeNode);
 
                     dependentNodes.forEach(node->{
                         Work newWork = new Work(node,node.sources,work.sourceValues);

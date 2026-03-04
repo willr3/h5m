@@ -1,6 +1,6 @@
 package io.hyperfoil.tools.h5m.entity.node;
 
-import io.hyperfoil.tools.h5m.entity.Node;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
 import jakarta.persistence.DiscriminatorValue;
 import jakarta.persistence.Entity;
 
@@ -12,12 +12,12 @@ import static io.hyperfoil.tools.h5m.entity.node.JqNode.*;
 
 @Entity
 @DiscriminatorValue("sql")
-public class SqlJsonpathNode extends Node {
+public class SqlJsonpathNode extends NodeEntity {
 
 
     //another copy of exp.entity.node.JqNode.parse with different error messages (and no splitting sources)
     //TODO create a more abstract exp.entity.node.JqNode.parse for different error messages and source limits
-    public static SqlJsonpathNode parse(String name, String input, Function<String, List<Node>> nodeFn){
+    public static SqlJsonpathNode parse(String name, String input, Function<String, List<NodeEntity>> nodeFn){
         if(input==null || input.isBlank()){
             System.err.println("missing sqlpath node input");
             return null;
@@ -31,11 +31,11 @@ public class SqlJsonpathNode extends Node {
             prefix =  input.substring(SOURCE_PREFIX.length(),input.indexOf(SOURCE_SUFFIX));
             input = input.substring(input.indexOf(SOURCE_SUFFIX)+SOURCE_SUFFIX.length());
         }
-        List<Node> sources = new ArrayList<>();
+        List<NodeEntity> sources = new ArrayList<>();
         boolean ok = true;
         if(!prefix.isBlank()) {
             for (String s : prefix.split(SOURCE_SEPARATOR)) {
-                List<Node> found = nodeFn.apply(s);
+                List<NodeEntity> found = nodeFn.apply(s);
                 if (found.isEmpty()) {
                     System.err.println("failed to find source node " + s);
                     ok = false;
@@ -62,13 +62,13 @@ public class SqlJsonpathNode extends Node {
         super();
         this.type = "sql";
     }
-    public SqlJsonpathNode(String name, String operation,List<Node> sources){
+    public SqlJsonpathNode(String name, String operation,List<NodeEntity> sources){
         super(name,operation,sources);
         this.type = "sql";
     }
 
     @Override
-    protected Node shallowCopy() {
+    protected NodeEntity shallowCopy() {
         return new SqlJsonpathNode(this.name, this.operation,this.sources);
     }
 }

@@ -1,6 +1,6 @@
 package io.hyperfoil.tools.h5m.benchmark;
 
-import io.hyperfoil.tools.h5m.entity.Value;
+import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.entity.node.JqNode;
 import org.openjdk.jmh.annotations.*;
 
@@ -19,10 +19,10 @@ public class ValueDependsOnBenchmark {
         @Param({"10", "100", "1000"})
         int depth;
 
-        Value[] values;
-        Value leaf;
-        Value root;
-        Value middle;
+        ValueEntity[] values;
+        ValueEntity leaf;
+        ValueEntity root;
+        ValueEntity middle;
 
         @Setup(Level.Trial)
         public void setup() {

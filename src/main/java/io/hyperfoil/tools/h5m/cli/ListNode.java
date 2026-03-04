@@ -1,7 +1,7 @@
 package io.hyperfoil.tools.h5m.cli;
 
-import io.hyperfoil.tools.h5m.entity.Node;
-import io.hyperfoil.tools.h5m.entity.NodeGroup;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
+import io.hyperfoil.tools.h5m.entity.NodeGroupEntity;
 import io.hyperfoil.tools.h5m.svc.NodeGroupService;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -30,16 +30,16 @@ public class ListNode implements Callable<Integer> {
             cmd.usage(System.err);
             return 1;
         }
-        NodeGroup nodeGroup = nodeGroupService.byName(groupName);
+        NodeGroupEntity nodeGroup = nodeGroupService.byName(groupName);
         if(nodeGroup == null){
-            System.err.println("Node group "+groupName+" not found");
+            System.err.println("NodeEntity group "+groupName+" not found");
             return 1;
         }
         System.out.println(
             ListCmd.table(80,nodeGroup.sources,List.of("name","type","fqdn","operation"),
                 List.of(n->n.name,
                 n->n.type,
-                Node::getFqdn,
+                NodeEntity::getFqdn,
                 n->n.operation
                 )
             )
