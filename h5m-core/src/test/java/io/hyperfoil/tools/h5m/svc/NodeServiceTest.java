@@ -408,6 +408,39 @@ public class NodeServiceTest extends FreshDb {
         assertTrue(read.endsWith("]"),"value should be an array: "+read);
     }
     @Test
+    public void calculateJqValues_null_slurp() throws IOException, HeuristicRollbackException, SystemException, HeuristicMixedException, RollbackException, NotSupportedException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        Node node1 = new JqNode();
+        node1.name="v1";
+        node1.persist();
+        Value v1 = new Value();
+        v1.data=mapper.readTree("{\"value\": 10, \"foo\": { \"value\": 1}}");
+        v1.node = node1;
+        v1.persist();
+        Node node2 = new JqNode();
+        node2.name="v2";
+        node2.persist();
+        Value v2 = new Value();
+        v2.data=mapper.readTree("{\"value\": 20, \"foo\": { \"value\": 2}}");
+        v2.node = node2;
+        v2.persist();
+        tm.commit();
+
+        Map<String,Value> sourceValueMap = new HashMap<>();
+        sourceValueMap.put("v1",v1);
+        sourceValueMap.put("v2",v2);
+
+        JqNode node = new JqNode("foo","inputs | map(.value) | add");
+        node.sources=List.of(node1,node2);
+
+        List<Value> calculated = nodeService.calculateJqValues(node,sourceValueMap,0);
+
+        assertEquals(1,calculated.size(),"expect to create a single value from two sources");
+        String read = calculated.getFirst().data.toString();
+        assertEquals("30",read,"first file should be in result: "+read);
+    }
+    @Test
     public void calculateJqValues_multiple_source_order() throws IOException, HeuristicRollbackException, SystemException, HeuristicMixedException, RollbackException, NotSupportedException {
         tm.begin();
         Node node1 = new JqNode();

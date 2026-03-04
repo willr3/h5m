@@ -17,6 +17,8 @@ public class JqNodeTest {
         assertFalse(JqNode.isNullInput(".foo.inputs"),"nested field access should not trigger null input");
         assertFalse(JqNode.isNullInput("myinputs"),"inputs as substring of another word should not trigger null input");
         assertFalse(JqNode.isNullInput("inputstream"),"inputs prefix of another word should not trigger null input");
+
+        assertTrue(JqNode.isNullInput("inputs | map(.value) | add"),"example from NodeServiceTest.calculateJqValues_null_slurp");
     }
 
 

@@ -49,7 +49,7 @@ public class NodeService {
     private static final ConcurrentHashMap<String, JsonQuery> JQ_CACHE = new ConcurrentHashMap<>();
     static {
         JQ_SCOPE = Scope.newEmptyScope();
-        BuiltinFunctionLoader.getInstance().loadFunctions(Versions.JQ_1_6, JQ_SCOPE);
+        BuiltinFunctionLoader.getInstance().loadFunctions(Versions.JQ_1_7, JQ_SCOPE);
     }
 
     private static JsonQuery compileJq(String filter) throws JsonQueryException {
@@ -57,7 +57,7 @@ public class NodeService {
         if (cached != null) {
             return cached;
         }
-        JsonQuery compiled = JsonQuery.compile(filter, Versions.JQ_1_6);
+        JsonQuery compiled = JsonQuery.compile(filter, Versions.JQ_1_7);
         JQ_CACHE.put(filter, compiled);
         return compiled;
     }
