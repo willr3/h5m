@@ -249,6 +249,18 @@ public class NodeService {
      */
     @Transactional
     public List<Value> calculateValues(Node node, List<Value> roots) throws IOException {
+        // Re-attach any detached root values to the current persistence context
+        // so that lazy fields (e.g. Value.data) can be loaded within this session
+        List<Value> managedRoots = new ArrayList<>(roots.size());
+        for (int i = 0; i < roots.size(); i++) {
+            Value root = roots.get(i);
+            if (root.id != null && !em.contains(root)) {
+                managedRoots.add(em.find(Value.class, root.id));
+            } else {
+                managedRoots.add(root);
+            }
+        }
+        roots = managedRoots;
         List<Value> rtrn = new ArrayList<>();
         switch (node.type){
             //nodes that operate one root at a time
