@@ -29,14 +29,20 @@ public class WorkQueueTest extends FreshDb {
 
 
     @Test
-    public void reject_relativedifference_as_duplicate(){
+    public void reject_relativedifference_as_duplicate() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        tm.begin();
         NodeEntity rootNode = new JqNode("root",".root");
+        rootNode.persist();
         NodeEntity relativeDifference = new RelativeDifference();
+        relativeDifference.persist();
+
         ValueEntity rootValue1 = new ValueEntity(null,rootNode,new TextNode("text1"));
         ValueEntity rootValue2 = new ValueEntity(null,rootNode,new TextNode("text2"));
 
         Work work1 = new Work(relativeDifference,List.of(rootNode),List.of(rootValue1));
+        work1.persist();
         Work work2 = new Work(relativeDifference,List.of(rootNode),List.of(rootValue2));
+        work2.persist();
 
         assertEquals(work1.hashCode(),work2.hashCode(),"both worth should have the same hashcode despite different values");
 
@@ -47,6 +53,7 @@ public class WorkQueueTest extends FreshDb {
         added = q.addWork(work2);
         assertTrue(q.isPending(work2),"work 2 should be pending since it matches work1");
         assertFalse(added,"seconds work should not be added because it should have the same hash");
+        tm.commit();
     }
 
     @Test
