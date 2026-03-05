@@ -193,9 +193,6 @@ public class WorkQueue implements BlockingQueue<Runnable> {
             takeLock.unlock();
         }
     }
-    public boolean addWork(Work work) {
-        return add(work);
-    }
     public boolean hasWork(Work work){
         return isPending(work) || isActive(work);
         //return runnables.stream().anyMatch(v->v instanceof WorkRunner && work.equals(((WorkRunner) v).work));

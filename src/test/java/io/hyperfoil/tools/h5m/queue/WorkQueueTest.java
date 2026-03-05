@@ -48,11 +48,11 @@ public class WorkQueueTest extends FreshDb {
 
         WorkQueue q = new WorkQueue();
 
-        boolean added = q.addWork(work1);
-        assertTrue(added,"first work should be added");
-        added = q.addWork(work2);
+        q.addWorks(List.of(work1));
+        assertEquals(1,q.size(),"first work should be added");
+        q.addWorks(List.of(work2));
         assertTrue(q.isPending(work2),"work 2 should be pending since it matches work1");
-        assertFalse(added,"seconds work should not be added because it should have the same hash");
+        assertEquals(1,q.size(),"seconds work should not be added because it should have the same hash");
         tm.commit();
     }
 
@@ -74,9 +74,8 @@ public class WorkQueueTest extends FreshDb {
         second.persist();
 
         assertEquals(first.hashCode(),second.hashCode(),"work with different id but same scope should have the same hash");
-        q.addWork(first);
-        boolean added = q.addWork(second);
-        assertFalse(added,"second should not be added to the queue");
+        q.addWorks(List.of(first, second));
+        assertEquals(1,q.size(),"second should not be added to the queue");
 
         tm.commit();
     }
@@ -98,8 +97,8 @@ public class WorkQueueTest extends FreshDb {
         bWork.persist();
         tm.commit();
 
-        q.addWork(bWork);
-        q.addWork(aWork);
+        q.addWorks(List.of(bWork));
+        q.addWorks(List.of(aWork));
         Runnable firstRunnable = q.take();
 
         assertNotNull(firstRunnable);
@@ -138,9 +137,7 @@ public class WorkQueueTest extends FreshDb {
         cWork.persist();
         tm.commit();
 
-        q.addWork(aWork);
-        q.addWork(bWork);
-        q.addWork(cWork);
+        q.addWorks(List.of(aWork, bWork, cWork));
 
         Runnable firstRunnable = q.poll();
         assertFalse(q.isPending(aWork),"a should be removed from the q");

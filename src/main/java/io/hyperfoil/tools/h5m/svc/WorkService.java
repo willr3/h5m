@@ -125,7 +125,7 @@ public class WorkService {
                     dependentNodes.forEach(node->{
                         Work newWork = new Work(node,node.sources,work.sourceValues);
                         create(newWork);
-                        boolean added = workQueue.addWork(newWork);
+                        workQueue.addWorks(List.of(newWork));
                     });
                 }
             }
