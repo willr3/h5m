@@ -27,16 +27,6 @@ public class ExecutorConfiguration {
     @Inject
     MeterRegistry registry; // Injected by Quarkus Micrometer
 
-
-    @Inject
-    WorkService workService;
-    @Inject
-    NodeGroupService nodeGroupService;
-    @Inject
-    NodeService nodeService;
-    @Inject
-    ValueService valueService;
-
     @Inject @ConfigProperty(name = "h5m.work.maximumPoolSize",defaultValue = "10")
     int maximumPoolSize;
     @Inject @ConfigProperty(name = "h5m.work.keepAlive",defaultValue = "10")
@@ -60,15 +50,13 @@ public class ExecutorConfiguration {
     @ApplicationScoped
     @Priority(9997)
     @Named("workExecutor")
-    public WorkQueueExecutor initDatasource(/*CommandLine.ParseResult parseResult*/) throws SQLException {
-
-        WorkQueue workQueue = new WorkQueue(nodeService,valueService,workService);
+    public WorkQueueExecutor initWorkQueueExecutor() {
         WorkQueueExecutor rtrn = new WorkQueueExecutor(
                 maximumPoolSize,
                 maximumPoolSize,
                 keepAlive,
                 convertTimeUnit(keepAliveUnit),
-                workQueue
+                new WorkQueue()
         );
         rtrn.allowCoreThreadTimeOut(false);
         rtrn.prestartAllCoreThreads();

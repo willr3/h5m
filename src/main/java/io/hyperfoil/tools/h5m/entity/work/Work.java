@@ -3,7 +3,9 @@ package io.hyperfoil.tools.h5m.entity.work;
 import io.hyperfoil.tools.h5m.entity.NodeEntity;
 import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.entity.node.RelativeDifference;
+import io.hyperfoil.tools.h5m.svc.WorkService;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
+import jakarta.enterprise.inject.spi.CDI;
 import jakarta.persistence.*;
 import org.hibernate.annotations.BatchSize;
 
@@ -16,7 +18,7 @@ import java.util.stream.Collectors;
 @DiscriminatorValue("node")
 //cross test comparison could use sourceNodes and not have an activeNode?
 //custom post nodegroup actions could have sourceNodes without activeNode
-public class Work  extends PanacheEntity implements Comparable<Work>{
+public class Work  extends PanacheEntity implements Runnable, Comparable<Work>{
 
     @BatchSize(size=10)
     @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY)
@@ -171,6 +173,10 @@ public class Work  extends PanacheEntity implements Comparable<Work>{
         } else {
             return 0;
         }
+    }
+
+    @Override public void run() {
+        CDI.current().select(WorkService.class).get().execute(this);
     }
 
     @Override
