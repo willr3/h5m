@@ -175,7 +175,7 @@ public class WorkQueue implements BlockingQueue<Runnable> {
         takeLock.lock();
         try {
             boolean wasEmpty = runnables.isEmpty();
-            List<Work> acceptedWork = works.stream().filter(w -> !isPending(w)).peek(w-> {
+            List<Work> acceptedWork = works.stream().filter(w -> !hasWork(w)).peek(w-> {
                 pendingWork.add(w);
                 runnables.add(w);
                 assert isPending(w);

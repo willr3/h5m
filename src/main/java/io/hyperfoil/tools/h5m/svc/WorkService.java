@@ -41,13 +41,22 @@ public class WorkService {
     }
     @Transactional
     public void create(List<Work> works) {
-        workExecutor.getWorkQueue().addWorks(works).forEach(work -> {
+        if (workExecutor.isShutdown()) {
+            return;
+        }
+        WorkQueue workQueue = workExecutor.getWorkQueue();
+        for (Work work : works) {
+            if (workQueue.hasWork(work)) {
+                continue;
+            }
             if (!work.isPersistent()) {
                 work.id = null;
-                em.merge(work);
+                Work merged = em.merge(work);
                 em.flush();
+                work.id = merged.id;
             }
-        });
+            workQueue.add(work);
+        }
     }
 
     @Transactional
