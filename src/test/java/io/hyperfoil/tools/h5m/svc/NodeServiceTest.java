@@ -848,10 +848,8 @@ public class NodeServiceTest extends FreshDb {
         // calculate jq values for both nodes
         Map<String, ValueEntity> sourceValues = Map.of("upload", rootValue);
         tm.begin();
-        List<ValueEntity> qvValues = nodeService.calculateJqValues(quarkusVersionNode, sourceValues, 0);
-        qvValues.forEach(ValueEntity.getEntityManager()::merge);
-        List<ValueEntity> jvValues = nodeService.calculateJqValues(javaVersionNode, sourceValues, 0);
-        jvValues.forEach(ValueEntity.getEntityManager()::merge);
+        List<ValueEntity> qvValues = nodeService.calculateJqValues(quarkusVersionNode, sourceValues, 0).stream().map(ValueEntity.getEntityManager()::merge).toList();
+        List<ValueEntity> jvValues = nodeService.calculateJqValues(javaVersionNode, sourceValues, 0).stream().map(ValueEntity.getEntityManager()::merge).toList();
         tm.commit();
 
         assertEquals(1, qvValues.size(), "should extract one QUARKUS_VERSION value");
@@ -1150,16 +1148,13 @@ public class NodeServiceTest extends FreshDb {
 
             Map<String, ValueEntity> sourceValues = Map.of("upload", rootValue);
             tm.begin();
-            List<ValueEntity> tpValues = nodeService.calculateJqValues(throughputNode, sourceValues, 0);
-            tpValues.forEach(ValueEntity.getEntityManager()::merge);
-            List<ValueEntity> verValues = nodeService.calculateJqValues(versionNode, sourceValues, 0);
-            verValues.forEach(ValueEntity.getEntityManager()::merge);
+            List<ValueEntity> tpValues = nodeService.calculateJqValues(throughputNode, sourceValues, 0).stream().map(ValueEntity.getEntityManager()::merge).toList();;
+            List<ValueEntity> verValues = nodeService.calculateJqValues(versionNode, sourceValues, 0).stream().map(ValueEntity.getEntityManager()::merge).toList();;
             // compute fingerprint values
             if (!verValues.isEmpty()) {
                 Map<String, ValueEntity> fpSourceValues = new HashMap<>();
                 fpSourceValues.put("version", verValues.getFirst());
-                List<ValueEntity> fpValues = nodeService.calculateFpValues(fpNode, fpSourceValues, 0);
-                fpValues.forEach(ValueEntity.getEntityManager()::merge);
+                List<ValueEntity> fpValues = nodeService.calculateFpValues(fpNode, fpSourceValues, 0).stream().map(ValueEntity.getEntityManager()::merge).toList();
             }
             tm.commit();
 
