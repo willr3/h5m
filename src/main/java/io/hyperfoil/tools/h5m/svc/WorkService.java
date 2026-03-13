@@ -41,10 +41,8 @@ public class WorkService {
     }
     @Transactional
     public void create(List<Work> works) {
-        if (workExecutor.isShutdown()) {
-            return;
-        }
         WorkQueue workQueue = workExecutor.getWorkQueue();
+        List<Work> newWorks = new ArrayList<>();
         for (Work work : works) {
             if (workQueue.hasWork(work)) {
                 continue;
@@ -55,8 +53,9 @@ public class WorkService {
                 em.flush();
                 work.id = merged.id;
             }
-            workQueue.add(work);
+            newWorks.add(work);
         }
+        workQueue.addWorks(newWorks);
     }
 
     @Transactional
