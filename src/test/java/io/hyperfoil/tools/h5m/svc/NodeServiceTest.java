@@ -236,6 +236,93 @@ public class NodeServiceTest extends FreshDb {
     }
 
     @Test
+    public void calculateSqlAllJsonpathValues_null() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        RootNode rootNode = new RootNode();
+        rootNode.persist();
+        SqlJsonpathAllNode node = new SqlJsonpathAllNode("sqlall","$.miss",List.of(rootNode));
+        node.persist();
+        ValueEntity v1 = new ValueEntity();
+        v1.data = mapper.readTree("""
+                {
+                  "foo": [ { "key": "one"}, { "key" : "two" } ],
+                  "bar": [ { "k": "uno" }, { "k": "dos"}, { "k" : "tres"} ],
+                  "biz": "cat",
+                  "buz": "dog"
+                }
+                """);
+        v1.node=rootNode;
+        v1.persist();
+        tm.commit();
+
+        Map<String, ValueEntity> sourceValueMap = new HashMap<>();
+        sourceValueMap.put(rootNode.name,v1);
+
+        List<ValueEntity> calculated = nodeService.calculateSqlAllJsonpathValues(node,sourceValueMap,0);
+        assertNotNull(calculated);
+        assertEquals(0,calculated.size());
+    }
+
+    @Test
+    public void calculateSqlAllJsonpathValues_match() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        RootNode rootNode = new RootNode();
+        rootNode.persist();
+        SqlJsonpathAllNode node = new SqlJsonpathAllNode("sqlall","$.foo",List.of(rootNode));
+        node.persist();
+        ValueEntity v1 = new ValueEntity();
+        v1.data = mapper.readTree("""
+                {
+                  "foo": [ { "key": "one"}, { "key" : "two" } ],
+                  "biz": "cat"
+                }
+                """);
+        v1.node=rootNode;
+        v1.persist();
+        tm.commit();
+
+        Map<String, ValueEntity> sourceValueMap = new HashMap<>();
+        sourceValueMap.put(rootNode.name,v1);
+
+        List<ValueEntity> calculated = nodeService.calculateSqlAllJsonpathValues(node,sourceValueMap,0);
+        assertNotNull(calculated);
+        assertEquals(1,calculated.size());
+        assertTrue(calculated.getFirst().data.isArray());
+    }
+
+    @Test
+    public void calculateSqlJsonpathValues_partial_match() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        RootNode rootNode = new RootNode();
+        rootNode.persist();
+        SqlJsonpathNode hitNode = new SqlJsonpathNode("hit","$.biz",List.of(rootNode));
+        hitNode.persist();
+        SqlJsonpathNode missNode = new SqlJsonpathNode("miss","$.nope",List.of(rootNode));
+        missNode.persist();
+
+        ValueEntity v1 = new ValueEntity();
+        v1.data = mapper.readTree("""
+                { "biz": "cat", "buz": "dog" }
+                """);
+        v1.node=rootNode;
+        v1.persist();
+        tm.commit();
+
+        Map<String, ValueEntity> sourceValueMap = new HashMap<>();
+        sourceValueMap.put(rootNode.name,v1);
+
+        List<ValueEntity> hit = nodeService.calculateSqlJsonpathValues(hitNode,sourceValueMap,0);
+        List<ValueEntity> miss = nodeService.calculateSqlJsonpathValues(missNode,sourceValueMap,0);
+
+        assertEquals(1, hit.size(), "matching path should produce a value");
+        assertEquals("cat", hit.getFirst().data.asText());
+        assertEquals(0, miss.size(), "non-matching path should produce no values");
+    }
+
+    @Test
     public void calculateRelativeDifference_root() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException, IOException {
         tm.begin();
         NodeEntity rootNode = new RootNode();
