@@ -12,6 +12,9 @@ public class FolderEntity extends PanacheEntity {
     @OneToOne(cascade = {CascadeType.ALL})
     public NodeGroupEntity group;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    public Team team;
+
     @Override
     public final boolean equals(Object o) {
         if (!(o instanceof FolderEntity that)) {

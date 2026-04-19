@@ -6,6 +6,7 @@ import io.hyperfoil.tools.h5m.api.svc.FolderServiceInterface;
 import io.hyperfoil.tools.h5m.entity.FolderEntity;
 import io.hyperfoil.tools.h5m.entity.NodeEntity;
 import io.hyperfoil.tools.h5m.entity.NodeGroupEntity;
+import io.hyperfoil.tools.h5m.entity.Team;
 import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.entity.mapper.ApiMapper;
 import io.hyperfoil.tools.h5m.entity.work.Work;
@@ -32,6 +33,9 @@ public class FolderService implements FolderServiceInterface {
     WorkService workService;
 
     @Inject
+    AuthorizationService authService;
+
+    @Inject
     ApiMapper apiMapper;
 
     @Override
@@ -42,6 +46,18 @@ public class FolderService implements FolderServiceInterface {
         entity.group = new NodeGroupEntity(name); //TODO do we auto-create a nodeGroup?
         FolderEntity.persist(entity);
         return entity.id;
+    }
+
+    @Transactional
+    public long create(String name, String teamName) {
+        Team team = Team.find("name", teamName).firstResult();
+        if (team == null) {
+            throw new IllegalArgumentException("Team not found: " + teamName);
+        }
+        long id = create(name);
+        FolderEntity entity = FolderEntity.findById(id);
+        entity.team = team;
+        return id;
     }
 
     @Transactional

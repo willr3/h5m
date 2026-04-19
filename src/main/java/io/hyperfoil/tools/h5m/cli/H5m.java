@@ -27,7 +27,7 @@ import java.util.concurrent.TimeUnit;
 
 @QuarkusMain
 @TopCommand
-@CommandLine.Command(name="", mixinStandardHelpOptions = true,separator = " ", subcommands={CommandLine.HelpCommand.class, AutoComplete.GenerateCompletion.class, ListCmd.class, AddCmd.class, RemoveCmd.class})
+@CommandLine.Command(name="", mixinStandardHelpOptions = true,separator = " ", subcommands={CommandLine.HelpCommand.class, AutoComplete.GenerateCompletion.class, ListCmd.class, AddCmd.class, RemoveCmd.class, AdminCmd.class})
 public class H5m implements QuarkusApplication {
 
     //@Inject
