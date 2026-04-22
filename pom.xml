@@ -53,6 +53,7 @@
         <h5m.benchmark.warmup>5</h5m.benchmark.warmup>
 
         <h5m.cli.native>true</h5m.cli.native>
+        <lib.aesh>3.5</lib.aesh>
 
         <!-- dependencies -->
         <lib.duckdb>1.4.4.0</lib.duckdb>
@@ -172,6 +173,11 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-smallrye-openapi</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.aesh</groupId>
+            <artifactId>aesh</artifactId>
+            <version>${lib.aesh}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
