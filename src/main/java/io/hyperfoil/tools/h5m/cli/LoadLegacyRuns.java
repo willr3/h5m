@@ -48,6 +48,7 @@ public class LoadLegacyRuns implements Callable<Integer> {
         Map<Long,String> tests = new HashMap<>();
         ObjectMapper mapper = new ObjectMapper();
         try(Connection connection = ds.getConnection()){
+            connection.setAutoCommit(false);
             if(testId!=null && testId > -1){
                 try(PreparedStatement statement = connection.prepareStatement("select name from test where id = ?")){
                     statement.setLong(1, testId);
@@ -84,6 +85,7 @@ public class LoadLegacyRuns implements Callable<Integer> {
                 }
                 try (PreparedStatement ps = connection.prepareStatement("select id,data from run where testid = ? and trashed = false")) {
                     ps.setLong(1, testId);
+                    ps.setFetchSize(1);
                     try (ResultSet rs = ps.executeQuery()) {
                         while(rs.next()){
                             Long id = rs.getLong(1);

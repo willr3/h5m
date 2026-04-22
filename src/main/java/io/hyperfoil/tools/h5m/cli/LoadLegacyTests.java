@@ -73,6 +73,18 @@ public class LoadLegacyTests implements Callable<Integer> {
         public List<NodeEntity> getLabelNodes(String name){
             return getNodes(name).stream().filter(nodeToLabel::containsKey).collect(Collectors.toList());
         }
+        public void removeNodes(String name){
+            if(nodesByName.containsKey(name)){
+                List<NodeEntity> nodes = new ArrayList<>(nodesByName.get(name));
+                for(NodeEntity node : nodes){
+                    nodesByName.remove(name, node);
+                    Label label = nodeToLabel.remove(node);
+                    if(label != null){
+                        labelToNodes.remove(label);
+                    }
+                }
+            }
+        }
 
     }
 
@@ -338,6 +350,7 @@ public class LoadLegacyTests implements Callable<Integer> {
                 }
                 FolderEntity folder = new FolderEntity();
                 folder.name=test.name;
+                folder.group = new NodeGroupEntity(test.name);
 
                 NodeTracking nodeTracking = new NodeTracking();
 
@@ -368,8 +381,17 @@ public class LoadLegacyTests implements Callable<Integer> {
                     assert transformers.size()==transformids.size();
 
                     if(transformers.size() > 1){
-                        log("MORE THAN 1 TRANSFORMER FOR "+test);
-                    }else {
+                        long distinctTargets = transformers.stream().map(Transformer::targetUri).distinct().count();
+                        if(distinctTargets > 1){
+                            log("SKIPPING "+test+" : multiple transformers with different target schemas");
+                            continue;
+                        }
+                        // multiple transformers for the same target schema (schema version evolution), pick the one with the most extractors
+                        Transformer best = transformers.stream().max(Comparator.comparingInt(t -> t.extractors().size())).get();
+                        transformers = Set.of(best);
+                        log(2, "multiple transformers for same target, using " + best.name() + " (" + best.extractors().size() + " extractors)");
+                    }
+                    {
                         for (Transformer transformer : transformers) {
                             List<Extractor> renamedExtractors = new ArrayList<>();
                             Map<String,String> extractorAliases = new HashMap<>();
@@ -385,7 +407,7 @@ public class LoadLegacyTests implements Callable<Integer> {
                             folder.group.addNode(transform);
                             nodeTracking.addNode(transform);
 
-                            NodeEntity dataset = new JqNode("dataset",".[]",List.of(transform));
+                            NodeEntity dataset = new JqNode("dataset","if type == \"array\" then .[] else . end",List.of(transform));
                             dataset.group=folder.group;
                             nodeTracking.addNode(dataset);
 
@@ -402,8 +424,8 @@ public class LoadLegacyTests implements Callable<Integer> {
                             }
                             for(LabelDef labelDef : labelDefs){
                                 if(nodeTracking.hasNode(labelDef.name)){
-                                    //conflicting name for label but ignorable
-                                    System.err.println("transform label conflict for "+labelDef+"\n  conflicts with "+nodeTracking.getNodes(labelDef.name));
+                                    log(4,"de-duplicating "+labelDef.name+" (target schema label replaces transformer extractor)");
+                                    nodeTracking.removeNodes(labelDef.name);
                                 }
                                 try(PreparedStatement statement = connection.prepareStatement("select name,jsonpath,isarray from label_extractors where label_id = ?")){
                                     statement.setLong(1,labelDef.id);
@@ -693,9 +715,7 @@ public class LoadLegacyTests implements Callable<Integer> {
                         }
                     }
                 }
-                //TODO create a folderService method that persists an entity
-                FolderEntity.persist(folder);
-                //folderService.create(folder);
+                folderService.create(folder);
             }
         }
         finally {

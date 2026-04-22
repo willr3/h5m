@@ -45,6 +45,12 @@ public class FolderService implements FolderServiceInterface {
     }
 
     @Transactional
+    public long create(FolderEntity entity){
+        FolderEntity.persist(entity);
+        return entity.id;
+    }
+
+    @Transactional
     public FolderEntity read(long id){
         return FolderEntity.findById(id);
     }
