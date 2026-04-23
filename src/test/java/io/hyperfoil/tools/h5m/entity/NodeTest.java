@@ -1,5 +1,8 @@
 package io.hyperfoil.tools.h5m.entity;
 
+import io.hyperfoil.tools.h5m.api.Node;
+import io.hyperfoil.tools.h5m.api.NodeGroup;
+import io.hyperfoil.tools.h5m.api.NodeType;
 import io.hyperfoil.tools.h5m.entity.node.JqNode;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -104,4 +107,42 @@ public class NodeTest {
     }
 
 
+    @Test
+    public void hashCode_not_infinite_recursion(){
+        List<Node> groupSources = new ArrayList<>();
+        NodeGroup group = new NodeGroup(-1L,"group",new Node(-1L,"root","root", NodeType.ROOT,null,"",Collections.emptyList()),groupSources);
+
+        Node n = new Node(1L,"node","fqdn",NodeType.JQ,group,"$.",List.of(group.root()));
+
+        groupSources.add(n);
+        try {
+            int hash = n.hashCode();
+        }catch(StackOverflowError e){
+            fail("infinite recursion in Node.hashCode");
+        }
+
+    }
+
+    @Test
+    public void equals_not_infinite_recursion(){
+        List<Node> sources1 = new ArrayList<>();
+        List<Node> sources2 = new ArrayList<>();
+        NodeGroup g1 = new NodeGroup(-1L,"group",new Node(-1L,"root","root", NodeType.ROOT,null,"",Collections.emptyList()),sources1);
+        NodeGroup g2 = new NodeGroup(-1L,"group",new Node(-1L,"root","root", NodeType.ROOT,null,"",Collections.emptyList()),sources2);
+
+        Node n1 = new Node(1L,"node","fqdn",NodeType.JQ,g1,"$.",Collections.emptyList());
+        Node n2 = new Node(1L,"node","fqdn",NodeType.JQ,g2,"$.",Collections.emptyList());
+
+        sources1.add(n1);
+        sources2.add(n2);
+
+        try{
+            n1.equals(n2);
+            n1.equals(n1);
+            g1.equals(g2);
+            g1.equals(g1);
+        }catch(StackOverflowError e){
+            fail("infinite recursion in Node.equals");
+        }
+    }
 }
