@@ -44,6 +44,31 @@ public class FolderService implements FolderServiceInterface {
         return entity.id;
     }
 
+    /*        if(!value.isPersistent()){
+            ValueEntity merged = em.merge(value);
+            em.flush();
+            value.id = merged.id;
+            return merged;
+        }else{
+            value.persist();
+        }
+        return value;
+
+     */
+
+    @Transactional
+    public long create(FolderEntity entity){
+        if(!entity.isPersistent()){
+            FolderEntity merged = em.merge(entity);
+            em.flush();
+            entity.id = merged.id;
+            return entity.id;
+        }else{
+            entity.persist();
+        }
+        return entity.id;
+    }
+
     @Transactional
     public FolderEntity read(long id){
         return FolderEntity.findById(id);

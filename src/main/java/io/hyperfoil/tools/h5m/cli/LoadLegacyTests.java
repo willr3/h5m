@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.agroal.api.AgroalDataSource;
 import io.agroal.api.configuration.supplier.AgroalPropertiesReader;
+import io.hyperfoil.tools.h5m.api.NodeGroup;
 import io.hyperfoil.tools.h5m.entity.FolderEntity;
 import io.hyperfoil.tools.h5m.entity.NodeEntity;
 import io.hyperfoil.tools.h5m.entity.NodeGroupEntity;
@@ -15,6 +16,7 @@ import io.hyperfoil.tools.h5m.svc.NodeService;
 import io.hyperfoil.tools.yaup.HashedLists;
 import io.hyperfoil.tools.yaup.HashedSets;
 import io.hyperfoil.tools.yaup.StringUtil;
+import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Inject;
 import picocli.CommandLine;
 
@@ -338,6 +340,7 @@ public class LoadLegacyTests implements Callable<Integer> {
                 }
                 FolderEntity folder = new FolderEntity();
                 folder.name=test.name;
+                folder.group = new NodeGroupEntity(test.name);
 
                 NodeTracking nodeTracking = new NodeTracking();
 
@@ -435,7 +438,7 @@ public class LoadLegacyTests implements Callable<Integer> {
                     //no transform
                     HashedSets<String,String> schemaByPath = new HashedSets<>();
                     //get the jsonpath -> schema used across all runs in this test
-                    try (PreparedStatement statement = connection.prepareStatement("select p.paths,p.schema from run_schema_paths p where testid = ?")) {
+                    try (PreparedStatement statement = connection.prepareStatement("select p.paths, p.schema from run_schema_paths p where testid = ?")) {
                         statement.setLong(1,test.id);
                         try(ResultSet rs = statement.executeQuery()){
                             while(rs.next()){
@@ -583,7 +586,7 @@ public class LoadLegacyTests implements Callable<Integer> {
                     }
                 }
                 //all variables are either aliases (when there isn't a calculation) or a Node
-                //fingerprints...
+                //create fingerprint nodes
                 String fingerprint_filter = "";
                 try(PreparedStatement statement = connection.prepareStatement("select fingerprint_labels, fingerprint_filter, timeline_labels, timeline_function from test where id = ?")){
                     ObjectMapper mapper = new ObjectMapper();
@@ -599,7 +602,7 @@ public class LoadLegacyTests implements Callable<Integer> {
                                 for (int i = 0; i < fingerprint_labels.size(); i++) {
                                     String labelName = StringUtil.removeQuotes(fingerprint_labels.get(i).toString());
                                     if (nodeTracking.hasNode(labelName)) {
-                                        List<NodeEntity> foundNodes = nodeTracking.getNodes(labelName);
+                                        List<NodeEntity> foundNodes = nodeTracking.getLabelNodes(labelName);
                                         if (foundNodes.size() == 1) {
                                             fingerprintNodes.add(foundNodes.get(0));
                                         } else {
@@ -694,8 +697,8 @@ public class LoadLegacyTests implements Callable<Integer> {
                     }
                 }
                 //TODO create a folderService method that persists an entity
-                FolderEntity.persist(folder);
-                //folderService.create(folder);
+                //FolderEntity.persist(folder);
+                folderService.create(folder);
             }
         }
         finally {
