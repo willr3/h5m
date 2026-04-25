@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import io.hyperfoil.tools.h5m.api.Node;
 import io.hyperfoil.tools.h5m.api.NodeType;
 import io.hyperfoil.tools.h5m.api.svc.NodeServiceInterface;
+import io.quarkus.security.Authenticated;
+import jakarta.annotation.security.PermitAll;
 import jakarta.inject.Inject;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -25,6 +27,7 @@ public class NodeResource {
     NodeServiceInterface nodeService;
 
     @POST
+    @Authenticated
     @Operation(description = "Create a new node with an operation")
     public Long create(
             @QueryParam("name") @NotEmpty String name,
@@ -36,6 +39,7 @@ public class NodeResource {
 
     @POST
     @Path("configured")
+    @Authenticated
     @Operation(description = "Create a new node with sources and configuration")
     public Long createConfigured(
             @QueryParam("name") @NotEmpty String name,
@@ -54,6 +58,7 @@ public class NodeResource {
 
     @DELETE
     @Path("{id}")
+    @Authenticated
     @Operation(description = "Delete a node by its ID")
     public void delete(@PathParam("id") Long nodeId) {
         nodeService.delete(nodeId);
@@ -61,6 +66,7 @@ public class NodeResource {
 
     @GET
     @Path("find")
+    @PermitAll
     @Operation(description = "Find nodes by FQDN within a specific group")
     public List<Node> findNodeByFqdn(
             @QueryParam("name") @Parameter(description = "FQDN of the node") String name,

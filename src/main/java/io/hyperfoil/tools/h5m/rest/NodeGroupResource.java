@@ -2,6 +2,8 @@ package io.hyperfoil.tools.h5m.rest;
 
 import io.hyperfoil.tools.h5m.api.NodeGroup;
 import io.hyperfoil.tools.h5m.api.svc.NodeGroupServiceInterface;
+import io.quarkus.security.Authenticated;
+import jakarta.annotation.security.PermitAll;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -19,6 +21,7 @@ public class NodeGroupResource {
 
     @GET
     @Path("{name}")
+    @PermitAll
     @Operation(description = "Retrieve a node group by its name")
     public NodeGroup byName(@PathParam("name") String groupName) {
         return nodeGroupService.byName(groupName);
@@ -26,6 +29,7 @@ public class NodeGroupResource {
 
     @DELETE
     @Path("{id}")
+    @Authenticated
     @Operation(description = "Delete a node group by its ID")
     public void delete(@PathParam("id") Long groupId) {
         nodeGroupService.delete(groupId);

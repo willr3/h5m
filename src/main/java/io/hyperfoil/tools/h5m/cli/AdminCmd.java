@@ -14,6 +14,9 @@ import java.util.concurrent.Callable;
                 AdminListTeams.class,
                 AdminListUsers.class,
                 AdminAddMember.class,
+                AdminCreateApiKey.class,
+                AdminListApiKeys.class,
+                AdminRevokeApiKey.class,
         }
 )
 public class AdminCmd implements Callable<Integer> {

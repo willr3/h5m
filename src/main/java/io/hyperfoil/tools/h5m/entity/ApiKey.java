@@ -15,7 +15,7 @@ public class ApiKey extends PanacheEntity {
     @Column(name = "key_hash")
     public String keyHash; // SHA-256 hex
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     public User user;
 
     public String description;
