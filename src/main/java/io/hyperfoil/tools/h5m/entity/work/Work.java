@@ -128,14 +128,12 @@ public class Work  extends PanacheEntity implements Runnable, Comparable<Work>{
             if(!sameNode){
                 return false;
             }
-            if (activeNode == null) {
-                if (this.sourceNodes.size() != work.sourceNodes.size()) {
+            if (this.sourceNodes.size() != work.sourceNodes.size()) {
+                return false;
+            }
+            for (int i = 0; i < sourceNodes.size(); i++) {
+                if (!sourceNodes.get(i).equals(work.sourceNodes.get(i))) {
                     return false;
-                }
-                for (int i = 0; i < sourceNodes.size(); i++) {
-                    if (!sourceNodes.get(i).equals(work.sourceNodes.get(i))) {
-                        return false;
-                    }
                 }
             }
             if(cumulative){

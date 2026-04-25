@@ -7,6 +7,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
@@ -56,6 +57,15 @@ public class FreshDb {
                     stmt.executeUpdate("DELETE from team");
                 }
             }
+        }
+    }
+
+    protected long countRows(String table) throws SQLException {
+        try (Connection conn = ds.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM " + table)) {
+            rs.next();
+            return ((Number) rs.getObject(1)).longValue();
         }
     }
 }

@@ -7,6 +7,8 @@ import java.util.concurrent.TimeUnit;
  */
 public interface WorkServiceInterface {
 
+    boolean isIdle();
+
     /**
      * Terminates the current work process within a specified timeout.
      *

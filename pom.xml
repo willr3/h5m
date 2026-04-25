@@ -385,8 +385,10 @@
                 <version>${build.maven-surefire-plugin}</version>
                 <configuration>
                     <argLine>@{argLine}</argLine>
-                    <excludes>**/*IT.java</excludes>
-                    <excludes>%regex[.*IT.class]</excludes>
+                    <excludes>
+                        <exclude>**/*IT.java</exclude>
+                        <exclude>**/benchmark/**</exclude>
+                    </excludes>
                     <systemPropertyVariables>
                         <projectArtifactId>${project.artifactId}-${project.version}</projectArtifactId>
                         <projectDir>${project.build.outputDirectory}</projectDir>

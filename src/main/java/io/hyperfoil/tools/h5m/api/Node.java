@@ -16,22 +16,24 @@ public record Node(
         @Schema(description = "Source dependency nodes") List<Node> sources) {
 
     @Override
+    public int hashCode() {
+        if (id != null) {
+            return Objects.hash(id, name, type);
+        }
+        return Objects.hash(name, type, operation, group != null ? group.id() : null);
+    }
+
+    @Override
     public boolean equals(Object o) {
         if (o instanceof Node n) {
             if (id != null && n.id != null) {
                 return id.equals(n.id);
             }
             return Objects.equals(name, n.name)
-                    && Objects.equals(type, n.type)
-                    && Objects.equals(operation, n.operation)
-                    && Objects.equals(group != null ? group.id() : null, n.group != null ? n.group.id() : null);
+                && Objects.equals(type, n.type)
+                && Objects.equals(operation, n.operation)
+                && Objects.equals(group != null ? group.id() : null, n.group != null ? n.group.id() : null);
         }
         return false;
     }
-
-    @Override
-    public int hashCode(){
-        return Objects.hash(id,name,type,group!=null ? group.id() : null,operation,sources);
-    }
-
 }

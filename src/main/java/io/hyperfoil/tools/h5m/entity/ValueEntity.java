@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.persistence.*;
-import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -56,10 +55,10 @@ public class ValueEntity extends PanacheEntity {
             name="value_edge",
             joinColumns = @JoinColumn(name = "child_id"),
             inverseJoinColumns = @JoinColumn(name = "parent_id"),
-            uniqueConstraints = @UniqueConstraint(columnNames = {"child_id", "parent_id"})
+            uniqueConstraints = @UniqueConstraint(columnNames = {"child_id", "parent_id"}),
+            indexes = @Index(name = "idx_value_edge_parent", columnList = "parent_id")
     )
     @OrderColumn(name = "idx")
-    @BatchSize(size = 25)
     public List<ValueEntity> sources;
 
     public ValueEntity(){

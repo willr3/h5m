@@ -15,14 +15,27 @@ public class KahnDagSort {
      * @param <T>
      */
     public static <T> List<T> sort(List<T> list, Function<T,List<T>> getDependencies){
-        if(list == null || list.isEmpty()){
+        if(list == null || list.size() <= 1){
             return list;
         }
-        // Pre-compute adjacency map: call getDependencies once per item instead of twice
         Map<T, List<T>> adjacencyMap = new HashMap<>(list.size() * 2);
         for (int i = 0, size = list.size(); i < size; i++) {
             T item = list.get(i);
             adjacencyMap.put(item, getDependencies.apply(item));
+        }
+        // Check if any item depends on another item in the list — if not, sorting is a no-op
+        boolean hasInternalDeps = false;
+        for (int i = 0, size = list.size(); i < size && !hasInternalDeps; i++) {
+            List<T> deps = adjacencyMap.get(list.get(i));
+            for (int j = 0, dSize = deps.size(); j < dSize; j++) {
+                if (adjacencyMap.containsKey(deps.get(j))) {
+                    hasInternalDeps = true;
+                    break;
+                }
+            }
+        }
+        if (!hasInternalDeps) {
+            return list;
         }
         Map<T, AtomicInteger> inDegrees = new HashMap<>(list.size() * 2);
         for (int i = 0, size = list.size(); i < size; i++) {

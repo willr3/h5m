@@ -5,8 +5,11 @@ import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.entity.work.Work;
 import io.hyperfoil.tools.h5m.queue.WorkQueue;
 import io.hyperfoil.tools.h5m.queue.WorkQueueExecutor;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
 import io.quarkus.runtime.StartupEvent;
 import io.hyperfoil.tools.h5m.event.ChangeDetectedEvent;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
 import jakarta.enterprise.event.Observes;
@@ -17,8 +20,10 @@ import jakarta.transaction.Synchronization;
 import jakarta.transaction.Transactional;
 import jakarta.transaction.TransactionManager;
 import io.quarkus.logging.Log;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.hibernate.Hibernate;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -43,15 +48,38 @@ public class WorkService implements WorkServiceInterface {
     ValueService valueService;
 
     @Inject
-    WorkQueueExecutor workExecutor;
+    MeterRegistry registry;
 
     @Inject
     Event<ChangeDetectedEvent> changeDetectedEvent;
 
-    //resumes unfinished work from previous execution
+    @ConfigProperty(name = "h5m.worker.core", defaultValue = "1")
+    int corePoolSize;
+
+    @ConfigProperty(name = "h5m.worker.maxPoolSize", defaultValue = "50")
+    int maxPoolSize;
+
+    @ConfigProperty(name = "h5m.worker.keepalive", defaultValue = "PT60S")
+    Duration keepAlive;
+
+    private WorkQueueExecutor workExecutor;
+
     @Transactional
     void onStart(@Observes StartupEvent ev) {
+        workExecutor = new WorkQueueExecutor(corePoolSize, maxPoolSize, keepAlive.toSeconds(), TimeUnit.SECONDS, new WorkQueue());
+        workExecutor.allowCoreThreadTimeOut(false);
+        workExecutor.prestartAllCoreThreads();
+        new ExecutorServiceMetrics(workExecutor, "h5mWorkExecutor", null).bindTo(registry);
+
+        //resumes unfinished work from previous execution
         workExecutor.getWorkQueue().addWorks(Work.listAll());
+    }
+
+    @PreDestroy
+    void shutdown() {
+        if (workExecutor != null) {
+            workExecutor.shutdown();
+        }
     }
     @Transactional
     public void create(List<Work> works) {
@@ -90,6 +118,7 @@ public class WorkService implements WorkServiceInterface {
                     work.activeNode.dependsOn(work.activeNode);
                 }
             }
+            workQueue.incrementDeferred(toQueue.size());
             try {
                 tm.getTransaction().registerSynchronization(new Synchronization() {
                     @Override
@@ -104,9 +133,11 @@ public class WorkService implements WorkServiceInterface {
                             Log.warnf("Transaction rolled back (status=%d), %d Work items not queued",
                                     status, toQueue.size());
                         }
+                        workQueue.decrementDeferred(toQueue.size());
                     }
                 });
             } catch (Exception e) {
+                workQueue.decrementDeferred(toQueue.size());
                 throw new IllegalStateException(
                         "Failed to register transaction synchronization; refusing to queue before commit", e);
             }
@@ -121,6 +152,11 @@ public class WorkService implements WorkServiceInterface {
     }
 
     @Override
+    public boolean isIdle() {
+        return workExecutor.getWorkQueue().isIdle();
+    }
+
+    @Override
     public boolean terminate(long timeout, TimeUnit unit) throws InterruptedException {
         workExecutor.shutdown();
         return workExecutor.awaitTermination(timeout, unit);
@@ -129,6 +165,7 @@ public class WorkService implements WorkServiceInterface {
     @Transactional
     public void execute(Work w){
         WorkQueue workQueue = workExecutor.getWorkQueue();
+        boolean decrementDeferred = false;
         try {
             Work work = em.find(Work.class, w.id);
             if (work == null) {
@@ -190,6 +227,18 @@ public class WorkService implements WorkServiceInterface {
             }
             //not in the finally so that it only happens if the work succeeds
             delete(work);
+
+            // Defer decrement until after this transaction commits so that
+            // isIdle() cannot return true while the DB commit is still in flight.
+            if(w.activeNode!=null){
+                decrementDeferred = true;
+                tm.getTransaction().registerSynchronization(new Synchronization() {
+                    @Override public void beforeCompletion() {}
+                    @Override public void afterCompletion(int status) {
+                        workQueue.decrement(w);
+                    }
+                });
+            }
         }catch( Exception e){
             //TODO how to handle the exception, adding it back to the todo list
             System.err.println("WorkRunner caught: "+e.getMessage()+"\n work="+w);
@@ -202,7 +251,9 @@ public class WorkService implements WorkServiceInterface {
                 workQueue.add(w);
             }
         } finally {
-            if(w.activeNode!=null){
+            // Only decrement immediately if we couldn't register the afterCompletion
+            // (early return for "not found", or exception before registration)
+            if(!decrementDeferred && w.activeNode!=null){
                 workQueue.decrement(w);
             }
         }

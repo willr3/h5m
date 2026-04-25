@@ -9,7 +9,6 @@ import io.hyperfoil.tools.h5m.entity.NodeGroupEntity;
 import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.entity.node.JqNode;
 import io.hyperfoil.tools.h5m.entity.work.Work;
-import io.hyperfoil.tools.h5m.queue.WorkQueueExecutor;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.transaction.TransactionManager;
@@ -34,7 +33,7 @@ public class WorkQueueRaceTest extends FreshDb {
     FolderService folderService;
 
     @Inject
-    WorkQueueExecutor workExecutor;
+    WorkService workService;
 
     @Inject
     TransactionManager tm;
@@ -158,7 +157,7 @@ public class WorkQueueRaceTest extends FreshDb {
             if (System.currentTimeMillis() > deadline) {
                 fail("Work queue drain timed out after " + timeoutMs + "ms");
             }
-            if (workExecutor.getWorkQueue().isIdle() && Work.count() == 0) {
+            if (workService.isIdle() && Work.count() == 0) {
                 stableChecks++;
             } else {
                 stableChecks = 0;

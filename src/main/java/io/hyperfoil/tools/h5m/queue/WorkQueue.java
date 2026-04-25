@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -26,6 +27,7 @@ public class WorkQueue implements BlockingQueue<Runnable> {
     //private Counters<NodeEntity> counters = new Counters<>();
     private Set<Work> activeWork = new ConcurrentHashSet<>();
     private Set<Work> pendingWork = new ConcurrentHashSet<>();
+    private final AtomicInteger deferredCount = new AtomicInteger(0);
 
     private final ReentrantLock takeLock = new ReentrantLock();
     private final Condition notEmpty = takeLock.newCondition();
@@ -39,10 +41,18 @@ public class WorkQueue implements BlockingQueue<Runnable> {
     public boolean isIdle(){
         takeLock.lock();
         try {
-            return activeWork.isEmpty() && runnables.isEmpty();
+            return activeWork.isEmpty() && runnables.isEmpty() && deferredCount.get() == 0;
         } finally {
             takeLock.unlock();
         }
+    }
+
+    public void incrementDeferred(int count) {
+        deferredCount.addAndGet(count);
+    }
+
+    public void decrementDeferred(int count) {
+        deferredCount.addAndGet(-count);
     }
 
     public void decrement(Work work){
@@ -175,7 +185,14 @@ public class WorkQueue implements BlockingQueue<Runnable> {
         takeLock.lock();
         try {
             boolean wasEmpty = runnables.isEmpty();
-            List<Work> acceptedWork = works.stream().filter(w -> !hasWork(w)).peek(w-> {
+            List<Work> acceptedWork = works.stream().filter(w -> {
+                boolean has = hasWork(w);
+                if (has) {
+                    log.warn("addWorks: REJECTED duplicate work id={} hash={} pending={} active={}",
+                            w.id, w.hashCode(), isPending(w), isActive(w));
+                }
+                return !has;
+            }).peek(w-> {
                 pendingWork.add(w);
                 runnables.add(w);
                 assert isPending(w);
