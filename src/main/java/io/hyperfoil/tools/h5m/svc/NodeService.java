@@ -767,7 +767,7 @@ public class NodeService implements NodeServiceInterface {
             System.err.println("Error occurred reading parameters from js function\n"+node.operation);
             return Collections.emptyList();
         }
-        List<JsonNode> input = JsNode.createParameters(node.operation, sourceValues);
+        List<JsonNode> input = JsNode.createParameters(node.operation, sourceValues, node.sources.size());
         Object result = null;
         try(Context context = Context.newBuilder("js").engine(Engine.newBuilder("js").option("engine.WarnInterpreterOnly", "false").build())
                 .allowExperimentalOptions(true)
