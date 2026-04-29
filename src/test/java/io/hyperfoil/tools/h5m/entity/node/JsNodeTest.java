@@ -128,7 +128,7 @@ public class JsNodeTest {
                 "b",new ValueEntity(null,null,mapper.readTree("2")),
                 "c",new ValueEntity(null,null,mapper.readTree("3"))
         );
-        List<JsonNode> params = JsNode.createParameters("function({a,b},c){}",values);
+        List<JsonNode> params = JsNode.createParameters("function({a,b},c){}",values,3);
         assertNotNull(params,"return should not be null");
         assertEquals(2,params.size(),"expected 2 values: "+params);
         JsonNode node = params.get(0);

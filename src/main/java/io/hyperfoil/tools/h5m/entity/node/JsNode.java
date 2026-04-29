@@ -64,7 +64,7 @@ public class JsNode extends NodeEntity {
         return rtrn;
     }
 
-    public static List<JsonNode> createParameters(String function, Map<String, ValueEntity> sourceValues){
+    public static List<JsonNode> createParameters(String function, Map<String, ValueEntity> sourceValues,int sourceCount){
         List<String> params = JsNode.getParameterNames(function,false);
         List<JsonNode> rtrn = new ArrayList<>();
         ObjectMapper mapper = new ObjectMapper();
@@ -99,7 +99,17 @@ public class JsNode extends NodeEntity {
                 }
             }else{
                 if(!sourceValues.containsKey(param)){
-                    System.err.println("unable to find parameter value for " + param);
+                    if(params.size() ==1 && !sourceValues.isEmpty()){
+                        if(sourceCount == 1){
+                            rtrn.add(sourceValues.values().iterator().next().data);
+                        }else{
+                            ObjectNode obj = mapper.createObjectNode();
+                            sourceValues.forEach((k,v) -> obj.set(k, v.data));
+                            rtrn.add(obj);
+                        }
+                    }else{
+                        System.err.println("unable to find parameter value for " + param);
+                    }
                 }else{
                     if(currentNode != null){
                         currentNode.set(param,sourceValues.get(param).data);

@@ -204,6 +204,66 @@ public class NodeServiceTest extends FreshDb {
     }
 
     @Test
+    public void calculateJsValue_arrow_different_parameter_name() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException, IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        NodeEntity rootNode = new RootNode();
+        rootNode.name="root";
+        rootNode.persist();
+        ValueEntity rootValue = new ValueEntity(null,rootNode,new TextNode("Bright"));
+        rootValue.persist();
+        JsNode jsNode = new JsNode("js","arg=>'Hi, '+arg");
+        jsNode.sources=List.of(rootNode);
+        jsNode.persist();
+        tm.commit();
+
+        assertEquals(1,jsNode.sources.size(),"jsNode should have a source");
+
+        Map<String, ValueEntity> combined = Map.of("root",rootValue);
+        List<ValueEntity> result = nodeService.calculateJsValues(jsNode, combined,0);
+
+        assertNotNull(result);
+        assertEquals(1,result.size());
+        ValueEntity first = result.get(0);
+        assertNotNull(first);
+        JsonNode data = first.data;
+        assertNotNull(data);
+        assertEquals("Hi, Bright",data.asText());
+    }
+
+    @Test
+    public void calculateJsValue_arrow_multiple_source_nodes() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException, IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        NodeEntity rootNode = new RootNode();
+        rootNode.name="root";
+
+        rootNode.persist();
+
+        JsNode otherSource = new JsNode("other","arg=>arg");
+        otherSource.persist();
+        ValueEntity rootValue = new ValueEntity(null,rootNode,new TextNode("Bright"));
+        rootValue.persist();
+        JsNode jsNode = new JsNode("js","arg=>arg");
+        jsNode.sources = List.of(rootNode,otherSource);
+        jsNode.persist();
+        tm.commit();
+
+        Map<String, ValueEntity> combined = Map.of("root",rootValue);
+        List<ValueEntity> result = nodeService.calculateJsValues(jsNode, combined,0);
+
+        assertNotNull(result);
+        assertEquals(1,result.size());
+        ValueEntity first = result.get(0);
+        assertNotNull(first);
+        JsonNode data = first.data;
+        assertNotNull(data);
+        assertInstanceOf(ObjectNode.class,data,"data should be a json object but was :"+data.toString());
+    }
+
+
+
+    @Test
     public void calculateSqlJsonpathValues() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
         ObjectMapper mapper = new ObjectMapper();
         tm.begin();
