@@ -343,6 +343,47 @@ public class LoadLegacyTestsTest {
         assertInstanceOf(JqNode.class,entity.sources.get(0),"source should be a JQ combiner node");
     }
     @Test
+    public void createNodesFromLabel_multi_extractor_single_param_creates_jq_combiner(){
+        // Mirrors the rhivos "Autobench Multi Core" pattern:
+        // - scalar extractor "workload" matches every dataset item (e.g., 10 values)
+        // - array extractor "results" only matches items with results (e.g., 1 value)
+        // Separate extractor nodes would produce mismatched counts (10 vs 1),
+        // causing calculateSourceValuePermutations to return null.
+        // The JQ combiner extracts both fields from the same input in one expression,
+        // producing one combined object per dataset item — no permutation needed.
+        LoadLegacyTests.Extractor workload = new LoadLegacyTests.Extractor("workload","$.workload",false);
+        LoadLegacyTests.Extractor results = new LoadLegacyTests.Extractor("results","$.results.*",true);
+        LoadLegacyTests.Label label = new LoadLegacyTests.Label(-1,"Autobench",
+                "v => v[\"results\"].reduce((a,b) => a+b) / v[\"results\"].length",
+                List.of(workload, results));
+
+        NodeGroupEntity group = new NodeGroupEntity();
+        LoadLegacyTests.NodeTracking tracker = new LoadLegacyTests.NodeTracking();
+
+        NodeEntity entity = loadLegacyTests.createNodesFromLabel(label,group.root,group,tracker,new HashSet<>());
+
+        assertNotNull(entity);
+        assertInstanceOf(JsNode.class, entity);
+        assertEquals("Autobench", entity.name);
+
+        // Single source: the JQ combiner node, not the 2 raw extractors
+        assertEquals(1, entity.sources.size(), "should have 1 source (JQ combiner), not 2 separate extractors");
+        NodeEntity combiner = entity.sources.get(0);
+        assertInstanceOf(JqNode.class, combiner);
+        assertTrue(combiner.name.endsWith("_extract"), "combiner name should end with _extract");
+
+        // The combiner's JQ expression builds an object with both extractor fields
+        // Scalar extractor uses "// null", array extractor uses "try [...] catch null"
+        assertTrue(combiner.operation.contains("workload"), "JQ expression should reference workload extractor");
+        assertTrue(combiner.operation.contains("results"), "JQ expression should reference results extractor");
+        assertTrue(combiner.operation.contains("// null"), "scalar extractor should use // null fallback");
+        assertTrue(combiner.operation.contains("try"), "array extractor should use try/catch for error suppression");
+
+        // The combiner sources from the parent (group root in this test)
+        assertEquals(1, combiner.sources.size());
+        assertEquals(group.root, combiner.sources.get(0));
+    }
+    @Test
     public void createFolder_two_transformers_creates_two_pipelines() {
         LoadLegacyTests.Extractor ext1 = new LoadLegacyTests.Extractor("data", "$.values[*]", true);
         LoadLegacyTests.Extractor ext2 = new LoadLegacyTests.Extractor("data", "$.data.values[*]", true);
