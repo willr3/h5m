@@ -297,10 +297,11 @@ public class LoadLegacyTests implements Callable<Integer> {
                         Extractor ext = label.extractors.get(i);
                         if (i > 0) jqExpr.append(", ");
                         String jqPath = jsonpathToJq(ext.jsonpath());
+                        String quotedName = "\"" + ext.name().replace("\"", "\\\"") + "\"";
                         if (ext.isArray()) {
-                            jqExpr.append(ext.name()).append(": (try [").append(jqPath).append("] catch null)");
+                            jqExpr.append(quotedName).append(": (try [").append(jqPath).append("] catch null)");
                         } else {
-                            jqExpr.append(ext.name()).append(": (").append(jqPath).append(" // null)");
+                            jqExpr.append(quotedName).append(": (").append(jqPath).append(" // null)");
                         }
                     }
                     jqExpr.append("}");
