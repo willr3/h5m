@@ -338,7 +338,9 @@ public class LoadLegacyTestsTest {
         assertInstanceOf(JsNode.class,entity,"Should create a JsNode that returns combined values");
         assertNotNull(entity.operation);
         assertFalse(JsNode.isNullEmptyOrIdentityFunction(entity.operation),"js node should have an operation that returns the input");
-        assertEquals(2,entity.sources.size(),"both extractors should be sources for the node");
+        // Multi-extractor single-param labels now use a JQ combiner as their single source
+        assertEquals(1,entity.sources.size(),"label should have 1 source (the JQ combiner node)");
+        assertInstanceOf(JqNode.class,entity.sources.get(0),"source should be a JQ combiner node");
     }
     @Test
     public void createFolder_two_transformers_creates_two_pipelines() {
@@ -358,21 +360,19 @@ public class LoadLegacyTestsTest {
         assertNotNull(folder);
         assertNotNull(folder.group);
 
-        // Should have 2 transformer nodes, 2 dataset nodes, 2 label nodes (one per dataset)
+        // Should have 2 transformer nodes + 1 coalesce node, 1 dataset node, 1 label node
         long transformerCount = folder.group.sources.stream().filter(v -> v instanceof JsNode && v.name.startsWith("transformer_")).count();
-        long datasetCount = folder.group.sources.stream().filter(v -> v instanceof JqNode && v.name.startsWith("dataset")).count();
-        assertEquals(2, transformerCount, "Expect 2 transformer nodes\n" + folder.group.sources.stream().map(NodeEntity::toString).collect(Collectors.joining("\n")));
-        assertEquals(2, datasetCount, "Expect 2 dataset nodes\n" + folder.group.sources.stream().map(NodeEntity::toString).collect(Collectors.joining("\n")));
+        long datasetCount = folder.group.sources.stream().filter(v -> v instanceof JqNode && v.name.equals("dataset")).count();
+        assertEquals(3, transformerCount, "Expect 2 transformer nodes + 1 coalesce\n" + folder.group.sources.stream().map(NodeEntity::toString).collect(Collectors.joining("\n")));
+        assertEquals(1, datasetCount, "Expect 1 dataset node (after coalesced transformers)\n" + folder.group.sources.stream().map(NodeEntity::toString).collect(Collectors.joining("\n")));
 
-        // Dataset nodes should have different names (suffixed with transformer id)
-        List<String> datasetNames = folder.group.sources.stream()
-                .filter(v -> v instanceof JqNode && v.name.startsWith("dataset"))
-                .map(v -> v.name).sorted().toList();
-        assertNotEquals(datasetNames.get(0), datasetNames.get(1), "dataset names should be distinct");
+        // Coalesce node should exist and source from both transformers
+        long coalesceCount = folder.group.sources.stream().filter(v -> v.name.equals("transformer_coalesce")).count();
+        assertEquals(1, coalesceCount, "Expect 1 coalesce node");
     }
 
     @Test
-    public void createFolder_two_transformers_labels_exist_for_each_dataset() {
+    public void createFolder_two_transformers_labels_created_once() {
         LoadLegacyTests.Extractor ext1 = new LoadLegacyTests.Extractor("score", "$.scores[*]", true);
         LoadLegacyTests.Extractor ext2 = new LoadLegacyTests.Extractor("score", "$.data.scores[*]", true);
 
@@ -386,9 +386,9 @@ public class LoadLegacyTestsTest {
 
         FolderEntity folder = loadLegacyTests.createFolder(test);
 
-        // Labels named "Score" should exist for each dataset (2 copies)
+        // Labels are created once against the coalesced dataset (not per-dataset)
         long scoreCount = folder.group.sources.stream().filter(v -> v.name.equals("Score")).count();
-        assertEquals(2, scoreCount, "Expect 2 'Score' label nodes (one per dataset)\n" + folder.group.sources.stream().map(NodeEntity::toString).collect(Collectors.joining("\n")));
+        assertEquals(1, scoreCount, "Expect 1 'Score' label node (created once against coalesced dataset)\n" + folder.group.sources.stream().map(NodeEntity::toString).collect(Collectors.joining("\n")));
     }
 
     @Test
