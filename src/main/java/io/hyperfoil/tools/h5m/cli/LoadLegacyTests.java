@@ -321,12 +321,13 @@ public class LoadLegacyTests implements Callable<Integer> {
                 });
                 String function = NodeService.renameParameters(transformer.function,extractorAliases);
                 //not using function and renamedExtractors
-                Label l  = new Label(-1,"transformer_"+transformer.name.replaceAll(":","_"),transformer.function,transformer.extractors);
+                String transformerSuffix = test.transformers().size() > 1 ? "_" + transformer.id() : "";
+                Label l  = new Label(-1,"transformer_"+transformer.name.replaceAll(":","_") + transformerSuffix,transformer.function,transformer.extractors);
                 NodeEntity transform = createNodesFromLabel(l,folder.group.root,folder.group,nodeTracking,new HashSet<>());
                 folder.group.addNode(transform);
                 nodeTracking.addNode(transform);
 
-                NodeEntity dataset = new JqNode("dataset",".[]",List.of(transform));
+                NodeEntity dataset = new JqNode("dataset" + transformerSuffix,"if type == \"array\" then .[] else . end",List.of(transform));
                 folder.group.addNode(dataset);
                 nodeTracking.addNode(dataset);
 
@@ -409,16 +410,13 @@ public class LoadLegacyTests implements Callable<Integer> {
                 if(variable.labels().size()==1){
                     String labelName = StringUtil.removeQuotes(variable.labels().get(0)).replaceAll(":","_");
                     List<NodeEntity> found = nodeTracking.getLabelNodes(labelName);
-                    if(found.size()==1){
+                    if(found.size()>=1){
                         variableIdToNode.put(variable.id(),found.get(0));
-                    }else {
-                        System.out.println("FAILED TO MAKE VARIABLE "+variable.id()+" for "+test.name+". Found count for "+labelName+" is "+found.size()+"\n   "+found.stream().map(NodeEntity::toString).collect(Collectors.joining("\n   "))+"\n labels="+variable.labels());
                         if(found.size()>1){
-
-                            System.out.println(printTest(test));
-
-                            System.exit(1);
+                            log(4,"variable "+variable.name()+" matched "+found.size()+" label nodes, using first");
                         }
+                    }else {
+                        System.out.println("FAILED TO MAKE VARIABLE "+variable.id()+" for "+test.name+". Found count for "+labelName+" is 0\n labels="+variable.labels());
                     }
                 }else{
                     //THIS IS NOT EXPECTED
@@ -455,10 +453,11 @@ public class LoadLegacyTests implements Callable<Integer> {
                     String labelName = StringUtil.removeQuotes(fingerprint.labels().get(i));
                     if (nodeTracking.hasNode(labelName)) {
                         List<NodeEntity> foundNodes = nodeTracking.getLabelNodes(labelName);
-                        if (foundNodes.size() == 1) {
+                        if (foundNodes.size() >= 1) {
                             fingerprintNodes.add(foundNodes.get(0));
-                        } else {
-                            // report the ambiguity?
+                            if (foundNodes.size() > 1) {
+                                log(4, "fingerprint label " + labelName + " matched " + foundNodes.size() + " nodes, using first");
+                            }
                         }
                     }else{
                         System.out.println("missing node "+labelName+" for Fingerprint_label on test "+testId+"="+test.name);
@@ -666,8 +665,9 @@ public class LoadLegacyTests implements Callable<Integer> {
                     assert transformers.size()==transformids.size();
 
                     if(transformers.size() > 1){
-                        log("MORE THAN 1 TRANSFORMER FOR "+test);
-                    }else {
+                        log(2, "multiple transformers (" + transformers.size() + ") for same target, creating pipeline for each");
+                    }
+                    {
                         for (Transformer transformer : transformers) {
                             List<LabelDef> labelDefs = new ArrayList<>();
                             //Set<String> labelNames = labelDefs.stream().map(LabelDef::name).collect(Collectors.toSet());
