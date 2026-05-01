@@ -340,6 +340,96 @@ public class LoadLegacyTestsTest {
         assertFalse(JsNode.isNullEmptyOrIdentityFunction(entity.operation),"js node should have an operation that returns the input");
         assertEquals(2,entity.sources.size(),"both extractors should be sources for the node");
     }
+    @Test
+    public void createFolder_two_transformers_creates_two_pipelines() {
+        LoadLegacyTests.Extractor ext1 = new LoadLegacyTests.Extractor("data", "$.values[*]", true);
+        LoadLegacyTests.Extractor ext2 = new LoadLegacyTests.Extractor("data", "$.data.values[*]", true);
+
+        LoadLegacyTests.Label label = new LoadLegacyTests.Label(-1, "result", null, List.of(new LoadLegacyTests.Extractor("result", "$.result", false)));
+
+        LoadLegacyTests.Transformer t1 = new LoadLegacyTests.Transformer(1, "transform", "data => data.map(d => d)", "urn:target:1", List.of(ext1), List.of(label));
+        LoadLegacyTests.Transformer t2 = new LoadLegacyTests.Transformer(2, "transform", "data => data.map(d => d)", "urn:target:1", List.of(ext2), List.of(label));
+
+        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1, "test", new HashedLists<>(),
+                List.of(), Collections.emptyList(), List.of(t1, t2), Collections.emptyList());
+
+        FolderEntity folder = loadLegacyTests.createFolder(test);
+
+        assertNotNull(folder);
+        assertNotNull(folder.group);
+
+        // Should have 2 transformer nodes, 2 dataset nodes, 2 label nodes (one per dataset)
+        long transformerCount = folder.group.sources.stream().filter(v -> v instanceof JsNode && v.name.startsWith("transformer_")).count();
+        long datasetCount = folder.group.sources.stream().filter(v -> v instanceof JqNode && v.name.startsWith("dataset")).count();
+        assertEquals(2, transformerCount, "Expect 2 transformer nodes\n" + folder.group.sources.stream().map(NodeEntity::toString).collect(Collectors.joining("\n")));
+        assertEquals(2, datasetCount, "Expect 2 dataset nodes\n" + folder.group.sources.stream().map(NodeEntity::toString).collect(Collectors.joining("\n")));
+
+        // Dataset nodes should have different names (suffixed with transformer id)
+        List<String> datasetNames = folder.group.sources.stream()
+                .filter(v -> v instanceof JqNode && v.name.startsWith("dataset"))
+                .map(v -> v.name).sorted().toList();
+        assertNotEquals(datasetNames.get(0), datasetNames.get(1), "dataset names should be distinct");
+    }
+
+    @Test
+    public void createFolder_two_transformers_labels_exist_for_each_dataset() {
+        LoadLegacyTests.Extractor ext1 = new LoadLegacyTests.Extractor("score", "$.scores[*]", true);
+        LoadLegacyTests.Extractor ext2 = new LoadLegacyTests.Extractor("score", "$.data.scores[*]", true);
+
+        LoadLegacyTests.Label label = new LoadLegacyTests.Label(-1, "Score", null, List.of(new LoadLegacyTests.Extractor("score", "$.score", false)));
+
+        LoadLegacyTests.Transformer t1 = new LoadLegacyTests.Transformer(10, "t", "score => [score]", "urn:t:1", List.of(ext1), List.of(label));
+        LoadLegacyTests.Transformer t2 = new LoadLegacyTests.Transformer(20, "t", "score => [score]", "urn:t:1", List.of(ext2), List.of(label));
+
+        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1, "test", new HashedLists<>(),
+                List.of(), Collections.emptyList(), List.of(t1, t2), Collections.emptyList());
+
+        FolderEntity folder = loadLegacyTests.createFolder(test);
+
+        // Labels named "Score" should exist for each dataset (2 copies)
+        long scoreCount = folder.group.sources.stream().filter(v -> v.name.equals("Score")).count();
+        assertEquals(2, scoreCount, "Expect 2 'Score' label nodes (one per dataset)\n" + folder.group.sources.stream().map(NodeEntity::toString).collect(Collectors.joining("\n")));
+    }
+
+    @Test
+    public void createFolder_two_transformers_variable_resolves() {
+        LoadLegacyTests.Extractor ext1 = new LoadLegacyTests.Extractor("val", "$.values[*]", true);
+        LoadLegacyTests.Extractor ext2 = new LoadLegacyTests.Extractor("val", "$.data.values[*]", true);
+
+        LoadLegacyTests.Label label = new LoadLegacyTests.Label(-1, "metric", null, List.of(new LoadLegacyTests.Extractor("metric", "$.metric", false)));
+        LoadLegacyTests.Variable variable = new LoadLegacyTests.Variable(-1, "metric_var", List.of("metric"), null);
+        LoadLegacyTests.Fingerprint fingerprint = new LoadLegacyTests.Fingerprint(List.of("metric"), null, List.of(), "");
+
+        LoadLegacyTests.Transformer t1 = new LoadLegacyTests.Transformer(10, "t", "val => [val]", "urn:t:1", List.of(ext1), List.of(label));
+        LoadLegacyTests.Transformer t2 = new LoadLegacyTests.Transformer(20, "t", "val => [val]", "urn:t:1", List.of(ext2), List.of(label));
+
+        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1, "test", new HashedLists<>(),
+                List.of(fingerprint), Collections.emptyList(), List.of(t1, t2), List.of(variable));
+
+        FolderEntity folder = loadLegacyTests.createFolder(test);
+
+        assertNotNull(folder);
+        // Should have fingerprint node (variable resolves even with multiple label matches)
+        long fpCount = folder.group.sources.stream().filter(v -> v instanceof FingerprintNode).count();
+        assertEquals(1, fpCount, "Expect 1 fingerprint node\n" + folder.group.sources.stream().map(NodeEntity::toString).collect(Collectors.joining("\n")));
+    }
+
+    @Test
+    public void createFolder_single_transformer_no_suffix() {
+        LoadLegacyTests.Extractor ext = new LoadLegacyTests.Extractor("data", "$.values", false);
+        LoadLegacyTests.Label label = new LoadLegacyTests.Label(-1, "result", null, List.of(new LoadLegacyTests.Extractor("result", "$.result", false)));
+        LoadLegacyTests.Transformer t = new LoadLegacyTests.Transformer(1, "myTransform", "data => [data]", "urn:t:1", List.of(ext), List.of(label));
+
+        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1, "test", new HashedLists<>(),
+                List.of(), Collections.emptyList(), List.of(t), Collections.emptyList());
+
+        FolderEntity folder = loadLegacyTests.createFolder(test);
+
+        // Single transformer should NOT have suffix
+        long datasetCount = folder.group.sources.stream().filter(v -> v.name.equals("dataset")).count();
+        assertEquals(1, datasetCount, "Expect 1 dataset node named 'dataset' (no suffix)\n" + folder.group.sources.stream().map(NodeEntity::toString).collect(Collectors.joining("\n")));
+    }
+
     @Test @Disabled("not sure why it is failing atm")
     public void createNodesFromLabel_two_extractors_custom_function_with_extra_parameters(){
         LoadLegacyTests.Extractor extractor1 = new LoadLegacyTests.Extractor("extractor","$.one",false);
