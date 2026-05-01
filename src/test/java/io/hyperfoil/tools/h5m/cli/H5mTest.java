@@ -1055,7 +1055,7 @@ public class H5mTest {
                 }
                 """
         );
-        
+
         List<LaunchResult> results = run(launcher,
                 new String[]{"add","folder",testName},
                 new String[]{"add","jq","to",testName,"split",".Item[]"},
@@ -1070,18 +1070,39 @@ public class H5mTest {
                 new String[]{"upload",filePath03.toString(),"to",testName},
                 new String[]{"list","value","from",testName}
         );
-        
+
         results.forEach(result->{
             assertEquals(0,result.exitCode(),result.getOutput());
         });
 
         LaunchResult afterUpload2 = results.get(results.size() - 3);
+        String output2 = afterUpload2.getOutput();
         assertTrue(afterUpload2.getOutput().contains("Count: 11"),
                 "After upload 2, expect 11 values from test (1 changes total)\n" + afterUpload2.getOutput());
+        assertTrue(output2.contains("\"domainvalue\":3"),
+                "Change should be detected for domain x=4\n" + output2);
+
+        assertTrue(output2.contains("\"previous\":2.1"),
+                "Should show previous y value of 2.1\n" + output2);
+        assertTrue(output2.contains("\"last\":2.1"),
+                "Should show last y value of 2.1\n" + output2);
+        assertTrue(output2.contains("\"ratio\":-47.61904761904761"),
+                "Should contain calculated ratio -47.61904761904761\n" + output2);
 
         LaunchResult result = results.getLast();
+        String output3 = result.getOutput();
         assertTrue(result.getOutput().contains("Count: 17"),
             "After upload 3, expect 17 values from test (2 changes total)\n" + result.getOutput());
+        assertTrue(output3.contains("\"domainvalue\":2"),
+                "Change should be detected for domain x=2\n" + output3);
+
+        assertTrue(output3.contains("\"previous\":3.1"),
+                "Should show previous y value of 3.1\n" + output3);
+        assertTrue(output3.contains("\"last\":3.1"),
+                "Should show last y value of 3.1\n" + output3);
+        assertTrue(output3.contains("\"ratio\":-32.258064516129025"),
+                "Should contain calculated ratio -32.258064516129025\n" + output3);
+
     }
 
     @Test
@@ -1131,7 +1152,7 @@ public class H5mTest {
                 }
                 """
         );
-        
+
         List<LaunchResult> results = run(launcher,
                 new String[]{"add","folder",testName},
                 new String[]{"add","jq","to",testName,"split",".Item[]"},
@@ -1148,26 +1169,64 @@ public class H5mTest {
                 new String[]{"upload",filePath04.toString(),"to",testName},
                 new String[]{"list","value","from",testName}
         );
-        
+
         results.forEach(result->{
             assertEquals(0,result.exitCode(),result.getOutput());
         });
 
         LaunchResult Upload1 = results.get(results.size() - 7);
+        String output1 = Upload1.getOutput();
         assertTrue(Upload1.getOutput().contains("Count: 5"),
             "After upload 1, expect 5 values\n" + Upload1.getOutput());
+        int changeCount1 = output1.split("\"ratio\":", -1).length - 1;
+        assertEquals(0, changeCount1,
+                "Upload 1: x=4 with only 1 sample should produce 0 changes (need minPrevious=2)");
+
 
         LaunchResult Upload2 = results.get(results.size() - 5);
+        String output2 = Upload2.getOutput();
         assertTrue(Upload2.getOutput().contains("Count: 10"),
             "After upload 2, expect 10 values\n" + Upload2.getOutput());
 
+        int changeCount2 = output2.split("\"ratio\":", -1).length - 1;
+        assertEquals(0, changeCount2,
+                "Upload 1: x=3 with only 1 sample should produce 0 changes (need minPrevious=2)");
+
         LaunchResult Upload3 = results.get(results.size() - 3);
+        String output3 = Upload3.getOutput();
+        int changeCount3 = output3.split("\"ratio\":", -1).length - 1;
+        assertEquals(1, changeCount3,
+                "Upload 1: x=2 with only 1 sample should produce 0 changes (need minPrevious=2)");
         assertTrue(Upload3.getOutput().contains("Count: 16"),
             "After upload 3, expect 16 values (expect 1 change here since it violates threshold value)\n" + Upload3.getOutput());
+        assertTrue(output3.contains("\"domainvalue\":4"),
+                "Change should be detected for domain x=4\n" + output3);
+
+        assertTrue(output3.contains("\"previous\":2.0"),
+                "Should show previous y value of 2.0\n" + output3);
+        assertTrue(output3.contains("\"last\":2.0"),
+                "Should show last y value of 2.0\n" + output3);
+        assertTrue(output3.contains("\"ratio\":-42.85714285714286"),
+                "Should contain calculated ratio -42.85714285714286\n" + output3);
+
 
         LaunchResult Upload4 = results.getLast();
+        String output4 = Upload4.getOutput();
+        int changeCount4 = output4.split("\"ratio\":", -1).length - 1;
+        assertEquals(2, changeCount4,
+                "Upload 1: x=1 should have 2 changes\n" + output4);
         assertTrue(Upload4.getOutput().contains("Count: 22"),
             "After upload 4, expect 22 values (expect 1 change here since it violates threshold value. With minPrevious=2 total changes=2)\n" + Upload4.getOutput());
+
+        assertTrue(output4.contains("\"domainvalue\":3"),
+                "Change should be detected for domain x=3\n" + output4);
+
+        assertTrue(output4.contains("\"previous\":2.5"),
+                "Should show previous y value of 2.5\n" + output4);
+        assertTrue(output4.contains("\"last\":2.5"),
+                "Should show last y value of 2.5\n" + output4);
+        assertTrue(output4.contains("\"ratio\":-33.333333333333336"),
+                "Should contain calculated ratio -33.333333333333336\n" + output4);
     }
 
     @Test
@@ -1238,31 +1297,56 @@ public class H5mTest {
         results.forEach(result->{
             assertEquals(0,result.exitCode(),result.getOutput());
         });
+        LaunchResult Upload1 = results.get(results.size() - 7);
+        String output1 = Upload1.getOutput();
+        int changeCount1 = output1.split("\"ratio\":", -1).length - 1;
+        assertEquals(0, changeCount1,
+                "Upload 1: x=4 with only 1 sample should produce 0 changes (need minPrevious=2)");
+
 
         LaunchResult afterUpload2 = results.get(results.size() - 5);
         String output2 = afterUpload2.getOutput();
         assertTrue(output2.contains("Count: 11"),
                 "After upload 2, expect 11 values (1 change detected for x=4)\n" + output2);
 
-        assertTrue(output2.contains("\"domainvalue\":4") || output2.contains("domainvalue\": 4"),
+        assertTrue(output2.contains("\"domainvalue\":4"),
                 "Change should be detected for domain x=4\n" + output2);
+
+        assertTrue(output2.contains("\"previous\":2.1"),
+                "Should show previous y value of 2.1\n" + output2);
+        assertTrue(output2.contains("\"last\":2.1"),
+                "Should show last y value of 2.1\n" + output2);
+        assertTrue(output2.contains("\"ratio\":-47.61904761904761"),
+                "Should contain calculated ratio -47.61904761904761\n" + output2);
 
         LaunchResult afterUpload3 = results.get(results.size() - 3);
         String output3 = afterUpload3.getOutput();
-        assertTrue(output3.contains("Count: 17"),
-                "After upload 3, expect 17 values (2 changes total)\n" + output3);
+        assertTrue(output3.contains("Count: 16"),
+                "After upload 3, expect 16 values (1 changes total)\n" + output3);
 
-        assertTrue(output3.contains("\"domainvalue\":3") || output3.contains("domainvalue\": 3"),
+        assertTrue(output3.contains("\"domainvalue\":3"),
                 "Change should be detected for domain x=3\n" + output3);
+        assertTrue(output3.contains("\"previous\":2.1"),
+                "Should show previous y value of 2.1\n" + output3);
+        assertTrue(output3.contains("\"last\":2.1"),
+                "Should show last y value of 2.1\n" + output3);
+        assertTrue(output3.contains("\"ratio\":47.61904761904763"),
+                "Should contain calculated ratio 47.61904761904763\n" + output3);
 
         LaunchResult afterUpload4 = results.getLast();
         String output4 = afterUpload4.getOutput();
-        assertTrue(output4.contains("Count: 23"),
-                "After upload 4, expect 23 values (3 changes total)\n" + output4);
+        assertTrue(output4.contains("Count: 22"),
+                "After upload 4, expect 22 values (2 changes total)\n" + output4);
 
-        assertTrue(output4.contains("\"domainvalue\":2") || output4.contains("domainvalue\": 2"),
+        assertTrue(output4.contains("\"domainvalue\":2"),
                 "Change should be detected for domain x=2\n" + output4);
 
+        assertTrue(output4.contains("\"previous\":4.1"),
+                "Should show previous y value of 4.1\n" + output4);
+        assertTrue(output4.contains("\"last\":4.1"),
+                "Should show last y value of 4.1\n" + output4);
+        assertTrue(output4.contains("\"ratio\":-48.78048780487805"),
+                "Should contain calculated ratio -48.78048780487805\n" + output4);
     }
 
 }

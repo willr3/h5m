@@ -16,6 +16,7 @@ import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.entity.node.*;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
 import jakarta.transaction.*;
 import org.junit.jupiter.api.Test;
 
@@ -39,6 +40,8 @@ public class NodeServiceTest extends FreshDb {
     NodeService nodeService;
     @Inject
     ValueService valueService;
+    @Inject
+    EntityManager em;
 
     @Test
     public void create_without_group() {
@@ -1989,6 +1992,584 @@ public class NodeServiceTest extends FreshDb {
 
     }
 
+    @Test
+    public void test_calculaterelativediff_remove_invalid_change_detection_following_domainValue() throws Exception {
+        tm.begin();
+
+        NodeEntity rootNode = new RootNode();
+        rootNode.persist();
+        SplitNode splitNode = new SplitNode("split", "split", List.of(rootNode));
+        splitNode.persist();
+        NodeEntity rangeNode = new JqNode("range",".y",splitNode);
+        rangeNode.persist();
+        NodeEntity domainNode = new JqNode("domain",".domain",splitNode);
+        domainNode.persist();
+        NodeEntity fingerprintNode = new JqNode("fingerprint",".fingerprint",splitNode);
+        fingerprintNode.persist();
+
+        RelativeDifference relDiff = new RelativeDifference("relativediff", "{}");
+
+        relDiff.setNodes(fingerprintNode, splitNode, rangeNode, domainNode);
+        relDiff.setWindow(1);
+        relDiff.setMinPrevious(1);
+        relDiff.setFilter("mean");
+        relDiff.persist();
+
+        ObjectMapper mapper = new ObjectMapper();
+
+        ValueEntity root1 = new ValueEntity(null,rootNode,mapper.readTree("""
+                { "split": [ { "fingerprint" : "alpha", "domain" : 4, "range" : 400} ] }
+                """));
+        root1.persist();
+
+        ValueEntity split1 = new ValueEntity(null,splitNode,root1.data.get("split").get(0),List.of(root1));
+        split1.persist();
+
+        ValueEntity domain1 = new ValueEntity(null,domainNode,split1.data.get("domain"),List.of(split1));
+        domain1.persist();
+
+        ValueEntity range1 = new ValueEntity(null,rangeNode,split1.data.get("range"),List.of(split1));
+        range1.persist();
+
+        ValueEntity fingerprint1 = new ValueEntity(null,fingerprintNode,split1.data.get("fingerprint"),List.of(split1));
+        fingerprint1.persist();
+
+        tm.commit();
+
+        List<ValueEntity> changes1 = nodeService.calculateRelativeDifferenceValues(relDiff, root1, 0);
+        assertEquals(0,changes1.size(),"upload 1: x=4 should produce 0 changes");
+
+        tm.begin();
+        ValueEntity root2 = new ValueEntity(null,rootNode,mapper.readTree("""
+                { "split": [ { "fingerprint" : "alpha", "domain" : 2, "range" : 200} ] }
+                """));
+        root2.persist();
+
+        ValueEntity split2 = new ValueEntity(null,splitNode,root2.data.get("split").get(0),List.of(root2));
+        split2.persist();
+
+        ValueEntity domain2 = new ValueEntity(null,domainNode,split2.data.get("domain"),List.of(split2));
+        domain2.persist();
+
+        ValueEntity range2 = new ValueEntity(null,rangeNode,split2.data.get("range"),List.of(split2));
+        range2.persist();
+
+        ValueEntity fingerprint2 = new ValueEntity(null,fingerprintNode,split2.data.get("fingerprint"),List.of(split2));
+        fingerprint2.persist();
+        tm.commit();
+
+        List<ValueEntity> changes2 = nodeService.calculateRelativeDifferenceValues(relDiff, root2, 0);
+        assertEquals(1, changes2.size(),
+                "Upload 2: x=2 with only 1 sample should produce 1 change");
+
+        ValueEntity change2 = changes2.get(0);
+        JsonNode changeData2 = change2.data;
+        JsonNode domainValue2 = changeData2.get("domainvalue");
+
+        assertEquals(4,domainValue2.asInt(),"Domain value should be 4");
+        assertNotNull(change2.sources, "Change at iteration 2 should have sources from the changed value at x=4");
+        ValueEntity changeSource =  change2.sources.get(0);
+        assertEquals(split1.id, changeSource.id,"Change id should be split 1 id where x=4");
+
+        assertNotNull(change2.sources, "Change at iteration 2 should have sources from the changed value at x=4");
+        changeSource =  change2.sources.get(0);
+        assertEquals(split1.id, changeSource.id,"Change id should be split 1 id where x=4");
+
+        tm.begin();
+        em.merge(changes2.get(0));
+
+        ValueEntity root3 = new ValueEntity(null,rootNode,mapper.readTree("""
+                { "split": [ { "fingerprint" : "alpha", "domain" : 1, "range" : 200} ] }
+                """));
+        root3.persist();
+
+        ValueEntity split3 = new ValueEntity(null,splitNode,root3.data.get("split").get(0),List.of(root3));
+        split3.persist();
+
+        ValueEntity domain3 = new ValueEntity(null,domainNode,split3.data.get("domain"),List.of(split3));
+        domain3.persist();
+
+        ValueEntity range3 = new ValueEntity(null,rangeNode,split3.data.get("range"),List.of(split3));
+        range3.persist();
+
+        ValueEntity fingerprint3 = new ValueEntity(null,fingerprintNode,split3.data.get("fingerprint"),List.of(split3));
+        fingerprint3.persist();
+        tm.commit();
+
+        List<ValueEntity> changes3 = nodeService.calculateRelativeDifferenceValues(relDiff, root3, 0);
+
+        assertEquals(0, changes3.size(),
+                "Upload 3: x=1 with only 1 sample should produce 0 changes (need window(1) + minPrevious(1) = 2 samples)");
+
+        tm.begin();
+        ValueEntity root4 = new ValueEntity(null,rootNode,mapper.readTree("""
+                { "split": [ { "fingerprint" : "alpha", "domain" : 3, "range" : 400} ] }
+                """));
+        root4.persist();
+
+        ValueEntity split4 = new ValueEntity(null,splitNode,root4.data.get("split").get(0),List.of(root4));
+        split4.persist();
+
+        ValueEntity domain4 = new ValueEntity(null,domainNode,split4.data.get("domain"),List.of(split4));
+        domain4.persist();
+
+        ValueEntity range4 = new ValueEntity(null,rangeNode,split4.data.get("range"),List.of(split4));
+        range4.persist();
+
+        ValueEntity fingerprint4 = new ValueEntity(null,fingerprintNode,split4.data.get("fingerprint"),List.of(split4));
+        fingerprint4.persist();
+        tm.commit();
+
+        List<ValueEntity> changes4 = nodeService.calculateRelativeDifferenceValues(relDiff, root4, 0);
+
+        assertEquals(1, changes4.size(),
+                "Upload 4: x=3 with only 1 sample should produce 1 change");
+
+        ValueEntity change4 = changes4.get(0);
+        JsonNode changeData4 = change4.data;
+        JsonNode domainValue4 = changeData4.get("domainvalue");
+        assertEquals(3,domainValue4.asInt(),"Domain value should be 3");
+
+       List<ValueEntity> vs =  valueService.getValues(relDiff);
+        assertEquals(0,vs.size(),"There should be no persisted change value"+ vs);
+
+    }
+
+    @Test
+    public void test_calculaterelativediff_keep_newCalculated_change_detection() throws Exception {
+        tm.begin();
+
+        NodeEntity rootNode = new RootNode();
+        rootNode.persist();
+        SplitNode splitNode = new SplitNode("split", "split", List.of(rootNode));
+        splitNode.persist();
+        NodeEntity rangeNode = new JqNode("range",".y",splitNode);
+        rangeNode.persist();
+        NodeEntity domainNode = new JqNode("domain",".domain",splitNode);
+        domainNode.persist();
+        NodeEntity fingerprintNode = new JqNode("fingerprint",".fingerprint",splitNode);
+        fingerprintNode.persist();
+
+
+
+        RelativeDifference relDiff = new RelativeDifference("relativediff", "{}");
+        relDiff.setNodes(fingerprintNode, splitNode, rangeNode, domainNode);
+        relDiff.setWindow(1);
+        relDiff.setMinPrevious(1);
+        relDiff.setFilter("mean");
+        relDiff.persist();
+
+        ObjectMapper mapper = new ObjectMapper();
+
+        ValueEntity root1 = new ValueEntity(null, rootNode, mapper.createObjectNode());
+        root1.persist();
+
+        ValueEntity split1 = new ValueEntity(null, splitNode, mapper.createObjectNode());
+        split1.sources = List.of(root1);
+        split1.persist();
+
+        ValueEntity domain1 = new ValueEntity(null, domainNode, new LongNode(4));
+        domain1.sources = List.of(split1);
+        domain1.persist();
+
+        ValueEntity range1 = new ValueEntity(null, rangeNode, new DoubleNode(400));
+        range1.sources = List.of(split1);
+        range1.persist();
+
+        ValueEntity fp1 = new ValueEntity(null, fingerprintNode, new TextNode("alpha"));
+        fp1.sources = List.of(split1);
+        fp1.persist();
+
+        tm.commit();
+
+        List<ValueEntity> changes1 = nodeService.calculateRelativeDifferenceValues(relDiff, root1, 0);
+        assertEquals(0, changes1.size(),
+                "Upload 1: x=4 Insufficient. produce 0 changes (need window(1) + minPrevious(1) = 2 samples)");
+
+        tm.begin();
+        ValueEntity root2 = new ValueEntity(null, rootNode, mapper.createObjectNode());
+        root2.persist();
+
+        ValueEntity split2 = new ValueEntity(null, splitNode, mapper.createObjectNode());
+        split2.sources = List.of(root2);
+        split2.persist();
+
+        ValueEntity domain2 = new ValueEntity(null, domainNode, new LongNode(2));
+        domain2.sources = List.of(split2);
+        domain2.persist();
+
+        ValueEntity range2 = new ValueEntity(null, rangeNode, new DoubleNode(200));
+        range2.sources = List.of(split2);
+        range2.persist();
+
+        ValueEntity fp2 = new ValueEntity(null, fingerprintNode, new TextNode("alpha"));
+        fp2.sources = List.of(split2);
+        fp2.persist();
+        tm.commit();
+
+        List<ValueEntity> changes2 = nodeService.calculateRelativeDifferenceValues(relDiff, root2, 0);
+        assertEquals(1, changes2.size(),
+                "Upload 2: x=2 should produce 1 change");
+
+        ValueEntity change2 = changes2.get(0);
+        JsonNode changeData2 = change2.data;
+        JsonNode domainValue2 = changeData2.get("domainvalue");
+        assertEquals(4,domainValue2.asInt(),"Domain value should be 4");
+
+        tm.begin();
+        em.merge(changes2.get(0));
+
+        ValueEntity root3 = new ValueEntity(null, rootNode, mapper.createObjectNode());
+        root3.persist();
+
+        ValueEntity split3 = new ValueEntity(null, splitNode, mapper.createObjectNode());
+        split3.sources = List.of(root3);
+        split3.persist();
+
+        ValueEntity domain3 = new ValueEntity(null, domainNode, new LongNode(1));
+        domain3.sources = List.of(split3);
+        domain3.persist();
+
+        ValueEntity range3 = new ValueEntity(null, rangeNode, new DoubleNode(200));
+        range3.sources = List.of(split3);
+        range3.persist();
+
+        ValueEntity fp3 = new ValueEntity(null, fingerprintNode, new TextNode("alpha"));
+        fp3.sources = List.of(split3);
+        fp3.persist();
+        tm.commit();
+
+        List<ValueEntity> changes3 = nodeService.calculateRelativeDifferenceValues(relDiff, root3, 0);
+
+        assertEquals(0, changes3.size(),
+                "Upload 3: x=1 produce 0 changes (need window(1) + minPrevious(1) = 2 samples)");
+
+        tm.begin();
+        ValueEntity root4 = new ValueEntity(null, rootNode, mapper.createObjectNode());
+        root4.persist();
+
+        ValueEntity split4 = new ValueEntity(null, splitNode, mapper.createObjectNode());
+        split4.sources = List.of(root4);
+        split4.persist();
+
+        ValueEntity domain4 = new ValueEntity(null, domainNode, new LongNode(3));
+        domain4.sources = List.of(split4);
+        domain4.persist();
+
+        ValueEntity range4 = new ValueEntity(null, rangeNode, new DoubleNode(200));
+        range4.sources = List.of(split4);
+        range4.persist();
+
+        ValueEntity fp4 = new ValueEntity(null, fingerprintNode, new TextNode("alpha"));
+        fp4.sources = List.of(split4);
+        fp4.persist();
+        tm.commit();
+
+        List<ValueEntity> changes4 = nodeService.calculateRelativeDifferenceValues(relDiff, root4, 0);
+
+        assertEquals(1, changes4.size(),
+                "Upload 4: x=3 produce 1 changes (need window(1) + minPrevious(1) = 2 samples)");
+
+        List<ValueEntity> vs =  valueService.getValues(relDiff);
+        assertEquals(1,vs.size(),"There should be 1 persisted change value for domainValue 4"+ vs);
+
+    }
+
+    @Test
+    public void test_calculaterelativediff_notRemove_outOfScope_domain() throws Exception {
+        tm.begin();
+
+        NodeEntity rootNode = new RootNode();
+        rootNode.persist();
+        SplitNode splitNode = new SplitNode("split", "split", List.of(rootNode));
+        splitNode.persist();
+        NodeEntity rangeNode = new JqNode("range",".y",splitNode);
+        rangeNode.persist();
+        NodeEntity domainNode = new JqNode("domain",".domain",splitNode);
+        domainNode.persist();
+        NodeEntity fingerprintNode = new JqNode("fingerprint",".fingerprint",splitNode);
+        fingerprintNode.persist();
+
+
+
+        RelativeDifference relDiff = new RelativeDifference("relativediff", "{}");
+        relDiff.setNodes(fingerprintNode, splitNode, rangeNode, domainNode);
+        relDiff.setWindow(1);
+        relDiff.setMinPrevious(1);
+        relDiff.setFilter("mean");
+        relDiff.persist();
+
+        ObjectMapper mapper = new ObjectMapper();
+
+        ValueEntity root1 = new ValueEntity(null, rootNode, mapper.createObjectNode());
+        root1.persist();
+
+        ValueEntity split1 = new ValueEntity(null, splitNode, mapper.createObjectNode());
+        split1.sources = List.of(root1);
+        split1.persist();
+
+        ValueEntity domain1 = new ValueEntity(null, domainNode, new LongNode(4));
+        domain1.sources = List.of(split1);
+        domain1.persist();
+
+        ValueEntity range1 = new ValueEntity(null, rangeNode, new DoubleNode(100));
+        range1.sources = List.of(split1);
+        range1.persist();
+
+        ValueEntity fp1 = new ValueEntity(null, fingerprintNode, new TextNode("alpha"));
+        fp1.sources = List.of(split1);
+        fp1.persist();
+
+        tm.commit();
+
+        List<ValueEntity> changes1 = nodeService.calculateRelativeDifferenceValues(relDiff, root1, 0);
+        assertEquals(0,changes1.size(),"upload 1: x=4 should produce 0 changes");
+
+        tm.begin();
+        ValueEntity root2 = new ValueEntity(null, rootNode, mapper.createObjectNode());
+        root2.persist();
+
+        ValueEntity split2 = new ValueEntity(null, splitNode, mapper.createObjectNode());
+        split2.sources = List.of(root2);
+        split2.persist();
+
+        ValueEntity domain2 = new ValueEntity(null, domainNode, new LongNode(2));
+        domain2.sources = List.of(split2);
+        domain2.persist();
+
+        ValueEntity range2 = new ValueEntity(null, rangeNode, new DoubleNode(200));
+        range2.sources = List.of(split2);
+        range2.persist();
+
+        ValueEntity fp2 = new ValueEntity(null, fingerprintNode, new TextNode("alpha"));
+        fp2.sources = List.of(split2);
+        fp2.persist();
+        tm.commit();
+
+        List<ValueEntity> changes2 = nodeService.calculateRelativeDifferenceValues(relDiff, root2, 0);
+        assertEquals(1, changes2.size(),
+                "Upload 2: x=2 with only 1 sample should produce 1 changes");
+
+        ValueEntity change2 = changes2.get(0);
+        JsonNode changeData2 = change2.data;
+        JsonNode domainValue2 = changeData2.get("domainvalue");
+        assertEquals(4,domainValue2.asInt(),"Domain value should be 4");
+
+        tm.begin();
+        em.merge(changes2.get(0));
+
+        ValueEntity root3 = new ValueEntity(null, rootNode, mapper.createObjectNode());
+        root3.persist();
+
+        ValueEntity split3 = new ValueEntity(null, splitNode, mapper.createObjectNode());
+        split3.sources = List.of(root3);
+        split3.persist();
+
+        ValueEntity domain3 = new ValueEntity(null, domainNode, new LongNode(3));
+        domain3.sources = List.of(split3);
+        domain3.persist();
+
+        ValueEntity range3 = new ValueEntity(null, rangeNode, new DoubleNode(300));
+        range3.sources = List.of(split3);
+        range3.persist();
+
+        ValueEntity fp3 = new ValueEntity(null, fingerprintNode, new TextNode("alpha"));
+        fp3.sources = List.of(split3);
+        fp3.persist();
+        tm.commit();
+
+        List<ValueEntity> changes3 = nodeService.calculateRelativeDifferenceValues(relDiff, root3, 0);
+
+        assertEquals(1, changes3.size(),
+                "Upload 3: x=1 with only 1 sample should produce 1 change");
+        ValueEntity change3 = changes3.get(0);
+        JsonNode changeData3 = change3.data;
+        JsonNode domainValue3 = changeData3.get("domainvalue");
+        assertEquals(3,domainValue3.asInt(),"Domain value should be 3");
+
+
+        tm.begin();
+        em.merge(changes3.get(0));
+        ValueEntity root4 = new ValueEntity(null, rootNode, mapper.createObjectNode());
+        root4.persist();
+
+        ValueEntity split4 = new ValueEntity(null, splitNode, mapper.createObjectNode());
+        split4.sources = List.of(root4);
+        split4.persist();
+
+        ValueEntity domain4 = new ValueEntity(null, domainNode, new LongNode(1));
+        domain4.sources = List.of(split4);
+        domain4.persist();
+
+        ValueEntity range4 = new ValueEntity(null, rangeNode, new DoubleNode(400));
+        range4.sources = List.of(split4);
+        range4.persist();
+
+        ValueEntity fp4 = new ValueEntity(null, fingerprintNode, new TextNode("alpha"));
+        fp4.sources = List.of(split4);
+        fp4.persist();
+        tm.commit();
+
+        List<ValueEntity> changes4 = nodeService.calculateRelativeDifferenceValues(relDiff, root4, 0);
+
+        assertEquals(1, changes4.size(),
+                "Upload 4: x=1 with only 1 sample should produce 1 change");
+        ValueEntity change4 = changes4.get(0);
+        JsonNode changeData4 = change4.data;
+        JsonNode domainValue4 = changeData4.get("domainvalue");
+        assertEquals(2,domainValue4.asInt(),"Domain value should be 2");
+
+        List<ValueEntity> vs =  valueService.getValues(relDiff);
+        assertEquals(1,vs.size(),"There should be one persisted change value for domainValue 3"+ vs);
+
+    }
+    @Test
+    public void test_relativeDifference_sources_order_preserved_after_persist_and_fetch() throws Exception {
+        tm.begin();
+        NodeEntity rootNode = new RootNode();
+        rootNode.persist();
+
+        SplitNode splitNode = new SplitNode("split", "split", List.of(rootNode));
+        splitNode.persist();
+
+        NodeEntity fingerprintNode = new JqNode("fingerprint", ".fingerprint", splitNode);
+        fingerprintNode.persist();
+
+        NodeEntity rangeNode = new JqNode("range", ".y", splitNode);
+        rangeNode.persist();
+
+        NodeEntity domainNode = new JqNode("domain", ".domain", splitNode);
+        domainNode.persist();
+
+        RelativeDifference relDiff = new RelativeDifference("relativediff", "{}");
+        relDiff.setNodes(fingerprintNode, splitNode, rangeNode, domainNode);
+        relDiff.setWindow(1);
+        relDiff.setMinPrevious(1);
+        relDiff.setFilter("mean");
+        relDiff.persist();
+        tm.commit();
+
+        tm.begin();
+        RelativeDifference fetchedRelDiff = NodeEntity.findById(relDiff.id);
+        assertEquals(4, fetchedRelDiff.sources.size(), "Should have 4 sources");
+
+        assertEquals(fingerprintNode.getId(), fetchedRelDiff.sources.get(0).getId(),"FingerPrint should be on 0th Index");
+        assertEquals(splitNode.getId(),fetchedRelDiff.sources.get(1).getId(),"split should be on 1st Index");
+        assertEquals(rangeNode.getId(),fetchedRelDiff.sources.get(2).getId(),"range should be on 2nd Index");
+        assertEquals(domainNode.getId(),fetchedRelDiff.sources.get(3).getId(),"domain should be on 3rd Index");
+
+        tm.commit();
+    }
+
+    @Test
+    public void testPersistenceDomainValues() throws Exception {
+
+        tm.begin();
+
+        NodeEntity rootNode = new RootNode();
+        rootNode.persist();
+        SplitNode splitNode = new SplitNode("split", "split", List.of(rootNode));
+        splitNode.persist();
+        NodeEntity rangeNode = new JqNode("range", ".y", splitNode);
+        rangeNode.persist();
+        NodeEntity domainNode = new JqNode("domain", ".domain", splitNode);
+        domainNode.persist();
+        NodeEntity fingerprintNode = new JqNode("fingerprint", ".fingerprint", splitNode);
+        fingerprintNode.persist();
+
+        RelativeDifference relDiff = new RelativeDifference("relativediff", "{}");
+
+        relDiff.setNodes(fingerprintNode, splitNode, rangeNode, domainNode);
+        relDiff.setWindow(1);
+        relDiff.setMinPrevious(1);
+        relDiff.setFilter("mean");
+        relDiff.persist();
+
+        ObjectMapper mapper = new ObjectMapper();
+
+        ValueEntity root1 = new ValueEntity(null, rootNode, mapper.readTree("""
+                { "split": [ { "fingerprint" : "alpha", "domain" : 4, "range" : 400} ] }
+                """));
+        root1.persist();
+
+        ValueEntity split1 = new ValueEntity(null, splitNode, root1.data.get("split").get(0), List.of(root1));
+        split1.persist();
+
+        ValueEntity domain1 = new ValueEntity(null, domainNode, split1.data.get("domain"), List.of(split1));
+        domain1.persist();
+
+        ValueEntity range1 = new ValueEntity(null, rangeNode, split1.data.get("range"), List.of(split1));
+        range1.persist();
+
+        ValueEntity fingerprint1 = new ValueEntity(null, fingerprintNode, split1.data.get("fingerprint"), List.of(split1));
+        fingerprint1.persist();
+
+        tm.commit();
+
+        List<ValueEntity> changes1 = nodeService.calculateRelativeDifferenceValues(relDiff, root1, 0);
+
+        tm.begin();
+        ValueEntity root2 = new ValueEntity(null, rootNode, mapper.readTree("""
+                { "split": [ { "fingerprint" : "alpha", "domain" : 2, "range" : 200} ] }
+                """));
+        root2.persist();
+
+        ValueEntity split2 = new ValueEntity(null, splitNode, root2.data.get("split").get(0), List.of(root2));
+        split2.persist();
+
+        ValueEntity domain2 = new ValueEntity(null, domainNode, split2.data.get("domain"), List.of(split2));
+        domain2.persist();
+
+        ValueEntity range2 = new ValueEntity(null, rangeNode, split2.data.get("range"), List.of(split2));
+        range2.persist();
+
+        ValueEntity fingerprint2 = new ValueEntity(null, fingerprintNode, split2.data.get("fingerprint"), List.of(split2));
+        fingerprint2.persist();
+        tm.commit();
+
+        List<ValueEntity> changes2 = nodeService.calculateRelativeDifferenceValues(relDiff, root2, 0);
+        assertEquals(1, changes2.size(),
+                "Upload 2: x=2 with only 1 sample should produce 1 change");
+
+        ValueEntity change2 = changes2.get(0);
+        JsonNode changeData2 = change2.data;
+        JsonNode domainValue2 = changeData2.get("domainvalue");
+
+        assertEquals(4, domainValue2.asInt(), "Domain value should be 4");
+
+
+        tm.begin();
+        em.merge(changes2.get(0));
+
+        ValueEntity root3 = new ValueEntity(null, rootNode, mapper.readTree("""
+                { "split": [ { "fingerprint" : "alpha", "domain" : 1, "range" : 100} ] }
+                """));
+        root3.persist();
+
+        ValueEntity split3 = new ValueEntity(null, splitNode, root3.data.get("split").get(0), List.of(root3));
+        split3.persist();
+
+        ValueEntity domain3 = new ValueEntity(null, domainNode, split3.data.get("domain"), List.of(split3));
+        domain3.persist();
+
+        ValueEntity range3 = new ValueEntity(null, rangeNode, split3.data.get("range"), List.of(split3));
+        range3.persist();
+
+        ValueEntity fingerprint3 = new ValueEntity(null, fingerprintNode, split3.data.get("fingerprint"), List.of(split3));
+        fingerprint3.persist();
+        tm.commit();
+
+        List<ValueEntity> changes3 = nodeService.calculateRelativeDifferenceValues(relDiff, root3, 0);
+
+        assertEquals(1, changes3.size(),
+                "Upload 3: x=2 should produce changes");
+        ValueEntity change3 = changes3.get(0);
+        JsonNode changeData3 = change3.data;
+        assertEquals(2, changeData3.get("domainvalue").asInt(), "Domain value should be 2");
+
+
+    }
+
     /**
      * Verify that the upload -> work queue -> value computation pipeline
      * works correctly with CascadeType.PERSIST only (no MERGE) on
@@ -2046,6 +2627,144 @@ public class NodeServiceTest extends FreshDb {
         assertFalse(transformValues.isEmpty(), "JQ node 'transform' should have computed a value");
         assertEquals("hello_done", transformValues.get(0).data.asText(),
             "transform node should produce 'hello_done'");
+        tm.commit();
+    }
+
+    @Test
+    public void test_calculaterelativediff_allDomainValues_not_accumulated_across_iterations() throws Exception {
+        tm.begin();
+
+        NodeEntity rootNode = new RootNode();
+        rootNode.persist();
+        SplitNode splitNode = new SplitNode("split", "split", List.of(rootNode));
+        splitNode.persist();
+        NodeEntity rangeNode = new JqNode("range", ".y", splitNode);
+        rangeNode.persist();
+        NodeEntity domainNode = new JqNode("domain", ".domain", splitNode);
+        domainNode.persist();
+        NodeEntity fingerprintNode = new JqNode("fingerprint", ".fingerprint", splitNode);
+        fingerprintNode.persist();
+
+        RelativeDifference relDiff = new RelativeDifference("relativediff", "{}");
+        relDiff.setNodes(fingerprintNode, splitNode, rangeNode, domainNode);
+        relDiff.setWindow(1);
+        relDiff.setMinPrevious(1);
+        relDiff.setFilter("mean");
+        relDiff.persist();
+
+        ObjectMapper mapper = new ObjectMapper();
+
+        // Upload 1: domain=4, range=100
+        ValueEntity root1 = new ValueEntity(null, rootNode, mapper.readTree(
+                """
+                { "split": [ { "fingerprint": "alpha", "domain": 4, "range": 100 } ] }
+                """));
+        root1.persist();
+        ValueEntity split1 = new ValueEntity(null, splitNode, root1.data.get("split").get(0), List.of(root1));
+        split1.persist();
+        new ValueEntity(null, domainNode, split1.data.get("domain"), List.of(split1)).persist();
+        new ValueEntity(null, rangeNode, split1.data.get("range"), List.of(split1)).persist();
+        new ValueEntity(null, fingerprintNode, split1.data.get("fingerprint"), List.of(split1)).persist();
+
+        tm.commit();
+
+        List<ValueEntity> changes1 = nodeService.calculateRelativeDifferenceValues(relDiff, root1, 0);
+        assertEquals(0, changes1.size(), "Upload 1: single sample, no changes expected");
+
+        // Upload 2: domain=3, range=100 (same range, no change expected)
+        tm.begin();
+        ValueEntity root2 = new ValueEntity(null, rootNode, mapper.readTree(
+                """
+                { "split": [ { "fingerprint": "alpha", "domain": 3, "range": 100 } ] }
+                """));
+        root2.persist();
+        ValueEntity split2 = new ValueEntity(null, splitNode, root2.data.get("split").get(0), List.of(root2));
+        split2.persist();
+        new ValueEntity(null, domainNode, split2.data.get("domain"), List.of(split2)).persist();
+        new ValueEntity(null, rangeNode, split2.data.get("range"), List.of(split2)).persist();
+        new ValueEntity(null, fingerprintNode, split2.data.get("fingerprint"), List.of(split2)).persist();
+        tm.commit();
+
+        List<ValueEntity> changes2 = nodeService.calculateRelativeDifferenceValues(relDiff, root2, 0);
+        assertEquals(0, changes2.size(), "Upload 2: same range value, no change expected");
+
+        // Upload 3: domain=2, range=200 (big change, should detect)
+        tm.begin();
+        ValueEntity root3 = new ValueEntity(null, rootNode, mapper.readTree(
+                """
+                { "split": [ { "fingerprint": "alpha", "domain": 2, "range": 200 } ] }
+                """));
+        root3.persist();
+        ValueEntity split3 = new ValueEntity(null, splitNode, root3.data.get("split").get(0), List.of(root3));
+        split3.persist();
+        new ValueEntity(null, domainNode, split3.data.get("domain"), List.of(split3)).persist();
+        new ValueEntity(null, rangeNode, split3.data.get("range"), List.of(split3)).persist();
+        new ValueEntity(null, fingerprintNode, split3.data.get("fingerprint"), List.of(split3)).persist();
+        tm.commit();
+
+        List<ValueEntity> changes3 = nodeService.calculateRelativeDifferenceValues(relDiff, root3, 0);
+        assertEquals(1, changes3.size(), "Upload 3: range doubled, should detect 1 change");
+        ValueEntity change3 = changes3.get(0);
+        JsonNode changeData3 = change3.data;
+        JsonNode domainValue3 = changeData3.get("domainvalue");
+        assertEquals(3,domainValue3.asInt(),"Domain value should be 3");
+
+        // Persist the change
+        tm.begin();
+        em.merge(changes3.get(0));
+        tm.commit();
+
+        // Upload 4: TWO split items in one root (domains 5 and 6, range=100)
+        // This forces rootDomainValues to have 2 entries, so the loop iterates twice.
+        // If allDomainValues accumulates across iterations, the cleanup in iteration 2
+        // will see domain values from iteration 1's window and could incorrectly
+        // delete the persisted change from upload 3.
+        tm.begin();
+        ValueEntity root4 = new ValueEntity(null, rootNode, mapper.readTree(
+                """
+                { "split": [
+                    { "fingerprint": "alpha", "domain": 5, "range": 100 },
+                    { "fingerprint": "alpha", "domain": 6, "range": 100 }
+                ] }
+                """));
+        root4.persist();
+        // Split item 1: domain=5
+        ValueEntity split4a = new ValueEntity(null, splitNode, root4.data.get("split").get(0), List.of(root4));
+        split4a.persist();
+        new ValueEntity(null, domainNode, split4a.data.get("domain"), List.of(split4a)).persist();
+        new ValueEntity(null, rangeNode, split4a.data.get("range"), List.of(split4a)).persist();
+        new ValueEntity(null, fingerprintNode, split4a.data.get("fingerprint"), List.of(split4a)).persist();
+        // Split item 2: domain=6
+        ValueEntity split4b = new ValueEntity(null, splitNode, root4.data.get("split").get(1), List.of(root4));
+        split4b.persist();
+        new ValueEntity(null, domainNode, split4b.data.get("domain"), List.of(split4b)).persist();
+        new ValueEntity(null, rangeNode, split4b.data.get("range"), List.of(split4b)).persist();
+        new ValueEntity(null, fingerprintNode, split4b.data.get("fingerprint"), List.of(split4b)).persist();
+        tm.commit();
+
+        List<ValueEntity> changes4 = nodeService.calculateRelativeDifferenceValues(relDiff, root4, 0);
+        assertEquals(0,changes4.size(),"No change detected");
+
+        // The change from upload 3 should still be persisted — the multi-split
+        // upload should NOT have deleted it due to allDomainValues accumulation
+        tm.begin();
+        List<ValueEntity> persistedChanges = valueService.getValues(relDiff);
+        assertEquals(1, persistedChanges.size(),
+                "Exactly 1 persisted change (from upload 3) should remain. " +
+                        "If allDomainValues accumulates across rootDomainValues iterations, " +
+                        "domain values from iteration 1 leak into iteration 2's cleanup scope and " +
+                        "could cause incorrect deletion. Persisted changes: " + persistedChanges);
+
+        // Verify the persisted change has the expected content from upload 3
+        ValueEntity persistedChange = persistedChanges.get(0);
+        JsonNode changeData = persistedChange.data;
+        assertNotNull(changeData, "Persisted change should have data");
+        assertNotNull(changeData.get("domainvalue"), "Change should have domainvalue");
+        assertNotNull(changeData.get("ratio"), "Change should have ratio");
+        assertNotNull(changeData.get("previous"), "Change should have previous");
+        assertNotNull(changeData.get("last"), "Change should have last");
+        assertEquals(3, changeData.get("domainvalue").asInt(),
+                "Persisted change should be for domain=3 (where the range jumped from 100 to 200)");
         tm.commit();
     }
 

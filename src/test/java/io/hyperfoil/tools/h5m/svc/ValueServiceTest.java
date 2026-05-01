@@ -790,6 +790,66 @@ public class ValueServiceTest extends FreshDb {
 
     }
     @Test
+    public void findMatchingFingerprint_dataset_sibling() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException, JsonProcessingException {
+        tm.begin();
+        NodeGroupEntity group = new NodeGroupEntity("findMatchingFingeprint_dataset_siblilng");
+        group.persist();
+        NodeEntity rootNode = group.root;
+        NodeEntity aNode = new JqNode("a",".a[]",List.of(rootNode));
+        //aNode.group=group;
+        aNode.persist();
+        NodeEntity bNode = new JqNode("b",".b",List.of(aNode));
+        //bNode.group=group;
+        bNode.persist();
+        NodeEntity cNode = new JqNode("c",".c",List.of(aNode));
+        //cNode.group=group;
+        cNode.persist();
+        NodeEntity dNode = new JqNode("d",".d",List.of(aNode));
+        //dNode.group=group;
+        dNode.persist();
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        ValueEntity rootValue = new ValueEntity(null,rootNode,objectMapper.readTree("""
+                { "a": [ { "b" : 1, "c" : "cat", "d" : 1}, { "b" : 2, "c" : "cat", "d" : 2 } ] }
+                """));
+        rootValue.persist();
+        ValueEntity a1 = new ValueEntity(null,aNode,rootValue.data.get("a").get(0),List.of(rootValue));
+        a1.persist();
+        ValueEntity a2 = new ValueEntity(null,aNode,rootValue.data.get("a").get(1),List.of(rootValue));
+        a2.persist();
+
+        ValueEntity b1 = new ValueEntity(null,bNode,a1.data.get("b"),List.of(a1));
+        b1.persist();
+        ValueEntity b2 = new ValueEntity(null,bNode,a2.data.get("b"),List.of(a2));
+        b2.persist();
+
+        ValueEntity c1 = new ValueEntity(null,cNode,a1.data.get("c"),List.of(a1));
+        c1.persist();
+        ValueEntity c2 = new ValueEntity(null,cNode,a2.data.get("c"),List.of(a2));
+        c2.persist();
+
+        ValueEntity d1 = new ValueEntity(null,cNode,a1.data.get("d"),List.of(a1));
+        d1.persist();
+        ValueEntity d2 = new ValueEntity(null,cNode,a2.data.get("d"),List.of(a2));
+        d2.persist();
+        tm.commit();
+
+        List<ValueEntity> found = valueService.findMatchingFingerprint(
+                bNode,
+                aNode,
+                c1,
+                dNode,
+                d1,
+                null,
+                2,
+                0,
+                false
+        );
+
+        assertTrue(found.contains(b1),"missing b1");
+        assertTrue(found.contains(b2),"missing b2");
+    }
+    @Test
     public void findMatchingFingerprint_dataset_cousin() throws SystemException, NotSupportedException, JsonProcessingException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
         tm.begin();
         NodeGroupEntity group = new NodeGroupEntity("findMatchingFingerprint_dataset_cousin");

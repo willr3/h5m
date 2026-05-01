@@ -93,13 +93,6 @@ public abstract class NodeEntity extends PanacheEntity implements Comparable<Nod
         this.previousVersion = previousVersion;
     }
 
-    @PreUpdate
-    @PrePersist
-    public void sortSources(){
-        this.sources = KahnDagSort.sort(sources, NodeEntity::getSources);
-    }
-
-
     public NodeEntity(){
         this.sources = new ArrayList<>();
     }

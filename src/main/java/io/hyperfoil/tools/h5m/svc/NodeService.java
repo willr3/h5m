@@ -41,7 +41,6 @@ import io.hyperfoil.tools.jjq.value.JqArray;
 import io.hyperfoil.tools.jjq.value.JqValue;
 
 import java.io.IOException;
-import java.sql.PreparedStatement;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.DoubleBinaryOperator;
@@ -438,11 +437,13 @@ public class NodeService implements NodeServiceInterface {
                         //this would need to filter rangeValues that already have a changeDetection detected...
                     }
                     */
+
                     //changing domainValues to just get the domainValues from this root would change from full series scanning to just scanning the new values
                     //but that would only work if values are added sequentially to the domain value (or we delay relative difference calculation to the end of the work queue.
                     //perhaps we check if root introduced the maximum domainValue then only calculate new changes for that last window
                     //or get the domainValues greater than domain values from root and calculate all those changes?
                     List<ValueEntity> rootDomainValues = valueService.getDescendantValues(root, relDiff.getDomainNode());
+                    List<ValueEntity> allDomainValues = new ArrayList<>();
                     for (int sdIdx = 0; sdIdx < rootDomainValues.size(); sdIdx++) {
                         ValueEntity uploadedDomainValue = rootDomainValues.get(sdIdx);
                         List<ValueEntity> preceedingDomainValues = valueService.findMatchingFingerprint(
@@ -468,12 +469,11 @@ public class NodeService implements NodeServiceInterface {
                                 0,
                                 false
                         );
-                        followingDomainValues.remove(0);
-
-                        List<ValueEntity> allDomainValues = new ArrayList<>();
+                        if(!followingDomainValues.isEmpty()) {
+                            followingDomainValues.remove(0);
+                        }
                         allDomainValues.addAll(preceedingDomainValues);
                         allDomainValues.addAll(followingDomainValues);
-
                         for (int dIdx = 0; dIdx < allDomainValues.size(); dIdx++) {
                             ValueEntity domainValue = allDomainValues.get(dIdx);
                             //todo this does not look for values after previous relDiff observation :(
@@ -553,13 +553,52 @@ public class NodeService implements NodeServiceInterface {
                                     dIdx += minPrevious;
                                     ValueEntity changeValue = new ValueEntity(root.folder, relDiff, data);
                                     changeValue.idx = startingOrdinal;
-                                    List<ValueEntity> foundParents = valueService.getAncestor(fingerprintValue, groupBy);
+                                    List<ValueEntity> foundParents = valueService.getAncestor(domainValue, groupBy);
                                     if (foundParents.size() == 1) {
                                         changeValue.sources = foundParents;
                                     }
+
                                     rtrn.add(changeValue);
                                 }
                             }
+                        }
+                        List<ValueEntity> persistedChangeValues = valueService.findMatchingFingerprint(
+                                relDiff,
+                                groupBy,
+                                fingerprintValue,
+                                relDiff.getDomainNode(),
+                                uploadedDomainValue,
+                                null,
+                                (int) (relDiff.getWindow() + minPrevious),
+                                0,
+                                false
+                        );
+                        List<JsonNode> domainRemoveScope = new ArrayList<>();
+                        for (ValueEntity dv : allDomainValues) {
+                            if (dv.data != null) {
+                                domainRemoveScope.add(dv.data);
+                            }
+                        }
+                        if (!rtrn.isEmpty()) {
+                            for (ValueEntity existingValue : persistedChangeValues) {
+                                JsonNode existingDomainValue = existingValue.data.get("domainvalue");
+                                if (existingDomainValue == null) continue;
+                                if (domainRemoveScope.contains(existingDomainValue)) {
+                                    boolean match = false;
+                                    for (ValueEntity currentValue : rtrn) {
+                                        JsonNode currentDomainValue = currentValue.data.get("domainvalue");
+                                        if (currentDomainValue == null) continue;
+                                        if (existingDomainValue.equals(currentDomainValue)) {
+                                            match = true;
+                                            break;
+                                        }
+                                    }
+                                    if (!match) {
+                                        valueService.delete(existingValue);
+                                    }
+                                }
+                            }
+
                         }
                     }
                 }
