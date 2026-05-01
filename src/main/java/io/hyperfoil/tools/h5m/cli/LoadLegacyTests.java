@@ -141,6 +141,16 @@ public class LoadLegacyTests implements Callable<Integer> {
 
     }
 
+    static String jsonpathToJq(String jsonpath) {
+        if (jsonpath == null || jsonpath.isEmpty()) return ".";
+        String jq = jsonpath;
+        if (jq.startsWith("$.")) jq = jq.substring(1);
+        else if (jq.equals("$")) return ".";
+        jq = jq.replace(".*", "[]?");
+        jq = jq.replace("[*]", "[]?");
+        return jq;
+    }
+
     @Inject
     FolderService folderService;
 
@@ -285,7 +295,26 @@ public class LoadLegacyTests implements Callable<Integer> {
             rtrn = JsNode.parse(label.name, function, labelNodesByName::get);
             if (rtrn == null) {
                 List<String> params = JsNode.getParameterNames(label.function);
-                if(params.size()==1) {//collect all extractors into the value
+                if(params.size()==1 && label.extractors.size() > 1) {
+                    // Multi-extractor single-param: build a JQ node that combines all extractions
+                    // into a single object per dataset item, mirroring Horreum's per-dataset extraction
+                    StringBuilder jqExpr = new StringBuilder("{");
+                    for (int i = 0; i < label.extractors.size(); i++) {
+                        Extractor ext = label.extractors.get(i);
+                        if (i > 0) jqExpr.append(", ");
+                        String jqPath = jsonpathToJq(ext.jsonpath());
+                        if (ext.isArray()) {
+                            jqExpr.append(ext.name()).append(": (try [").append(jqPath).append("] catch null)");
+                        } else {
+                            jqExpr.append(ext.name()).append(": (").append(jqPath).append(" // null)");
+                        }
+                    }
+                    jqExpr.append("}");
+                    NodeEntity combiner = new JqNode(label.name() + "_extract", jqExpr.toString(), List.of(source));
+                    group.addNode(combiner);
+                    nodeTracking.addNode(combiner);
+                    rtrn = new JsNode(label.name, function, List.of(combiner));
+                } else if(params.size()==1) {
                     rtrn = new JsNode(label.name,function,labelNodesByName.values().stream().flatMap(List::stream).collect(Collectors.toList()));
                 } else {
                     rtrn = JsNode.parse(label.name, function, labelNodesByName::get,true);
@@ -311,8 +340,8 @@ public class LoadLegacyTests implements Callable<Integer> {
         NodeTracking nodeTracking = new NodeTracking();
 
         if(!test.transformers().isEmpty()){
-            // Phase 1: Create transformer + dataset pipelines for each transformer
-            List<NodeEntity> datasetNodes = new ArrayList<>();
+            // Phase 1: Create transformer nodes for each transformer
+            List<NodeEntity> transformerNodes = new ArrayList<>();
             List<Label> allSchemaLabels = null;
             for(Transformer transformer : test.transformers){
                 List<Extractor> renamedExtractors = new ArrayList<>();
@@ -329,11 +358,7 @@ public class LoadLegacyTests implements Callable<Integer> {
                 NodeEntity transform = createNodesFromLabel(l,folder.group.root,folder.group,nodeTracking,new HashSet<>());
                 folder.group.addNode(transform);
                 nodeTracking.addNode(transform);
-
-                NodeEntity dataset = new JqNode("dataset" + transformerSuffix,"if type == \"array\" then .[] else . end",List.of(transform));
-                folder.group.addNode(dataset);
-                nodeTracking.addNode(dataset);
-                datasetNodes.add(dataset);
+                transformerNodes.add(transform);
 
                 // Keep the first transformer's labels (all transformers target the same schema)
                 if (allSchemaLabels == null) {
@@ -341,20 +366,41 @@ public class LoadLegacyTests implements Callable<Integer> {
                 }
             }
 
-            // Phase 2: Create labels for each dataset node
-            // For multi-transformer, labels are created per dataset so values come from whichever matches
+            // Phase 2: Coalesce transformers, then split into dataset, then create labels
+            // Both transformers target the same schema — for a given run only one produces output.
+            // Coalesce at transformer level (single value each) so the permutation logic handles
+            // empty sources correctly (maxNodeValuesLength == 1 triggers the simple case).
+            NodeEntity transformerSource;
+            if (transformerNodes.size() == 1) {
+                transformerSource = transformerNodes.get(0);
+            } else {
+                StringJoiner coalesceParams = new StringJoiner(",");
+                for (int i = 0; i < transformerNodes.size(); i++) coalesceParams.add("t" + i);
+                StringBuilder coalesceBody = new StringBuilder();
+                for (int i = 0; i < transformerNodes.size() - 1; i++) {
+                    coalesceBody.append("t").append(i).append(" != null ? t").append(i).append(" : ");
+                }
+                coalesceBody.append("t").append(transformerNodes.size() - 1);
+                String coalesceFunc = "(" + coalesceParams + ") => " + coalesceBody;
+                transformerSource = new JsNode("transformer_coalesce", coalesceFunc, transformerNodes);
+                folder.group.addNode(transformerSource);
+                nodeTracking.addNode(transformerSource);
+            }
+
+            NodeEntity dataset = new JqNode("dataset","if type == \"array\" then .[] else . end",List.of(transformerSource));
+            folder.group.addNode(dataset);
+            nodeTracking.addNode(dataset);
+
             if (allSchemaLabels != null) {
                 Set<String> labelNames = new HashSet<>();
                 for (Label schemaLabel : allSchemaLabels) {
                     log(6, "label=" + schemaLabel.name);
-                    for (NodeEntity dataset : datasetNodes) {
-                        NodeEntity labelNode = createNodesFromLabel(schemaLabel, dataset, folder.group, nodeTracking, labelNames);
-                        if (labelNode != null) {
-                            nodeTracking.tagNodeAsLabel(schemaLabel, labelNode);
-                            folder.group.addNode(labelNode);
-                        } else {
-                            System.out.println("FAILURE NULL NODE FOR LABEL " + schemaLabel);
-                        }
+                    NodeEntity labelNode = createNodesFromLabel(schemaLabel, dataset, folder.group, nodeTracking, labelNames);
+                    if (labelNode != null) {
+                        nodeTracking.tagNodeAsLabel(schemaLabel, labelNode);
+                        folder.group.addNode(labelNode);
+                    } else {
+                        System.out.println("FAILURE NULL NODE FOR LABEL " + schemaLabel);
                     }
                 }
             }
