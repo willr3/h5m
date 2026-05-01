@@ -311,6 +311,9 @@ public class LoadLegacyTests implements Callable<Integer> {
         NodeTracking nodeTracking = new NodeTracking();
 
         if(!test.transformers().isEmpty()){
+            // Phase 1: Create transformer + dataset pipelines for each transformer
+            List<NodeEntity> datasetNodes = new ArrayList<>();
+            List<Label> allSchemaLabels = null;
             for(Transformer transformer : test.transformers){
                 List<Extractor> renamedExtractors = new ArrayList<>();
                 Map<String,String> extractorAliases = new HashMap<>();
@@ -330,25 +333,30 @@ public class LoadLegacyTests implements Callable<Integer> {
                 NodeEntity dataset = new JqNode("dataset" + transformerSuffix,"if type == \"array\" then .[] else . end",List.of(transform));
                 folder.group.addNode(dataset);
                 nodeTracking.addNode(dataset);
+                datasetNodes.add(dataset);
 
+                // Keep the first transformer's labels (all transformers target the same schema)
+                if (allSchemaLabels == null) {
+                    allSchemaLabels = transformer.targetSchemaLabels();
+                }
+            }
+
+            // Phase 2: Create labels for each dataset node
+            // For multi-transformer, labels are created per dataset so values come from whichever matches
+            if (allSchemaLabels != null) {
                 Set<String> labelNames = new HashSet<>();
-                for(Label schemaLabel : transformer.targetSchemaLabels()){
-                    if(nodeTracking.hasNode(schemaLabel.name)){
-                        //conflicting name for label but ignorable
-                        System.err.println("transform label conflict for "+schemaLabel+"\n  conflicts with "+nodeTracking.getNodes(schemaLabel.name()));
-                    }
-                    log(6,"label="+schemaLabel.name);
-                    NodeEntity labelNode = createNodesFromLabel(schemaLabel,dataset,folder.group,nodeTracking,labelNames);
-                    if ( labelNode!=null ) {
-                        nodeTracking.tagNodeAsLabel(schemaLabel,labelNode);
-                        folder.group.addNode(labelNode);
-                    }else{
-                        System.out.println("FAILURE NULL NODE FOR LABEL "+schemaLabel);
-                        System.exit(1);
-                        //reused
+                for (Label schemaLabel : allSchemaLabels) {
+                    log(6, "label=" + schemaLabel.name);
+                    for (NodeEntity dataset : datasetNodes) {
+                        NodeEntity labelNode = createNodesFromLabel(schemaLabel, dataset, folder.group, nodeTracking, labelNames);
+                        if (labelNode != null) {
+                            nodeTracking.tagNodeAsLabel(schemaLabel, labelNode);
+                            folder.group.addNode(labelNode);
+                        } else {
+                            System.out.println("FAILURE NULL NODE FOR LABEL " + schemaLabel);
+                        }
                     }
                 }
-
             }
         }else if(!test.schemaPaths().isEmpty()){
             List<String> schemaPaths = new ArrayList<>(test.schemaPaths().keys());
