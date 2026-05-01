@@ -142,13 +142,7 @@ public class LoadLegacyTests implements Callable<Integer> {
     }
 
     static String jsonpathToJq(String jsonpath) {
-        if (jsonpath == null || jsonpath.isEmpty()) return ".";
-        String jq = jsonpath;
-        if (jq.startsWith("$.")) jq = jq.substring(1);
-        else if (jq.equals("$")) return ".";
-        jq = jq.replace(".*", "[]?");
-        jq = jq.replace("[*]", "[]?");
-        return jq;
+        return NodeService.jsonpathToJq(jsonpath);
     }
 
     @Inject
@@ -354,7 +348,7 @@ public class LoadLegacyTests implements Callable<Integer> {
                 String function = NodeService.renameParameters(transformer.function,extractorAliases);
                 //not using function and renamedExtractors
                 String transformerSuffix = test.transformers().size() > 1 ? "_" + transformer.id() : "";
-                Label l  = new Label(-1,"transformer_"+transformer.name.replaceAll(":","_") + transformerSuffix,transformer.function,transformer.extractors);
+                Label l  = new Label(-1,"transformer_"+transformer.name.replaceAll("[^a-zA-Z0-9_$]","_") + transformerSuffix,transformer.function,transformer.extractors);
                 NodeEntity transform = createNodesFromLabel(l,folder.group.root,folder.group,nodeTracking,new HashSet<>());
                 folder.group.addNode(transform);
                 nodeTracking.addNode(transform);

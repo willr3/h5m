@@ -755,6 +755,16 @@ public class NodeService implements NodeServiceInterface {
         }
         return idx;
     }
+    public static String jsonpathToJq(String jsonpath) {
+        if (jsonpath == null || jsonpath.isEmpty()) return ".";
+        String jq = jsonpath;
+        if (jq.startsWith("$.")) jq = jq.substring(1);
+        else if (jq.equals("$")) return ".";
+        jq = jq.replace(".*", "[]?");
+        jq = jq.replace("[*]", "[]?");
+        return jq;
+    }
+
     public static String renameParameters(String function,Map<String,String> renames){
         for(String key:renames.keySet()){
             Matcher m = Pattern.compile(key).matcher(function);

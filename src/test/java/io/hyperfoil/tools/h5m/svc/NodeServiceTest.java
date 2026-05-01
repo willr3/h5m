@@ -329,6 +329,67 @@ public class NodeServiceTest extends FreshDb {
     }
 
     @Test
+    public void calculateJqValues_array_miss() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        RootNode rootNode = new RootNode();
+        rootNode.persist();
+        JqNode node = new JqNode("jqall","[.miss[]?]",List.of(rootNode));
+        node.persist();
+        ValueEntity v1 = new ValueEntity();
+        v1.data = mapper.readTree("""
+                {
+                  "foo": [ { "key": "one"}, { "key" : "two" } ],
+                  "bar": [ { "k": "uno" }, { "k": "dos"}, { "k" : "tres"} ],
+                  "biz": "cat",
+                  "buz": "dog"
+                }
+                """);
+        v1.node=rootNode;
+        v1.persist();
+        tm.commit();
+
+        Map<String, ValueEntity> sourceValueMap = new HashMap<>();
+        sourceValueMap.put(rootNode.name,v1);
+
+        List<ValueEntity> calculated = nodeService.calculateJqValues(node,sourceValueMap,0);
+        assertNotNull(calculated);
+        // JQ [.miss[]?] produces an empty array [], which is not null so it gets returned
+        assertEquals(1,calculated.size());
+        assertTrue(calculated.getFirst().data.isArray());
+        assertEquals(0,calculated.getFirst().data.size(),"empty array for missing path");
+    }
+
+    @Test
+    public void calculateJqValues_array_match() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        RootNode rootNode = new RootNode();
+        rootNode.persist();
+        JqNode node = new JqNode("jqall","[.foo[]?]",List.of(rootNode));
+        node.persist();
+        ValueEntity v1 = new ValueEntity();
+        v1.data = mapper.readTree("""
+                {
+                  "foo": [ { "key": "one"}, { "key" : "two" } ],
+                  "biz": "cat"
+                }
+                """);
+        v1.node=rootNode;
+        v1.persist();
+        tm.commit();
+
+        Map<String, ValueEntity> sourceValueMap = new HashMap<>();
+        sourceValueMap.put(rootNode.name,v1);
+
+        List<ValueEntity> calculated = nodeService.calculateJqValues(node,sourceValueMap,0);
+        assertNotNull(calculated);
+        assertEquals(1,calculated.size());
+        assertTrue(calculated.getFirst().data.isArray());
+        assertEquals(2,calculated.getFirst().data.size(),"should contain both foo elements");
+    }
+
+    @Test
     public void calculateSqlAllJsonpathValues_null() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
         ObjectMapper mapper = new ObjectMapper();
         tm.begin();
