@@ -375,12 +375,12 @@ public class LoadLegacyTests implements Callable<Integer> {
                 transformerSource = transformerNodes.get(0);
             } else {
                 StringJoiner coalesceParams = new StringJoiner(",");
-                for (int i = 0; i < transformerNodes.size(); i++) coalesceParams.add("t" + i);
+                for (NodeEntity tn : transformerNodes) coalesceParams.add(tn.name);
                 StringBuilder coalesceBody = new StringBuilder();
                 for (int i = 0; i < transformerNodes.size() - 1; i++) {
-                    coalesceBody.append("t").append(i).append(" != null ? t").append(i).append(" : ");
+                    coalesceBody.append(transformerNodes.get(i).name).append(" != null ? ").append(transformerNodes.get(i).name).append(" : ");
                 }
-                coalesceBody.append("t").append(transformerNodes.size() - 1);
+                coalesceBody.append(transformerNodes.get(transformerNodes.size() - 1).name);
                 String coalesceFunc = "(" + coalesceParams + ") => " + coalesceBody;
                 transformerSource = new JsNode("transformer_coalesce", coalesceFunc, transformerNodes);
                 folder.group.addNode(transformerSource);
