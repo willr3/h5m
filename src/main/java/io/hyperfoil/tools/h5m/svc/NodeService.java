@@ -377,12 +377,12 @@ public class NodeService implements NodeServiceInterface {
             NodeEntity groupBy = NodeEntity.findById(relDiff.getGroupByNode().getId());
             List<ValueEntity> fingerprintValues = valueService.getDescendantValues(root,relDiff.getFingerprintNode());
             String fpFilter = relDiff.getFingerprintFilter();
-            for(int fIdx=0; fIdx<fingerprintValues.size(); fIdx++){
+            for(int fIdx=0; fIdx<fingerprintValues.size(); fIdx++) {
                 ValueEntity fingerprintValue = fingerprintValues.get(fIdx);
                 if (fpFilter != null && !evaluateFingerprintFilter(fpFilter, fingerprintValue.data)) {
                     continue;
                 }
-                if( relDiff.getDomainNode()!=null ){
+                if (relDiff.getDomainNode() != null) {
 
                     //when would this have more than 1 value?
                     /*
@@ -413,100 +413,127 @@ public class NodeService implements NodeServiceInterface {
                         //this would need to filter rangeValues that already have a changeDetection detected...
                     }
                     */
-
                     //changing domainValues to just get the domainValues from this root would change from full series scanning to just scanning the new values
                     //but that would only work if values are added sequentially to the domain value (or we delay relative difference calculation to the end of the work queue.
                     //perhaps we check if root introduced the maximum domainValue then only calculate new changes for that last window
                     //or get the domainValues greater than domain values from root and calculate all those changes?
-                    List<ValueEntity> domainValues = valueService.findMatchingFingerprint(
-                            relDiff.getDomainNode(),
-                            groupBy,
-                            fingerprintValue,
-                            relDiff.getDomainNode()
-                    );
-                    for(int dIdx=0; dIdx<domainValues.size(); dIdx++){
-                        ValueEntity domainValue = domainValues.get(dIdx);
-                        //todo this does not look for values after previous relDiff observation :(
-                        List<ValueEntity> rangeValues = valueService.findMatchingFingerprint(
-                                relDiff.getRangeNode(),
+                    List<ValueEntity> rootDomainValues = valueService.getDescendantValues(root, relDiff.getDomainNode());
+                    for (int sdIdx = 0; sdIdx < rootDomainValues.size(); sdIdx++) {
+                        ValueEntity uploadedDomainValue = rootDomainValues.get(sdIdx);
+                        List<ValueEntity> preceedingDomainValues = valueService.findMatchingFingerprint(
+                                relDiff.getDomainNode(),
                                 groupBy,
                                 fingerprintValue,
                                 relDiff.getDomainNode(),
-                                domainValue,
+                                uploadedDomainValue,
+                                null,
                                 (int) (relDiff.getWindow() + minPrevious),
                                 0,
                                 true
                         );
-                        List<Double> converted = rangeValues.stream().map(obj->{
-                            if (obj.data instanceof NumericNode numericNode){
-                                return numericNode.asDouble();
-                            }else if (obj.data.toString().matches("[0-9]+\\.?[0-9]*")){
-                                return Double.parseDouble(obj.data.toString());
-                            }else{
-                                return null;
-                            }
-                        }).filter(Objects::nonNull).toList();
 
-                        if (converted.size() < relDiff.getWindow() + minPrevious) {
-                            System.err.println("insufficient samples to calculate "+relDiff.name+" need "+(relDiff.getWindow() + minPrevious)+" have "+converted.size());
-                        } else {
-                            DoubleBinaryOperator op = switch (relDiff.getFilter()){
-                                case "min" -> Double::min;
-                                case "max" -> Double::max;
-                                case "mean" -> Double::sum;
-                                default -> Double::sum;
-                            };
-                            SummaryStatistics previousStats = new SummaryStatistics();
-                            converted
-                                    .stream()
-                                    .limit(minPrevious)
-                                    //.skip(relDiff.getWindow())
-                                    .mapToDouble(Double::doubleValue)
-                                    .forEach(previousStats::addValue);
-                            Double value = converted
-                                    .stream()
-                                    //.limit(relDiff.getWindow())
-                                    .skip(minPrevious)
-                                    .mapToDouble(Double::doubleValue)
-                                    .reduce(op)
-                                    .getAsDouble();
-                            if(relDiff.getFilter().equals("mean")){
-                                value = value / (converted.size() - minPrevious);
-                            }
-                            double ratio = value / previousStats.getMean();
-                            if( ratio < 1 - relDiff.getThreshold() || ratio > 1 + relDiff.getThreshold() ){
-                                // We cannot know which datapoint is first with the regression; as a heuristic approach
-                                // we'll select first datapoint with value lower than mean (if this is a drop, e.g. throughput)
-                                // or above the mean (if this is an increase, e.g. memory usage).
-                                Double cv = null;
-                                //why does i start with less than last in window?
-                                for(int i = (int)relDiff.getWindow() -1 ; i >= 0; --i){
-                                    cv = converted.get(i);
-                                    if( ratio < 1 && cv < previousStats.getMean() ){
-                                        break;
-                                    }else if (ratio > 1 && cv > previousStats.getMean()){
-                                        break;
+                        List<ValueEntity> followingDomainValues = valueService.findMatchingFingerprint(
+                                relDiff.getDomainNode(),
+                                groupBy,
+                                fingerprintValue,
+                                relDiff.getDomainNode(),
+                                uploadedDomainValue,
+                                null,
+                                (int) (relDiff.getWindow() + minPrevious),
+                                0,
+                                false
+                        );
+                        followingDomainValues.remove(0);
+
+                        List<ValueEntity> allDomainValues = new ArrayList<>();
+                        allDomainValues.addAll(preceedingDomainValues);
+                        allDomainValues.addAll(followingDomainValues);
+
+                        for (int dIdx = 0; dIdx < allDomainValues.size(); dIdx++) {
+                            ValueEntity domainValue = allDomainValues.get(dIdx);
+                            //todo this does not look for values after previous relDiff observation :(
+                            List<ValueEntity> rangeValues = valueService.findMatchingFingerprint(
+                                    relDiff.getRangeNode(),
+                                    groupBy,
+                                    fingerprintValue,
+                                    relDiff.getDomainNode(),
+                                    domainValue,
+                                    null,
+                                    (int) (relDiff.getWindow() + minPrevious),
+                                    0,
+                                    true
+                            );
+                            List<Double> converted = rangeValues.stream().map(obj -> {
+                                if (obj.data instanceof NumericNode numericNode) {
+                                    return numericNode.asDouble();
+                                } else if (obj.data.toString().matches("[0-9]+\\.?[0-9]*")) {
+                                    return Double.parseDouble(obj.data.toString());
+                                } else {
+                                    return null;
+                                }
+                            }).filter(Objects::nonNull).toList();
+
+                            if (converted.size() < relDiff.getWindow() + minPrevious) {
+                                System.err.println("insufficient samples to calculate " + relDiff.name + " need " + (relDiff.getWindow() + minPrevious) + " have " + converted.size());
+                            } else {
+                                DoubleBinaryOperator op = switch (relDiff.getFilter()) {
+                                    case "min" -> Double::min;
+                                    case "max" -> Double::max;
+                                    case "mean" -> Double::sum;
+                                    default -> Double::sum;
+                                };
+                                SummaryStatistics previousStats = new SummaryStatistics();
+                                converted
+                                        .stream()
+                                        .limit(minPrevious)
+                                        //.skip(relDiff.getWindow())
+                                        .mapToDouble(Double::doubleValue)
+                                        .forEach(previousStats::addValue);
+                                Double value = converted
+                                        .stream()
+                                        //.limit(relDiff.getWindow())
+                                        .skip(minPrevious)
+                                        .mapToDouble(Double::doubleValue)
+                                        .reduce(op)
+                                        .getAsDouble();
+                                if (relDiff.getFilter().equals("mean")) {
+                                    value = value / (converted.size() - minPrevious);
+                                }
+                                double ratio = value / previousStats.getMean();
+                                if (ratio < 1 - relDiff.getThreshold() || ratio > 1 + relDiff.getThreshold()) {
+                                    // We cannot know which datapoint is first with the regression; as a heuristic approach
+                                    // we'll select first datapoint with value lower than mean (if this is a drop, e.g. throughput)
+                                    // or above the mean (if this is an increase, e.g. memory usage).
+                                    Double cv = null;
+                                    //why does i start with less than last in window?
+                                    for (int i = (int) relDiff.getWindow() - 1; i >= 0; --i) {
+                                        cv = converted.get(i);
+                                        if (ratio < 1 && cv < previousStats.getMean()) {
+                                            break;
+                                        } else if (ratio > 1 && cv > previousStats.getMean()) {
+                                            break;
+                                        }
                                     }
+                                    assert cv != null;
+                                    Double prevData = converted.get((int) relDiff.getWindow() - 1);
+                                    Double lastData = cv;
+                                    ObjectNode data = OBJECT_MAPPER.createObjectNode();
+                                    data.set("previous", new DoubleNode(prevData));
+                                    data.set("last", new DoubleNode(lastData));
+                                    data.set("value", new DoubleNode(value));
+                                    data.set("ratio", new DoubleNode(100 * (ratio - 1)));
+                                    //data.set("dIdx",new IntNode(dIdx));//was added for debug
+                                    data.set("domainvalue", domainValue.data);
+                                    //skip domain values due to a detection
+                                    dIdx += minPrevious;
+                                    ValueEntity changeValue = new ValueEntity(root.folder, relDiff, data);
+                                    changeValue.idx = startingOrdinal;
+                                    List<ValueEntity> foundParents = valueService.getAncestor(fingerprintValue, groupBy);
+                                    if (foundParents.size() == 1) {
+                                        changeValue.sources = foundParents;
+                                    }
+                                    rtrn.add(changeValue);
                                 }
-                                assert cv != null;
-                                Double prevData = converted.get((int)relDiff.getWindow()-1);
-                                Double lastData = cv;
-                                ObjectNode data = OBJECT_MAPPER.createObjectNode();
-                                data.set("previous",new DoubleNode(prevData));
-                                data.set("last",new DoubleNode(lastData));
-                                data.set("value",new DoubleNode(value));
-                                data.set("ratio",new DoubleNode(100*(ratio-1)));
-                                //data.set("dIdx",new IntNode(dIdx));//was added for debug
-                                data.set("domainvalue",domainValue.data);
-                                //skip domain values due to a detection
-                                dIdx+=minPrevious;
-                                ValueEntity changeValue = new ValueEntity(root.folder,relDiff,data);
-                                changeValue.idx=startingOrdinal;
-                                List<ValueEntity> foundParents = valueService.getAncestor(fingerprintValue,groupBy);
-                                if(foundParents.size()==1){
-                                    changeValue.sources=foundParents;
-                                }
-                                rtrn.add(changeValue);
                             }
                         }
                     }

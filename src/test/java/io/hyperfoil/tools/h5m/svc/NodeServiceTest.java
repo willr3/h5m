@@ -1488,5 +1488,293 @@ public class NodeServiceTest extends FreshDb {
         List<ValueEntity> mixedR2 = nodeService.calculateFixedThresholdValues(ftMixed, root2, 0);
         assertEquals(1, mixedR1.size(), "minInclusive=false: value 10 should violate min=10");
         assertEquals(0, mixedR2.size(), "maxInclusive=true: value 100 should NOT violate max=100");
+
     }
+
+    @Test
+    public void testCalculateRelativeDifferenceValuesOrdered() throws Exception {
+        tm.begin();
+
+        NodeEntity rootNode = new RootNode();
+        rootNode.persist();
+        NodeEntity rangeNode = new JqNode("range",".y",rootNode);
+        rangeNode.persist();
+        NodeEntity domainNode = new JqNode("domain",".domain",rootNode);
+        domainNode.persist();
+        NodeEntity fingerprintNode = new JqNode("fingerprint",".fingerprint",rootNode);
+        fingerprintNode.persist();
+        SplitNode splitNode = new SplitNode("split", "split", List.of(rootNode));
+        splitNode.persist();
+
+        RelativeDifference relDiff = new RelativeDifference("relativediff", "{}");
+        relDiff.setNodes(fingerprintNode, splitNode, rangeNode, domainNode);
+        relDiff.setWindow(1);
+        relDiff.setMinPrevious(1);
+        relDiff.setFilter("mean");
+        relDiff.persist();
+
+        ObjectMapper mapper = new ObjectMapper();
+
+        ValueEntity root1 = new ValueEntity(null, rootNode, mapper.createObjectNode());
+        root1.persist();
+
+        ValueEntity split1 = new ValueEntity(null, splitNode, mapper.createObjectNode());
+        split1.sources = List.of(root1);
+        split1.persist();
+
+        ValueEntity domain1 = new ValueEntity(null, domainNode, new LongNode(3));
+        domain1.sources = List.of(split1);
+        domain1.persist();
+
+        ValueEntity range1 = new ValueEntity(null, rangeNode, new DoubleNode(1.1));
+        range1.sources = List.of(split1);
+        range1.persist();
+
+        ValueEntity fp1 = new ValueEntity(null, fingerprintNode, new TextNode("alpha"));
+        fp1.sources = List.of(split1);
+        fp1.persist();
+
+        tm.commit();
+
+        List<ValueEntity> changes1 = nodeService.calculateRelativeDifferenceValues(relDiff, root1, 0);
+        assertEquals(0, changes1.size(),
+                "Upload 1: x=3 with only 1 sample should produce 0 changes (need window(1) + minPrevious(1) = 2 samples)");
+
+
+        tm.begin();
+        ValueEntity root2 = new ValueEntity(null, rootNode, mapper.createObjectNode());
+        root2.persist();
+
+        ValueEntity split2 = new ValueEntity(null, splitNode, mapper.createObjectNode());
+        split2.sources = List.of(root2);
+        split2.persist();
+
+        ValueEntity domain2 = new ValueEntity(null, domainNode, new LongNode(2));
+        domain2.sources = List.of(split2);
+        domain2.persist();
+
+        ValueEntity range2 = new ValueEntity(null, rangeNode, new DoubleNode(2.1));
+        range2.sources = List.of(split2);
+        range2.persist();
+
+        ValueEntity fp2 = new ValueEntity(null, fingerprintNode, new TextNode("alpha"));
+        fp2.sources = List.of(split2);
+        fp2.persist();
+        tm.commit();
+
+        List<ValueEntity> changes2 = nodeService.calculateRelativeDifferenceValues(relDiff, root2, 0);
+        assertEquals(1, changes2.size(),
+                "Upload 2: x=2 should produce 1 change (ratio exceeds 50% threshold)");
+
+        ValueEntity change2 = changes2.get(0);
+        JsonNode changeData2 = change2.data;
+
+        double ratio2 = changeData2.get("ratio").asDouble();
+        double previous2 = changeData2.get("previous").asDouble();
+        JsonNode domainValue2 = changeData2.get("domainvalue");
+
+        assertEquals(3, domainValue2.asInt(), "Domain should be 3");
+        assertEquals(2.1, previous2, "Previous range value should be 2.1");
+        assertEquals(-47.61904761904762, ratio2, 0.0001, "Ratio should be ~-47.62%");
+
+
+        tm.begin();
+        ValueEntity root3 = new ValueEntity(null, rootNode, mapper.createObjectNode());
+        root3.persist();
+
+        ValueEntity split3 = new ValueEntity(null, splitNode, mapper.createObjectNode());
+        split3.sources = List.of(root3);
+        split3.persist();
+
+        ValueEntity domain3 = new ValueEntity(null, domainNode, new LongNode(1));
+        domain3.sources = List.of(split3);
+        domain3.persist();
+
+        ValueEntity range3 = new ValueEntity(null, rangeNode, new DoubleNode(3.1));
+        range3.sources = List.of(split3);
+        range3.persist();
+
+        ValueEntity fp3 = new ValueEntity(null, fingerprintNode, new TextNode("alpha"));
+        fp3.sources = List.of(split3);
+        fp3.persist();
+        tm.commit();
+
+        List<ValueEntity> changes3 = nodeService.calculateRelativeDifferenceValues(relDiff, root3, 0);
+
+        assertEquals(1, changes3.size(), "Upload 3: Should process only x=1 (new domain value), producing at most 1 change");
+
+        ValueEntity change3 = changes3.get(0);
+        JsonNode changeData3 = change3.data;
+        double ratio3 = changeData3.get("ratio").asDouble();
+        double previous3 = changeData3.get("previous").asDouble();
+        JsonNode domainValue3 = changeData3.get("domainvalue");
+
+        assertEquals(2, domainValue3.asInt(), "Domain should be 2");
+        assertEquals(3.1, previous3, "Previous range value should be 3.1");
+        assertEquals(-32.25806451612903, ratio3, 0.0001, "Ratio should be ~-32.26%");
+
+    }
+
+    @Test
+    public void testCalculateRelativeDifferenceValues_unordered_sequence() throws Exception {
+        tm.begin();
+
+        NodeEntity rootNode = new RootNode();
+        rootNode.persist();
+        NodeEntity rangeNode = new JqNode("range",".y",rootNode);
+        rangeNode.persist();
+        NodeEntity domainNode = new JqNode("domain",".domain",rootNode);
+        domainNode.persist();
+        NodeEntity fingerprintNode = new JqNode("fingerprint",".fingerprint",rootNode);
+        fingerprintNode.persist();
+
+        SplitNode splitNode = new SplitNode("split", "split", List.of(rootNode));
+        splitNode.persist();
+
+        RelativeDifference relDiff = new RelativeDifference("relativediff", "{}");
+        relDiff.setNodes(fingerprintNode, splitNode, rangeNode, domainNode);
+        relDiff.setWindow(1);
+        relDiff.setMinPrevious(1);
+        relDiff.setFilter("mean");
+        relDiff.persist();
+
+        ObjectMapper mapper = new ObjectMapper();
+
+        ValueEntity root1 = new ValueEntity(null, rootNode, mapper.createObjectNode());
+        root1.persist();
+
+        ValueEntity split1 = new ValueEntity(null, splitNode, mapper.createObjectNode());
+        split1.sources = List.of(root1);
+        split1.persist();
+
+        ValueEntity domain1 = new ValueEntity(null, domainNode, new LongNode(4));
+        domain1.sources = List.of(split1);
+        domain1.persist();
+
+        ValueEntity range1 = new ValueEntity(null, rangeNode, new DoubleNode(1.1));
+        range1.sources = List.of(split1);
+        range1.persist();
+
+        ValueEntity fp1 = new ValueEntity(null, fingerprintNode, new TextNode("alpha"));
+        fp1.sources = List.of(split1);
+        fp1.persist();
+
+        tm.commit();
+
+        List<ValueEntity> changes1 = nodeService.calculateRelativeDifferenceValues(relDiff, root1, 0);
+        assertEquals(0, changes1.size(),
+                "Upload 1: x=4 with only 1 sample should produce 0 changes (need window(1) + minPrevious(1) = 2 samples)");
+
+
+        tm.begin();
+        ValueEntity root2 = new ValueEntity(null, rootNode, mapper.createObjectNode());
+        root2.persist();
+
+        ValueEntity split2 = new ValueEntity(null, splitNode, mapper.createObjectNode());
+        split2.sources = List.of(root2);
+        split2.persist();
+
+        ValueEntity domain2 = new ValueEntity(null, domainNode, new LongNode(2));
+        domain2.sources = List.of(split2);
+        domain2.persist();
+
+        ValueEntity range2 = new ValueEntity(null, rangeNode, new DoubleNode(2.1));
+        range2.sources = List.of(split2);
+        range2.persist();
+
+        ValueEntity fp2 = new ValueEntity(null, fingerprintNode, new TextNode("alpha"));
+        fp2.sources = List.of(split2);
+        fp2.persist();
+        tm.commit();
+
+        List<ValueEntity> changes2 = nodeService.calculateRelativeDifferenceValues(relDiff, root2, 0);
+        assertEquals(1, changes2.size(),
+                "Upload 2: x=2 should produce 1 change (ratio exceeds 50% threshold)");
+
+        ValueEntity change2 = changes2.get(0);
+        JsonNode changeData2 = change2.data;
+        double ratio2 = changeData2.get("ratio").asDouble();
+        double previous2 = changeData2.get("previous").asDouble();
+        JsonNode domainValue2 = changeData2.get("domainvalue");
+
+
+        assertEquals(4, domainValue2.asInt(), "Domain should be 4");
+        assertEquals(2.1, previous2, "Previous range value should be 2.1");
+        assertEquals(-47.61904761904761, ratio2 ,"Ratio should exceed ~-47.62");
+
+        tm.begin();
+        ValueEntity root3 = new ValueEntity(null, rootNode, mapper.createObjectNode());
+        root3.persist();
+
+        ValueEntity split3 = new ValueEntity(null, splitNode, mapper.createObjectNode());
+        split3.sources = List.of(root3);
+        split3.persist();
+
+        ValueEntity domain3 = new ValueEntity(null, domainNode, new LongNode(3));
+        domain3.sources = List.of(split3);
+        domain3.persist();
+
+        ValueEntity range3 = new ValueEntity(null, rangeNode, new DoubleNode(3.1));
+        range3.sources = List.of(split3);
+        range3.persist();
+
+        ValueEntity fp3 = new ValueEntity(null, fingerprintNode, new TextNode("alpha"));
+        fp3.sources = List.of(split3);
+        fp3.persist();
+        tm.commit();
+
+        List<ValueEntity> changes3 = nodeService.calculateRelativeDifferenceValues(relDiff, root3, 0);
+
+        assertEquals(1, changes3.size(),
+                "Upload 3: x=3 should produce 1 change (ratio exceeds 50% threshold)");
+
+
+        ValueEntity change3 = changes3.get(0);
+        JsonNode changeData3 = change3.data;
+        double ratio3 = changeData3.get("ratio").asDouble();
+        double previous3 = changeData3.get("previous").asDouble();
+        JsonNode domainValue3 = changeData3.get("domainvalue");
+
+        assertEquals(3, domainValue3.asInt(), "Domain should be 3");
+        assertEquals(2.1, previous3, 0.01, "Previous range value should be 2.1");
+        assertEquals(47.61904761904763, ratio3 ,"Ratio should exceed ~47.62");
+
+        tm.begin();
+        ValueEntity root4 = new ValueEntity(null, rootNode, mapper.createObjectNode());
+        root4.persist();
+
+        ValueEntity split4 = new ValueEntity(null, splitNode, mapper.createObjectNode());
+        split4.sources = List.of(root4);
+        split4.persist();
+
+        ValueEntity domain4 = new ValueEntity(null, domainNode, new LongNode(1));
+        domain4.sources = List.of(split4);
+        domain4.persist();
+
+        ValueEntity range4 = new ValueEntity(null, rangeNode, new DoubleNode(4.1));
+        range4.sources = List.of(split4);
+        range4.persist();
+
+        ValueEntity fp4 = new ValueEntity(null, fingerprintNode, new TextNode("alpha"));
+        fp4.sources = List.of(split4);
+        fp4.persist();
+        tm.commit();
+
+        List<ValueEntity> changes4 = nodeService.calculateRelativeDifferenceValues(relDiff, root4, 0);
+
+        assertEquals(1, changes4.size(),
+                "Upload 2: x=1 should produce 1 change (ratio exceeds 50% threshold)");
+
+        ValueEntity change4 = changes4.get(0);
+        JsonNode changeData4 = change4.data;
+        double ratio4 = changeData4.get("ratio").asDouble();
+        double previous4 = changeData4.get("previous").asDouble();
+        JsonNode domainValue4 = changeData4.get("domainvalue");
+
+        assertEquals(2, domainValue4.asInt(), "Domain should be 2");
+        assertEquals(4.1, previous4, "Previous range value should be 4.1");
+        assertEquals(-48.78048780487805,ratio4,"Ratio should exceed ~-48.78048780487805");
+
+    }
+
 }

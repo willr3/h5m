@@ -999,4 +999,251 @@ public class H5mTest {
                 "quarkus-jvm should not appear in violations — scoping broken\n" + output);
     }
 
+    @Test
+    public void relativedifference_not_recalculate_old_changes(QuarkusMainLauncher launcher) throws IOException {
+        String testName = StackWalker.getInstance()
+                .walk(s -> s.skip(0).findFirst())
+                .get()
+                .getMethodName();
+        Path folder = Files.createTempDirectory("h5m");
+
+        Path filePath01 = Files.writeString(Files.createTempFile(folder,"h5m",".json").toAbsolutePath(),
+                """
+                {
+                  "Item": [
+                    {"x": 3, "y": 1.1, "fp": "alpha"}
+                  ]
+                }
+                """
+        );
+
+        Path filePath02 = Files.writeString(Files.createTempFile(folder,"h5m",".json").toAbsolutePath(),
+                """
+                {
+                  "Item": [
+                    {"x": 2, "y": 2.1, "fp": "alpha"}
+                  ]
+                }
+                """
+        );
+
+        Path filePath03 = Files.writeString(Files.createTempFile(folder,"h5m",".json").toAbsolutePath(),
+                """
+                {
+                  "Item": [
+                    {"x": 1, "y": 3.1, "fp": "alpha"}
+                  ]
+                }
+                """
+        );
+        
+        List<LaunchResult> results = run(launcher,
+                new String[]{"add","folder",testName},
+                new String[]{"add","jq","to",testName,"split",".Item[]"},
+                new String[]{"add","jq","to",testName,"domainNode","{split}:.x"},
+                new String[]{"add","jq","to",testName,"rangeNode","{split}:.y"},
+                new String[]{"add","jq","to",testName,"fp","{split}:.fp"},
+                new String[]{"list",testName,"nodes"},
+                new String[]{"add","relativedifference","relativediff","to",testName,"range","rangeNode","domain","domainNode","by","split","fingerprint","fp","window","1","minPrevious","1"},
+                new String[]{"upload",filePath01.toString(),"to",testName},
+                new String[]{"upload",filePath02.toString(),"to",testName},
+                new String[]{"list","value","from",testName},
+                new String[]{"upload",filePath03.toString(),"to",testName},
+                new String[]{"list","value","from",testName}
+        );
+        
+        results.forEach(result->{
+            assertEquals(0,result.exitCode(),result.getOutput());
+        });
+
+        LaunchResult afterUpload2 = results.get(results.size() - 3);
+        assertTrue(afterUpload2.getOutput().contains("Count: 11"),
+                "After upload 2, expect 11 values from test (1 changes total)\n" + afterUpload2.getOutput());
+
+        LaunchResult result = results.getLast();
+        assertTrue(result.getOutput().contains("Count: 17"),
+            "After upload 3, expect 17 values from test (2 changes total)\n" + result.getOutput());
+    }
+
+    @Test
+    public void relativedifference_skip_minPrevious(QuarkusMainLauncher launcher) throws IOException {
+        String testName = StackWalker.getInstance()
+                .walk(s -> s.skip(0).findFirst())
+                .get()
+                .getMethodName();
+        Path folder = Files.createTempDirectory("h5m");
+
+        Path filePath01 = Files.writeString(Files.createTempFile(folder,"h5m",".json").toAbsolutePath(),
+                """
+                {
+                  "Item": [
+                    {"x": 4, "y": 1.0, "fp": "alpha"}
+                  ]
+                }
+                """
+        );
+
+        Path filePath02 = Files.writeString(Files.createTempFile(folder,"h5m",".json").toAbsolutePath(),
+                """
+                {
+                  "Item": [
+                    {"x": 3, "y": 1.5, "fp": "alpha"}
+                  ]
+                }
+                """
+        );
+
+        Path filePath03 = Files.writeString(Files.createTempFile(folder,"h5m",".json").toAbsolutePath(),
+                """
+                {
+                  "Item": [
+                    {"x": 2, "y": 2.0, "fp": "alpha"}
+                  ]
+                }
+                """
+        );
+
+        Path filePath04 = Files.writeString(Files.createTempFile(folder,"h5m",".json").toAbsolutePath(),
+                """
+                {
+                  "Item": [
+                    {"x": 1, "y": 2.5, "fp": "alpha"}
+                  ]
+                }
+                """
+        );
+        
+        List<LaunchResult> results = run(launcher,
+                new String[]{"add","folder",testName},
+                new String[]{"add","jq","to",testName,"split",".Item[]"},
+                new String[]{"add","jq","to",testName,"domainNode","{split}:.x"},
+                new String[]{"add","jq","to",testName,"rangeNode","{split}:.y"},
+                new String[]{"add","jq","to",testName,"fp","{split}:.fp"},
+                new String[]{"add","relativedifference","relativediff","to",testName,"range","rangeNode","domain","domainNode","by","split","fingerprint","fp","window","1","minPrevious","2"},
+                new String[]{"upload",filePath01.toString(),"to",testName},
+                new String[]{"list","value","from",testName},
+                new String[]{"upload",filePath02.toString(),"to",testName},
+                new String[]{"list","value","from",testName},
+                new String[]{"upload",filePath03.toString(),"to",testName},
+                new String[]{"list","value","from",testName},
+                new String[]{"upload",filePath04.toString(),"to",testName},
+                new String[]{"list","value","from",testName}
+        );
+        
+        results.forEach(result->{
+            assertEquals(0,result.exitCode(),result.getOutput());
+        });
+
+        LaunchResult Upload1 = results.get(results.size() - 7);
+        assertTrue(Upload1.getOutput().contains("Count: 5"),
+            "After upload 1, expect 5 values\n" + Upload1.getOutput());
+
+        LaunchResult Upload2 = results.get(results.size() - 5);
+        assertTrue(Upload2.getOutput().contains("Count: 10"),
+            "After upload 2, expect 10 values\n" + Upload2.getOutput());
+
+        LaunchResult Upload3 = results.get(results.size() - 3);
+        assertTrue(Upload3.getOutput().contains("Count: 16"),
+            "After upload 3, expect 16 values (expect 1 change here since it violates threshold value)\n" + Upload3.getOutput());
+
+        LaunchResult Upload4 = results.getLast();
+        assertTrue(Upload4.getOutput().contains("Count: 22"),
+            "After upload 4, expect 22 values (expect 1 change here since it violates threshold value. With minPrevious=2 total changes=2)\n" + Upload4.getOutput());
+    }
+
+    @Test
+    public void relativedifference_Unordered_uploads(QuarkusMainLauncher launcher) throws IOException {
+        String testName = StackWalker.getInstance()
+                .walk(s -> s.skip(0).findFirst())
+                .get()
+                .getMethodName();
+        Path folder = Files.createTempDirectory("h5m");
+
+        Path filePath01 = Files.writeString(Files.createTempFile(folder,"h5m",".json").toAbsolutePath(),
+                """
+                {
+                  "Item": [
+                    {"x": 4, "y": 1.1, "fp": "alpha"}
+                  ]
+                }
+                """
+        );
+
+        Path filePath02 = Files.writeString(Files.createTempFile(folder,"h5m",".json").toAbsolutePath(),
+                """
+                {
+                  "Item": [
+                    {"x": 2, "y": 2.1, "fp": "alpha"}
+                  ]
+                }
+                """
+        );
+
+        Path filePath03 = Files.writeString(Files.createTempFile(folder,"h5m",".json").toAbsolutePath(),
+                """
+                {
+                  "Item": [
+                    {"x": 3, "y": 3.1, "fp": "alpha"}
+                  ]
+                }
+                """
+        );
+
+        Path filePath04 = Files.writeString(Files.createTempFile(folder,"h5m",".json").toAbsolutePath(),
+                """
+                {
+                  "Item": [
+                    {"x": 1, "y": 4.1, "fp": "alpha"}
+                  ]
+                }
+                """
+        );
+
+        List<LaunchResult> results = run(launcher,
+                new String[]{"add","folder",testName},
+                new String[]{"add","jq","to",testName,"split",".Item[]"},
+                new String[]{"add","jq","to",testName,"domainNode","{split}:.x"},
+                new String[]{"add","jq","to",testName,"rangeNode","{split}:.y"},
+                new String[]{"add","jq","to",testName,"fp","{split}:.fp"},
+                new String[]{"list",testName,"nodes"},
+                new String[]{"add","relativedifference","relativediff","to",testName,"range","rangeNode","domain","domainNode","by","split","fingerprint","fp","window","1","minPrevious","1"},
+                new String[]{"upload",filePath01.toString(),"to",testName},
+                new String[]{"upload",filePath02.toString(),"to",testName},
+                new String[]{"list","value","from",testName},
+                new String[]{"upload",filePath03.toString(),"to",testName},
+                new String[]{"list","value","from",testName},
+                new String[]{"upload",filePath04.toString(),"to",testName},
+                new String[]{"list","value","from",testName}
+        );
+
+        results.forEach(result->{
+            assertEquals(0,result.exitCode(),result.getOutput());
+        });
+
+        LaunchResult afterUpload2 = results.get(results.size() - 5);
+        String output2 = afterUpload2.getOutput();
+        assertTrue(output2.contains("Count: 11"),
+                "After upload 2, expect 11 values (1 change detected for x=4)\n" + output2);
+
+        assertTrue(output2.contains("\"domainvalue\":4") || output2.contains("domainvalue\": 4"),
+                "Change should be detected for domain x=4\n" + output2);
+
+        LaunchResult afterUpload3 = results.get(results.size() - 3);
+        String output3 = afterUpload3.getOutput();
+        assertTrue(output3.contains("Count: 17"),
+                "After upload 3, expect 17 values (2 changes total)\n" + output3);
+
+        assertTrue(output3.contains("\"domainvalue\":3") || output3.contains("domainvalue\": 3"),
+                "Change should be detected for domain x=3\n" + output3);
+
+        LaunchResult afterUpload4 = results.getLast();
+        String output4 = afterUpload4.getOutput();
+        assertTrue(output4.contains("Count: 23"),
+                "After upload 4, expect 23 values (3 changes total)\n" + output4);
+
+        assertTrue(output4.contains("\"domainvalue\":2") || output4.contains("domainvalue\": 2"),
+                "Change should be detected for domain x=2\n" + output4);
+
+    }
+
 }
