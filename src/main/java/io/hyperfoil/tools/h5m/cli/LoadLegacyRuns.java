@@ -28,6 +28,7 @@ public class LoadLegacyRuns implements Callable<Integer> {
     @CommandLine.Option(names = {"password"}, description = "legacy db password", defaultValue = "quarkus") String password;
     @CommandLine.Option(names = {"url"}, description = "legacy connection url",defaultValue = "jdbc:postgresql://0.0.0.0:") String url;
     @CommandLine.Option(names = {"testId"}, description = "specify which test to load. Loads all if unspecified" ) Long testId;
+    @CommandLine.Option(names = {"limit"}, description = "max runs to load", defaultValue = "-1") int limit;
 
     @Override
     public Integer call() throws Exception {
@@ -82,16 +83,27 @@ public class LoadLegacyRuns implements Callable<Integer> {
                         }
                     }
                 }
-                try (PreparedStatement ps = connection.prepareStatement("select id,data from run where testid = ? and trashed = false")) {
+                String runQuery = limit > 0
+                        ? "select id,data from run where testid = ? and trashed = false order by id desc limit ?"
+                        : "select id,data from run where testid = ? and trashed = false order by id desc";
+                connection.setAutoCommit(false);
+                try (PreparedStatement ps = connection.prepareStatement(runQuery)) {
+                    ps.setFetchSize(5);
                     ps.setLong(1, testId);
+                    if (limit > 0) ps.setInt(2, limit);
+                    int count = 0;
                     try (ResultSet rs = ps.executeQuery()) {
                         while(rs.next()){
                             Long id = rs.getLong(1);
                             System.out.println(name+" "+id);
                             JsonNode data = mapper.readTree(rs.getString(2));
                             folderService.upload(folder.name(),null,data);
+                            count++;
                         }
                     }
+                    System.out.println("loaded " + count + " runs");
+                } finally {
+                    connection.setAutoCommit(true);
                 }
             }
         } finally {
