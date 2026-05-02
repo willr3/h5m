@@ -606,6 +606,36 @@ public class LoadLegacyTestsTest {
         assertEquals(1, combinerCount, "should have exactly 1 combiner node, not duplicates");
     }
 
+    @Test
+    public void createNodesFromLabel_jq_combiner_wraps_filter_paths_in_first() {
+        // Non-array extractors with jsonpath filter expressions produce a stream in JQ.
+        // Without first(), object construction creates cartesian products (nested objects).
+        // With first(), each field gets a single value.
+        LoadLegacyTests.Extractor ext1 = new LoadLegacyTests.Extractor("count",
+                "$.data[*] ? (@.name == \"target\") .result.\"text()\"", false);
+        LoadLegacyTests.Extractor ext2 = new LoadLegacyTests.Extractor("target",
+                "$.data[*] ? (@.name == \"target\") .target.\"text()\"", false);
+        LoadLegacyTests.Label label = new LoadLegacyTests.Label(-1, "pct",
+                "v => parseInt((v.count / v.target) * 100)", List.of(ext1, ext2));
+
+        NodeGroupEntity group = new NodeGroupEntity();
+        LoadLegacyTests.NodeTracking tracker = new LoadLegacyTests.NodeTracking();
+
+        NodeEntity entity = loadLegacyTests.createNodesFromLabel(label, group.root, group, tracker, new HashSet<>());
+
+        assertNotNull(entity);
+        assertEquals(1, entity.sources.size());
+        NodeEntity combiner = entity.sources.get(0);
+        assertInstanceOf(JqNode.class, combiner);
+        // Both scalar extractors have filters, so their paths should be wrapped in first()
+        assertTrue(combiner.operation.contains("first("), "filter-chain paths should be wrapped in first()");
+        // Should not contain bare select() outside first()
+        String op = combiner.operation;
+        int firstIdx = op.indexOf("first(");
+        int selectIdx = op.indexOf("select(");
+        assertTrue(selectIdx > firstIdx, "select() should be inside first(), not standalone");
+    }
+
     @Test @Disabled("not sure why it is failing atm")
     public void createNodesFromLabel_two_extractors_custom_function_with_extra_parameters(){
         LoadLegacyTests.Extractor extractor1 = new LoadLegacyTests.Extractor("extractor","$.one",false);
