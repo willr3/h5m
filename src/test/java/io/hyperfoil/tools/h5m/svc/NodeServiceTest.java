@@ -1514,4 +1514,39 @@ public class NodeServiceTest extends FreshDb {
         assertEquals(1, mixedR1.size(), "minInclusive=false: value 10 should violate min=10");
         assertEquals(0, mixedR2.size(), "maxInclusive=true: value 100 should NOT violate max=100");
     }
+
+    @Test
+    public void jsonpathToJq_filter_equals() {
+        assertEquals(
+                ".boot_time[]?.boot_logs[]? | select(.name == \"early-boot-service.service\")",
+                NodeService.jsonpathToJq("$.boot_time[*].boot_logs[*] ? (@.name == \"early-boot-service.service\")"));
+    }
+
+    @Test
+    public void jsonpathToJq_filter_not_equals() {
+        assertEquals(
+                ".results[]? | select(.jobName != \"garbage-collection\")",
+                NodeService.jsonpathToJq("$.results[*] ?(@.jobName != \"garbage-collection\")"));
+    }
+
+    @Test
+    public void jsonpathToJq_filter_like_regex() {
+        assertEquals(
+                ".boot_time[]?.boot_logs[]? | select((.name | test(\"^InitRD$\")))",
+                NodeService.jsonpathToJq("$.boot_time[*].boot_logs[*] ? (@.name like_regex \"^InitRD$\")"));
+    }
+
+    @Test
+    public void jsonpathToJq_filter_with_quoted_fields_and_trailing_path() {
+        assertEquals(
+                ".faban.summary.benchResults.driverSummary[]? | select(.[\"@name\"] == \"MfgDriver\").customStats.stat[0].passed.[\"text()\"]",
+                NodeService.jsonpathToJq("$.faban.summary.benchResults.driverSummary[*] ? (@.\"@name\" == \"MfgDriver\").customStats.stat[0].passed.\"text()\""));
+    }
+
+    @Test
+    public void jsonpathToJq_no_filter() {
+        assertEquals(".foo.bar", NodeService.jsonpathToJq("$.foo.bar"));
+        assertEquals(".foo[]?.bar", NodeService.jsonpathToJq("$.foo[*].bar"));
+        assertEquals(".foo[]?.bar", NodeService.jsonpathToJq("$.foo.*.bar"));
+    }
 }

@@ -760,9 +760,73 @@ public class NodeService implements NodeServiceInterface {
         String jq = jsonpath;
         if (jq.startsWith("$.")) jq = jq.substring(1);
         else if (jq.equals("$")) return ".";
-        jq = jq.replace(".*", "[]?");
         jq = jq.replace("[*]", "[]?");
+        jq = jq.replace(".*", "[]?");
+        // Convert PostgreSQL jsonpath filter expressions to JQ select()
+        // ? (@.field == "value") → [] | select(.field == "value")
+        // ? (@.field != "value") → [] | select(.field != "value")
+        // ? (@.field like_regex "pattern") → [] | select(.field | test("pattern"))
+        if (jq.contains("?")) {
+            jq = convertJsonpathFilters(jq);
+        }
         return jq;
+    }
+
+    static String convertJsonpathFilters(String jq) {
+        StringBuilder result = new StringBuilder();
+        int i = 0;
+        while (i < jq.length()) {
+            // Look for ? ( or ?( — the jsonpath filter pattern, not []? which is JQ optional
+            int filterStart = -1;
+            for (int s = i; s < jq.length(); s++) {
+                if (jq.charAt(s) == '?' && s + 1 < jq.length()) {
+                    int next = s + 1;
+                    while (next < jq.length() && jq.charAt(next) == ' ') next++;
+                    if (next < jq.length() && jq.charAt(next) == '(') {
+                        filterStart = s;
+                        break;
+                    }
+                }
+            }
+            if (filterStart == -1) {
+                result.append(jq, i, jq.length());
+                break;
+            }
+            String before = jq.substring(i, filterStart).trim();
+            if (!before.isEmpty()) {
+                result.append(before);
+            }
+            if (!result.toString().endsWith("[]?")) {
+                result.append("[]?");
+            }
+            int parenStart = jq.indexOf("(", filterStart);
+            if (parenStart == -1) {
+                result.append(jq, filterStart, jq.length());
+                break;
+            }
+            int depth = 1;
+            int parenEnd = parenStart + 1;
+            while (parenEnd < jq.length() && depth > 0) {
+                if (jq.charAt(parenEnd) == '(') depth++;
+                else if (jq.charAt(parenEnd) == ')') depth--;
+                parenEnd++;
+            }
+            String filterBody = jq.substring(parenStart + 1, parenEnd - 1).trim();
+            // Convert @.field references to .field and handle quoted field names
+            // @."special" → .["special"], @.normal → .normal
+            filterBody = filterBody.replaceAll("@\\.\"([^\"]+)\"", ".[\"$1\"]");
+            filterBody = filterBody.replace("@.", ".");
+            // Handle like_regex → test()
+            if (filterBody.contains("like_regex")) {
+                filterBody = filterBody.replaceAll("(\\S+)\\s+like_regex\\s+\"([^\"]+)\"", "($1 | test(\"$2\"))");
+            }
+            result.append(" | select(").append(filterBody).append(")");
+            i = parenEnd;
+        }
+        // Convert remaining ."text()" style field access to ["text()"]
+        String output = result.toString();
+        output = output.replaceAll("\\.\"([^\"]+)\"", ".[\"$1\"]");
+        return output;
     }
 
     public static String renameParameters(String function,Map<String,String> renames){
