@@ -300,6 +300,8 @@ public class LoadLegacyTests implements Callable<Integer> {
                         String quotedName = "\"" + ext.name().replace("\"", "\\\"") + "\"";
                         if (ext.isArray()) {
                             jqExpr.append(quotedName).append(": (try [").append(jqPath).append("] catch null)");
+                        } else if (jqPath.contains("select(")) {
+                            jqExpr.append(quotedName).append(": (first(").append(jqPath).append(") // null)");
                         } else {
                             jqExpr.append(quotedName).append(": (").append(jqPath).append(" // null)");
                         }
