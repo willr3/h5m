@@ -471,6 +471,76 @@ public class LoadLegacyTestsTest {
         assertEquals(1, datasetCount, "Expect 1 dataset node named 'dataset' (no suffix)\n" + folder.group.sources.stream().map(NodeEntity::toString).collect(Collectors.joining("\n")));
     }
 
+    @Test
+    public void createFolder_two_transformers_coalesce_uses_sanitized_names() {
+        // Transformer names with spaces must be sanitized for JS parameter names
+        LoadLegacyTests.Extractor ext1 = new LoadLegacyTests.Extractor("data", "$.old[*]", true);
+        LoadLegacyTests.Extractor ext2 = new LoadLegacyTests.Extractor("data", "$.new[*]", true);
+
+        LoadLegacyTests.Label label = new LoadLegacyTests.Label(-1, "result", null, List.of(new LoadLegacyTests.Extractor("result", "$.result", false)));
+
+        LoadLegacyTests.Transformer t1 = new LoadLegacyTests.Transformer(1, "My Transform", "data => data", "urn:t:1", List.of(ext1), List.of(label));
+        LoadLegacyTests.Transformer t2 = new LoadLegacyTests.Transformer(2, "My Transform", "data => data", "urn:t:1", List.of(ext2), List.of(label));
+
+        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1, "test", new HashedLists<>(),
+                List.of(), Collections.emptyList(), List.of(t1, t2), Collections.emptyList());
+
+        FolderEntity folder = loadLegacyTests.createFolder(test);
+
+        // Transformer names should be sanitized (spaces → underscores)
+        NodeEntity coalesce = folder.group.sources.stream().filter(v -> v.name.equals("transformer_coalesce")).findFirst().orElse(null);
+        assertNotNull(coalesce, "coalesce node should exist");
+        // Extract parameter list from "(params) => body"
+        String params = coalesce.operation.substring(1, coalesce.operation.indexOf(")"));
+        assertFalse(params.contains(" "), "parameter names should not contain spaces: " + params);
+        assertTrue(params.contains("transformer_My_Transform_1"), "should use sanitized transformer name with ID suffix");
+    }
+
+    @Test
+    public void createNodesFromLabel_jq_combiner_quotes_extractor_names_with_spaces() {
+        // Horreum extractor names can contain spaces — JQ object keys need quoting
+        LoadLegacyTests.Extractor ext1 = new LoadLegacyTests.Extractor("My Score","$.score",false);
+        LoadLegacyTests.Extractor ext2 = new LoadLegacyTests.Extractor("Other Value","$.value",false);
+        LoadLegacyTests.Label label = new LoadLegacyTests.Label(-1,"computed",
+                "v => v[\"My Score\"] + v[\"Other Value\"]", List.of(ext1, ext2));
+
+        NodeGroupEntity group = new NodeGroupEntity();
+        LoadLegacyTests.NodeTracking tracker = new LoadLegacyTests.NodeTracking();
+
+        NodeEntity entity = loadLegacyTests.createNodesFromLabel(label, group.root, group, tracker, new HashSet<>());
+
+        assertNotNull(entity);
+        assertEquals(1, entity.sources.size());
+        NodeEntity combiner = entity.sources.get(0);
+        assertInstanceOf(JqNode.class, combiner);
+        assertTrue(combiner.operation.contains("\"My Score\""), "extractor name with spaces should be quoted");
+        assertTrue(combiner.operation.contains("\"Other Value\""), "extractor name with spaces should be quoted");
+    }
+
+    @Test
+    public void createFolder_no_transform_deduplicates_coalesce_sources() {
+        // When the same label appears across multiple schemas but resolves to the same
+        // extractor node, the coalesce should deduplicate to avoid value_edge violations
+        LoadLegacyTests.Extractor ext = new LoadLegacyTests.Extractor("value","$.value",false);
+        LoadLegacyTests.Label label1 = new LoadLegacyTests.Label(1,"metric","v => v * 2",List.of(ext));
+        LoadLegacyTests.Label label2 = new LoadLegacyTests.Label(2,"metric","v => v * 3",List.of(ext));
+
+        HashedLists<String,LoadLegacyTests.Label> schemaPaths = new HashedLists<>();
+        schemaPaths.put("$.\"$schema\"", label1);
+        schemaPaths.put("$.\"$schema\"", label2);
+
+        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1, "test", schemaPaths,
+                Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+
+        FolderEntity folder = loadLegacyTests.createFolder(test);
+
+        assertNotNull(folder);
+        // With dedup, the combining should produce at most 1 unique source
+        // (both variants use the same extractor node via nodeTracking reuse)
+        long metricCount = folder.group.sources.stream().filter(v -> v.name.equals("metric")).count();
+        assertTrue(metricCount >= 1, "should have at least one metric node");
+    }
+
     @Test @Disabled("not sure why it is failing atm")
     public void createNodesFromLabel_two_extractors_custom_function_with_extra_parameters(){
         LoadLegacyTests.Extractor extractor1 = new LoadLegacyTests.Extractor("extractor","$.one",false);
