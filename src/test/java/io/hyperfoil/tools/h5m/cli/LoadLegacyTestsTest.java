@@ -541,6 +541,71 @@ public class LoadLegacyTestsTest {
         assertTrue(metricCount >= 1, "should have at least one metric node");
     }
 
+    @Test
+    public void createFolder_no_transform_variant_nodes_added_to_group() {
+        // When labels are duplicated across schemas, the numbered variants must be
+        // added to folder.group so they get group_id and are processed by the work queue
+        LoadLegacyTests.Extractor ext1 = new LoadLegacyTests.Extractor("val","$.val",false);
+        LoadLegacyTests.Extractor ext2 = new LoadLegacyTests.Extractor("val","$.other_val",false);
+        LoadLegacyTests.Label label1 = new LoadLegacyTests.Label(1,"metric",null,List.of(ext1));
+        LoadLegacyTests.Label label2 = new LoadLegacyTests.Label(2,"metric",null,List.of(ext2));
+
+        HashedLists<String,LoadLegacyTests.Label> schemaPaths = new HashedLists<>();
+        schemaPaths.put("$.\"$schema\"", label1);
+        schemaPaths.put("$.\"$schema\"", label2);
+
+        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1, "test", schemaPaths,
+                Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+
+        FolderEntity folder = loadLegacyTests.createFolder(test);
+
+        assertNotNull(folder);
+        // All nodes should have group set (no orphans)
+        for (NodeEntity n : folder.group.sources) {
+            assertNotNull(n.group, "node " + n.name + " should have group set");
+            assertEquals(folder.group, n.group, "node " + n.name + " should belong to the folder group");
+        }
+        // The numbered variants (metric0, metric1) should be in the group's sources
+        long variantCount = folder.group.sources.stream()
+                .filter(v -> v.name.startsWith("metric") && v.name.matches("metric\\d+"))
+                .count();
+        assertTrue(variantCount >= 1, "numbered variant nodes should be in the group\n"
+                + folder.group.sources.stream().map(NodeEntity::toString).collect(Collectors.joining("\n")));
+    }
+
+    @Test
+    public void createNodesFromLabel_jq_combiner_reused_across_labels() {
+        // When two labels with different functions but same extractors call createNodesFromLabel,
+        // the second should reuse the existing JQ combiner instead of creating a duplicate
+        LoadLegacyTests.Extractor ext1 = new LoadLegacyTests.Extractor("a","$.a",false);
+        LoadLegacyTests.Extractor ext2 = new LoadLegacyTests.Extractor("b","$.b",false);
+
+        LoadLegacyTests.Label label1 = new LoadLegacyTests.Label(1,"result","v => v.a + v.b",List.of(ext1, ext2));
+        LoadLegacyTests.Label label2 = new LoadLegacyTests.Label(2,"result","v => v.a * v.b",List.of(ext1, ext2));
+
+        NodeGroupEntity group = new NodeGroupEntity();
+        LoadLegacyTests.NodeTracking tracker = new LoadLegacyTests.NodeTracking();
+
+        NodeEntity node1 = loadLegacyTests.createNodesFromLabel(label1, group.root, group, tracker, new HashSet<>());
+        NodeEntity node2 = loadLegacyTests.createNodesFromLabel(label2, group.root, group, tracker, new HashSet<>());
+
+        assertNotNull(node1);
+        assertNotNull(node2);
+        // Both should be JsNodes with a JQ combiner as source
+        assertInstanceOf(JsNode.class, node1);
+        assertInstanceOf(JsNode.class, node2);
+        assertEquals(1, node1.sources.size());
+        assertEquals(1, node2.sources.size());
+        // Both should reference the SAME combiner instance (reused, not duplicated)
+        assertSame(node1.sources.get(0), node2.sources.get(0),
+                "both labels should reuse the same JQ combiner node");
+        // Only one combiner should exist in the group
+        long combinerCount = group.sources.stream()
+                .filter(v -> v.name.endsWith("_extract"))
+                .count();
+        assertEquals(1, combinerCount, "should have exactly 1 combiner node, not duplicates");
+    }
+
     @Test @Disabled("not sure why it is failing atm")
     public void createNodesFromLabel_two_extractors_custom_function_with_extra_parameters(){
         LoadLegacyTests.Extractor extractor1 = new LoadLegacyTests.Extractor("extractor","$.one",false);
