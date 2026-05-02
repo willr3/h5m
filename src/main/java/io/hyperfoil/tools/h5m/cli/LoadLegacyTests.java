@@ -305,9 +305,16 @@ public class LoadLegacyTests implements Callable<Integer> {
                         }
                     }
                     jqExpr.append("}");
-                    NodeEntity combiner = new JqNode(label.name() + "_extract", jqExpr.toString(), List.of(source));
-                    group.addNode(combiner);
-                    nodeTracking.addNode(combiner);
+                    String combinerName = label.name() + "_extract";
+                    NodeEntity combiner;
+                    List<NodeEntity> existing = nodeTracking.getNodes(combinerName);
+                    if (!existing.isEmpty()) {
+                        combiner = existing.get(0);
+                    } else {
+                        combiner = new JqNode(combinerName, jqExpr.toString(), List.of(source));
+                        group.addNode(combiner);
+                        nodeTracking.addNode(combiner);
+                    }
                     rtrn = new JsNode(label.name, function, List.of(combiner));
                 } else if(params.size()==1) {
                     rtrn = new JsNode(label.name,function,labelNodesByName.values().stream().flatMap(List::stream).collect(Collectors.toList()));
@@ -434,8 +441,10 @@ public class LoadLegacyTests implements Callable<Integer> {
                         if(labels.size()>1) {
                             labelNode.name = labelNode.name + nodesByOriginalName.get(label.name).size();
                             nodesByOriginalName.put(label.name,labelNode);
+                            folder.group.addNode(labelNode);
                         } else {
                             nodeTracking.tagNodeAsLabel(label, labelNode);
+                            folder.group.addNode(labelNode);
                         }
                     }
 
