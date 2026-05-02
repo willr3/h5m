@@ -88,6 +88,7 @@ public class VerifyLegacy implements Callable<Integer> {
             int totalMismatches = 0;
             int totalMissing = 0;
             int totalExtra = 0;
+            int totalMisaligned = 0;
             Map<String, int[]> perLabel = new LinkedHashMap<>();  // label → [match, mismatch, missing]
             Map<Integer, int[]> perDataset = new TreeMap<>();     // ordinal → [match, mismatch, missing]
             long startTime = System.currentTimeMillis();
@@ -99,6 +100,7 @@ public class VerifyLegacy implements Callable<Integer> {
                 totalMismatches += result[1];
                 totalMissing += result[2];
                 totalExtra += result[3];
+                totalMisaligned += result[4];
             }
 
             long elapsed = System.currentTimeMillis() - startTime;
@@ -111,7 +113,7 @@ public class VerifyLegacy implements Callable<Integer> {
             System.out.printf("Match rate: %.1f%% (%d/%d)%n", matchRate, totalMatches, totalComparisons);
             System.out.println("  matching:   " + totalMatches);
             System.out.println("  mismatched: " + totalMismatches);
-            System.out.println("  missing:    " + totalMissing);
+            System.out.println("  missing:    " + totalMissing + " (" + totalMisaligned + " misaligned, " + (totalMissing - totalMisaligned) + " absent)");
             System.out.println("  extra:      " + totalExtra);
             System.out.printf("Time: %.1fs%n", elapsed / 1000.0);
 
@@ -265,7 +267,7 @@ public class VerifyLegacy implements Callable<Integer> {
 
     private int[] compareRun(Connection legacyConn, String testName, long runId,
                              Map<String, int[]> perLabel, Map<Integer, int[]> perDataset) throws SQLException {
-        int matches = 0, mismatches = 0, missing = 0, extra = 0;
+        int matches = 0, mismatches = 0, missing = 0, extra = 0, misaligned = 0;
 
         // Get Horreum label values for this run
         Map<String, Map<Integer, String>> horreumValues = new LinkedHashMap<>();
@@ -375,7 +377,25 @@ public class VerifyLegacy implements Callable<Integer> {
                     missing++;
                     track(perLabel, labelName, 2);
                     track(perDataset, ordinal, 2);
-                    System.out.println("  MISSING  " + labelName + " (dataset " + ordinal + ", h5m idx " + h5mIdx + ")");
+                    // Check if the value exists at a different idx (wrong position) or not at all
+                    String hNorm = normalizeValue(horreumValue);
+                    String foundAt = null;
+                    if (!h5mOrdinals.isEmpty()) {
+                        for (Map.Entry<Integer, String> h5mEntry : h5mOrdinals.entrySet()) {
+                            if (hNorm.equals(normalizeValue(h5mEntry.getValue()))) {
+                                foundAt = "idx=" + h5mEntry.getKey();
+                                break;
+                            }
+                        }
+                    }
+                    if (foundAt != null) {
+                        misaligned++;
+                        System.out.println("  MISALIGN " + labelName + " (dataset " + ordinal + "): value exists at " + foundAt);
+                    } else if (!h5mOrdinals.isEmpty()) {
+                        System.out.println("  MISMATCH " + labelName + " (dataset " + ordinal + ", h5m idx " + h5mIdx + "): node has values but none match");
+                    } else {
+                        System.out.println("  MISSING  " + labelName + " (dataset " + ordinal + ", h5m idx " + h5mIdx + "): no values in h5m");
+                    }
                     if (verbose && !h5mOrdinals.isEmpty()) {
                         System.out.println("           h5m has values at indices: " + h5mOrdinals.keySet());
                     }
@@ -393,8 +413,8 @@ public class VerifyLegacy implements Callable<Integer> {
             System.out.println("  EXTRA    " + extra + " labels in h5m not in Horreum");
         }
 
-        System.out.println("  Result: " + matches + " match, " + mismatches + " mismatch, " + missing + " missing, " + extra + " extra");
-        return new int[]{matches, mismatches, missing, extra};
+        System.out.println("  Result: " + matches + " match, " + mismatches + " mismatch, " + missing + " missing (" + misaligned + " misaligned), " + extra + " extra");
+        return new int[]{matches, mismatches, missing, extra, misaligned};
     }
 
     private static <K> void track(Map<K, int[]> map, K key, int idx) {
