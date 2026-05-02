@@ -443,12 +443,28 @@ public class LoadLegacyTests implements Callable<Integer> {
             }// for each jsonpath
             //create all the merge nodes to resolve label name conflicts
             for(String labelName : nodesByOriginalName.keys()){
-                System.out.println("combining "+labelName);
                 List<NodeEntity> sourceNodes = nodesByOriginalName.get(labelName);
-                NodeEntity newNode = new JsNode(labelName,"obj=>Object.values(obj).find(v => v != null)",sourceNodes);
-                folder.group.addNode(newNode);
-                nodeTracking.addNode(newNode);
-                nodeTracking.tagNodeAsLabel(new Label(-1,labelName,newNode.operation,Collections.emptyList()),newNode);
+                // Deduplicate: variants sourcing from the same extractor produce the same
+                // value at runtime, causing value_edge duplicate constraint violations.
+                // Also skip variants with no sources (can't produce values).
+                Set<Long> seenSourceIds = new HashSet<>();
+                List<NodeEntity> uniqueSourceNodes = new ArrayList<>();
+                for (NodeEntity sn : sourceNodes) {
+                    if (sn.sources.isEmpty()) continue;
+                    Long sourceId = sn.sources.get(0).id;
+                    if (sourceId == null || seenSourceIds.add(sourceId)) {
+                        uniqueSourceNodes.add(sn);
+                    }
+                }
+                if (uniqueSourceNodes.size() == 1) {
+                    nodeTracking.tagNodeAsLabel(new Label(-1,labelName,null,Collections.emptyList()), uniqueSourceNodes.get(0));
+                } else if (uniqueSourceNodes.size() > 1) {
+                    System.out.println("combining " + labelName + " (" + uniqueSourceNodes.size() + " unique sources from " + sourceNodes.size() + " variants)");
+                    NodeEntity newNode = new JsNode(labelName, "obj=>Object.values(obj).find(v => v != null)", uniqueSourceNodes);
+                    folder.group.addNode(newNode);
+                    nodeTracking.addNode(newNode);
+                    nodeTracking.tagNodeAsLabel(new Label(-1, labelName, newNode.operation, Collections.emptyList()), newNode);
+                }
             }
         }
 
