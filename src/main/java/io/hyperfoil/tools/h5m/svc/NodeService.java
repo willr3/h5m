@@ -595,7 +595,7 @@ public class NodeService implements NodeServiceInterface {
     }
     private List<ValueEntity> calculateSqlJsonpathValuesFirstOrAll(NodeEntity node, Map<String, ValueEntity> sourceValues, int startingOrdinal,String psqlFunction) throws IOException {
         List<ValueEntity> rtrn = new ArrayList<>();
-        if(sourceValues.isEmpty()){//end early when there isn't input
+        if(sourceValues.isEmpty()){
             return rtrn;
         }
 
@@ -604,54 +604,31 @@ public class NodeService implements NodeServiceInterface {
             return Collections.emptyList();
         }
         ValueEntity input = sourceValues.get(node.sources.getFirst().name);
-        ValueEntity tempV = new ValueEntity(null,node,null);
-        tempV.sources=List.of(input);
-        tempV.idx=startingOrdinal;
-        ValueEntity newValue = valueService.create(tempV);
-        Session session = em.unwrap(Session.class);
-        session.doWork(conn -> {
-            try(PreparedStatement statement = conn.prepareStatement(
-                    switch(dbKind) {
-                        case "sqlite" ->
-                                """
-                                update value set data = ( select data from value where id = ?) -> ? where id = ?
-                                """;
-                        case "postgresql" ->
-                                """
-                                update value set data = PSQL_FUNCTION( (select data from value where id = ?) , ?::jsonpath ) where id = ?
-                                """.replaceAll("PSQL_FUNCTION",psqlFunction);
-                        default -> "";
-                    }
-            )) {
-                statement.setLong(1,input.id);
-                statement.setString(2,node.operation);
-                statement.setLong(3,newValue.id);
-                statement.execute();
-            }catch (Exception e){
-                System.err.println(e.getMessage());
-            }
 
-            JsonNode found = (JsonNode) em.createNativeQuery(
-                    switch(dbKind){
-                        case "sqlite" -> "select data from value where data is not null and data != 'null' and id = ?";
-                        case "postgresql" -> "select data from value where data is not null and data != 'null'::jsonb and id = ?";
-                        default -> "";
-                    }
-                , JsonNode.class)
-                .setParameter(1,newValue.id)
+        JsonNode found = (JsonNode) em.createNativeQuery(
+                switch(dbKind) {
+                    case "sqlite" -> "SELECT (SELECT data FROM value WHERE id = ?) -> ?";
+                    case "postgresql" -> ("SELECT PSQL_FUNCTION((SELECT data FROM value WHERE id = ?), ?::jsonpath)")
+                            .replaceAll("PSQL_FUNCTION", psqlFunction);
+                    default -> "";
+                }, JsonNode.class)
+                .setParameter(1, input.id)
+                .setParameter(2, node.operation)
                 .getSingleResultOrNull();
-            if( found == null ){
-                valueService.delete(newValue);
-            } else {
-                //empty result mascarading as an empty array
-                if(dbKind.equals("postgresql") && psqlFunction.equals("jsonb_path_query_array") && found.isArray() && found.size()==0){
-                    valueService.delete(newValue);
-                } else {
-                    newValue.data = found;
-                    rtrn.add(newValue);
-                }
-            }
-        });
+
+        if (found == null || found.isNull()) {
+            return rtrn;
+        }
+        if (psqlFunction.equals("jsonb_path_query_array") && found.isArray() && found.size() == 0) {
+            return rtrn;
+        }
+
+        ValueEntity newValue = new ValueEntity(null, node, null);
+        newValue.data = found;
+        newValue.sources = List.of(input);
+        newValue.idx = startingOrdinal;
+        valueService.create(newValue);
+        rtrn.add(newValue);
         return rtrn;
     }
     @Transactional
