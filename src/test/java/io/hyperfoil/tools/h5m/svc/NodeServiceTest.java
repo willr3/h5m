@@ -1,5 +1,6 @@
 package io.hyperfoil.tools.h5m.svc;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.DoubleNode;
@@ -657,6 +658,107 @@ public class NodeServiceTest extends FreshDb {
         assertTrue(read.startsWith("["),"value should be an array: "+read);
         assertTrue(read.endsWith("]"),"value should be an array: "+read);
     }
+    //key based merging using Jsq
+    @Test
+    public void calculatejsValues_dataset_merge() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException, IOException {
+        tm.begin();
+        NodeEntity root = new RootNode();
+        root.persist();
+        NodeEntity transform1 = new JqNode("transform1","$.config");
+        transform1.persist();
+        NodeEntity transform2 = new JqNode("transform2","$.foo");
+        transform2.persist();
+        NodeEntity transform3 = new JqNode("transform3","$.bar");
+        transform3.persist();
+        JsNode dataset = new JsNode("dataset", """
+                function* (value){
+                  const keys = Object.keys(value);
+                  const values = Object.values(value);
+                  const length = Math.max(...Object.values(value).map(v => Array.isArray(v) ? v.length : 1))
+                  const rtrn = []
+                  for (let i=0; i<length; i++){
+                     let entry = {}
+                     for(const key of keys){
+                       let toAdd = Array.isArray(value[key]) ? value[key].length > i ? value[key][i] : false : value[key]
+                       if(toAdd){
+                         entry[key]=toAdd
+                       }
+                     }
+                     console.log("entry",JSON.stringify(entry,null,2)   )
+                     rtrn.push(entry)
+                     yield entry;
+                  }
+                  //return rtrn
+                }
+                """);
+        dataset.persist();
+        ObjectMapper mapper = new ObjectMapper();
+        ValueEntity upload = new ValueEntity(null,root,mapper.readTree("""
+            { "config": { "alpha" : "apple"},
+              "foo": [ { "key" : "fooOne" } , { "key": "fooTwo" } , { "key" : "fooThree" }],
+              "bar": [ { "key" : "barOne" } , { "key": "barTwo" } ]
+            }
+        """));
+        upload.persist();
+        ValueEntity t1 = new ValueEntity(null,transform1,upload.data.get("config"));
+        t1.persist();
+        ValueEntity t2 = new ValueEntity(null,transform1,upload.data.get("foo"));
+        t2.persist();
+        ValueEntity t3 = new ValueEntity(null,transform1,upload.data.get("bar"));
+        t3.persist();
+        tm.commit();
+
+        List<ValueEntity> values = nodeService.calculateJsValues(dataset,Map.of("transform1",t1,"transform2",t2,"transform3",t3),0);
+        assertEquals(3,values.size(),"expect to create a single value from two sources");
+        assertNotNull(values.get(0).data,"value[0] data should not be null");
+        assertTrue(Stream.of("transform1","transform2","transform3").allMatch(values.get(0).data::hasNonNull),"missing expected key from values[0]");
+        assertNotNull(values.get(1).data,"value[1] data should not be null");
+        assertTrue(Stream.of("transform1","transform2","transform3").allMatch(values.get(1).data::hasNonNull),"missing expected key from values[1]");
+        assertNotNull(values.get(2).data,"value[2] data should not be null");
+        assertTrue(Stream.of("transform1","transform2").allMatch(values.get(2).data::hasNonNull),"missing expected key from values[2]");
+
+
+    }
+
+    @Test
+    public void calculatejqValues_dataset_merge() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException, IOException {
+        tm.begin();
+        NodeEntity root = new RootNode();
+        root.persist();
+        NodeEntity transform1 = new JqNode("transform1","$.config");
+        transform1.persist();
+        NodeEntity transform2 = new JqNode("transform2","$.foo");
+        transform2.persist();
+        NodeEntity transform3 = new JqNode("transform3","$.bar");
+        transform3.persist();
+        JqNode dataset = new JqNode("dataset", """
+                . as $a | ([.[]|if type=="array" then length else 1 end]|max) as $m | [range($m)|. as $p | [$a[]|if type=="object" then . elif type=="array" and $p<length then .[$p] else empty end]]
+                """);
+        dataset.persist();
+        ObjectMapper mapper = new ObjectMapper();
+        ValueEntity upload = new ValueEntity(null,root,mapper.readTree("""
+            { "config": { "alpha" : "apple"},
+              "foo": [ { "key" : "fooOne" } , { "key": "fooTwo" } , { "key" : "fooThree" }],
+              "bar": [ { "key" : "barOne" } , { "key": "barTwo" } ]
+            }
+        """));
+        upload.persist();
+        ValueEntity t1 = new ValueEntity(null,transform1,upload.data.get("config"));
+        t1.persist();
+        ValueEntity t2 = new ValueEntity(null,transform1,upload.data.get("foo"));
+        t2.persist();
+        ValueEntity t3 = new ValueEntity(null,transform1,upload.data.get("bar"));
+        t3.persist();
+        tm.commit();
+
+        List<ValueEntity> values = nodeService.calculateJqValues(dataset,Map.of("transform1",t1,"transform2",t2,"transform3",t3),0);
+        assertEquals(1,values.size(),"expect to create a single value from two sources");
+        ValueEntity found = values.get(0);
+        assertNotNull(found.data,"found data should not be null");
+        System.out.println(found.data);
+
+    }
+
     @Test
     public void calculateJqValues_multiple_source_order() throws IOException, HeuristicRollbackException, SystemException, HeuristicMixedException, RollbackException, NotSupportedException {
         tm.begin();
