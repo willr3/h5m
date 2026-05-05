@@ -10,7 +10,7 @@ import io.hyperfoil.tools.h5m.entity.NodeGroupEntity;
 import io.hyperfoil.tools.h5m.entity.node.*;
 import io.hyperfoil.tools.h5m.svc.FolderService;
 import io.hyperfoil.tools.h5m.svc.NodeService;
-import io.hyperfoil.tools.yaup.HashedLists;
+import io.hyperfoil.tools.yaup.HashedSets;
 import io.hyperfoil.tools.yaup.HashedSets;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.enterprise.inject.spi.CDI;
@@ -69,7 +69,7 @@ public class LoadLegacyTestsTest {
 
         LoadLegacyTests.Transformer transformer = new LoadLegacyTests.Transformer(-1,"transformName","args=>[args]","targetUri",List.of(transformExtractor),List.of(label1));
 
-        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1,"test",new HashedLists<>(), List.of(),Collections.emptyList(),List.of(transformer),Collections.emptyList());
+        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1,"test",new HashedSets<>(), List.of(),Collections.emptyList(),List.of(transformer),Collections.emptyList());
 
         FolderEntity folder = loadLegacyTests.createFolder(test);
 
@@ -99,7 +99,7 @@ public class LoadLegacyTestsTest {
         LoadLegacyTests.Label label2 = new LoadLegacyTests.Label(-1,"label",null,List.of(extractor2));
 
 
-        HashedLists<String,LoadLegacyTests.Label> schemaPaths = new HashedLists<>();
+        HashedSets<String,LoadLegacyTests.Label> schemaPaths = new HashedSets<>();
         schemaPaths.put("$.\"$schema\"",label1);
         schemaPaths.put("$.\"$schema\"",label2);
 
@@ -127,7 +127,7 @@ public class LoadLegacyTestsTest {
         LoadLegacyTests.Label label2 = new LoadLegacyTests.Label(-1,"label",null,List.of(extractor2));
 
 
-        HashedLists<String,LoadLegacyTests.Label> schemaPaths = new HashedLists<>();
+        HashedSets<String,LoadLegacyTests.Label> schemaPaths = new HashedSets<>();
         schemaPaths.put("$.\"$schema\"",label1);
         schemaPaths.put("$.other.\"$schema\"",label2);
 
@@ -150,7 +150,7 @@ public class LoadLegacyTestsTest {
         LoadLegacyTests.Extractor extractor = new LoadLegacyTests.Extractor("extractor","$.tag",false);
         LoadLegacyTests.Label label = new LoadLegacyTests.Label(-1,"label","foo=>foo",List.of(extractor));
 
-        HashedLists<String,LoadLegacyTests.Label> schemaPaths = new HashedLists<>();
+        HashedSets<String,LoadLegacyTests.Label> schemaPaths = new HashedSets<>();
         schemaPaths.put("$.\"$schema\"",label);
 
         LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1,"test",schemaPaths, Collections.emptyList(),Collections.emptyList(),Collections.emptyList(),Collections.emptyList());
@@ -176,7 +176,7 @@ public class LoadLegacyTestsTest {
 
         LoadLegacyTests.Variable variable = new LoadLegacyTests.Variable(-1,"variable",List.of(label.name()),null);
 
-        HashedLists<String,LoadLegacyTests.Label> schemaPaths = new HashedLists<>();
+        HashedSets<String,LoadLegacyTests.Label> schemaPaths = new HashedSets<>();
         schemaPaths.put("$.\"$schema\"",label);
 
         LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1,"test",schemaPaths, Collections.emptyList(),Collections.emptyList(),Collections.emptyList(),List.of(variable));
@@ -200,7 +200,7 @@ public class LoadLegacyTestsTest {
 
         LoadLegacyTests.Variable variable = new LoadLegacyTests.Variable(-1,"variable",List.of(label1.name(),label2.name()),"args=>args.a+args.b");
 
-        HashedLists<String,LoadLegacyTests.Label> schemaPaths = new HashedLists<>();
+        HashedSets<String,LoadLegacyTests.Label> schemaPaths = new HashedSets<>();
         schemaPaths.put("$.\"$schema\"",label1);
         schemaPaths.put("$.\"$schema\"",label2);
 
@@ -225,7 +225,7 @@ public class LoadLegacyTestsTest {
         LoadLegacyTests.Extractor extractor1 = new LoadLegacyTests.Extractor("extractor","$.one",false);
         LoadLegacyTests.Label label1 = new LoadLegacyTests.Label(-1,"label1","foo=>foo",List.of(extractor1));
         LoadLegacyTests.Fingerprint fingerprint = new LoadLegacyTests.Fingerprint(List.of(label1.name()),null,List.of(),"");
-        HashedLists<String,LoadLegacyTests.Label> schemaPaths = new HashedLists<>();
+        HashedSets<String,LoadLegacyTests.Label> schemaPaths = new HashedSets<>();
         schemaPaths.put("$.\"$schema\"",label1);
 
 
@@ -247,7 +247,7 @@ public class LoadLegacyTestsTest {
         LoadLegacyTests.Extractor extractor1 = new LoadLegacyTests.Extractor("extractor","$.one",false);
         LoadLegacyTests.Label label1 = new LoadLegacyTests.Label(-1,"label1","foo=>foo",List.of(extractor1));
         LoadLegacyTests.Fingerprint fingerprint = new LoadLegacyTests.Fingerprint(List.of(label1.name()),null,List.of(),"");
-        HashedLists<String,LoadLegacyTests.Label> schemaPaths = new HashedLists<>();
+        HashedSets<String,LoadLegacyTests.Label> schemaPaths = new HashedSets<>();
         schemaPaths.put("$.\"$schema\"",label1);
         ObjectMapper mapper = new ObjectMapper();
         ObjectNode config = (ObjectNode) mapper.readTree("""
@@ -393,7 +393,7 @@ public class LoadLegacyTestsTest {
         LoadLegacyTests.Transformer t1 = new LoadLegacyTests.Transformer(1, "transform", "data => data.map(d => d)", "urn:target:1", List.of(ext1), List.of(label));
         LoadLegacyTests.Transformer t2 = new LoadLegacyTests.Transformer(2, "transform", "data => data.map(d => d)", "urn:target:1", List.of(ext2), List.of(label));
 
-        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1, "test", new HashedLists<>(),
+        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1, "test", new HashedSets<>(),
                 List.of(), Collections.emptyList(), List.of(t1, t2), Collections.emptyList());
 
         FolderEntity folder = loadLegacyTests.createFolder(test);
@@ -403,13 +403,10 @@ public class LoadLegacyTestsTest {
 
         // Should have 2 transformer nodes + 1 coalesce node, 1 dataset node, 1 label node
         long transformerCount = folder.group.sources.stream().filter(v -> v instanceof JsNode && v.name.startsWith("transformer_")).count();
-        long datasetCount = folder.group.sources.stream().filter(v -> v instanceof JqNode && v.name.equals("dataset")).count();
-        assertEquals(3, transformerCount, "Expect 2 transformer nodes + 1 coalesce\n" + folder.group.sources.stream().map(NodeEntity::toString).collect(Collectors.joining("\n")));
+        long datasetCount = folder.group.sources.stream().filter(v -> v.name.equals("dataset")).count();
+        assertEquals(2, transformerCount, "Expect 2 transformer nodes\n" + folder.group.sources.stream().map(NodeEntity::toString).collect(Collectors.joining("\n")));
         assertEquals(1, datasetCount, "Expect 1 dataset node (after coalesced transformers)\n" + folder.group.sources.stream().map(NodeEntity::toString).collect(Collectors.joining("\n")));
 
-        // Coalesce node should exist and source from both transformers
-        long coalesceCount = folder.group.sources.stream().filter(v -> v.name.equals("transformer_coalesce")).count();
-        assertEquals(1, coalesceCount, "Expect 1 coalesce node");
     }
 
     @Test
@@ -422,7 +419,7 @@ public class LoadLegacyTestsTest {
         LoadLegacyTests.Transformer t1 = new LoadLegacyTests.Transformer(10, "t", "score => [score]", "urn:t:1", List.of(ext1), List.of(label));
         LoadLegacyTests.Transformer t2 = new LoadLegacyTests.Transformer(20, "t", "score => [score]", "urn:t:1", List.of(ext2), List.of(label));
 
-        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1, "test", new HashedLists<>(),
+        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1, "test", new HashedSets<>(),
                 List.of(), Collections.emptyList(), List.of(t1, t2), Collections.emptyList());
 
         FolderEntity folder = loadLegacyTests.createFolder(test);
@@ -444,7 +441,7 @@ public class LoadLegacyTestsTest {
         LoadLegacyTests.Transformer t1 = new LoadLegacyTests.Transformer(10, "t", "val => [val]", "urn:t:1", List.of(ext1), List.of(label));
         LoadLegacyTests.Transformer t2 = new LoadLegacyTests.Transformer(20, "t", "val => [val]", "urn:t:1", List.of(ext2), List.of(label));
 
-        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1, "test", new HashedLists<>(),
+        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1, "test", new HashedSets<>(),
                 List.of(fingerprint), Collections.emptyList(), List.of(t1, t2), List.of(variable));
 
         FolderEntity folder = loadLegacyTests.createFolder(test);
@@ -461,7 +458,7 @@ public class LoadLegacyTestsTest {
         LoadLegacyTests.Label label = new LoadLegacyTests.Label(-1, "result", null, List.of(new LoadLegacyTests.Extractor("result", "$.result", false)));
         LoadLegacyTests.Transformer t = new LoadLegacyTests.Transformer(1, "myTransform", "data => [data]", "urn:t:1", List.of(ext), List.of(label));
 
-        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1, "test", new HashedLists<>(),
+        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1, "test", new HashedSets<>(),
                 List.of(), Collections.emptyList(), List.of(t), Collections.emptyList());
 
         FolderEntity folder = loadLegacyTests.createFolder(test);
@@ -482,18 +479,18 @@ public class LoadLegacyTestsTest {
         LoadLegacyTests.Transformer t1 = new LoadLegacyTests.Transformer(1, "My Transform", "data => data", "urn:t:1", List.of(ext1), List.of(label));
         LoadLegacyTests.Transformer t2 = new LoadLegacyTests.Transformer(2, "My Transform", "data => data", "urn:t:1", List.of(ext2), List.of(label));
 
-        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1, "test", new HashedLists<>(),
+        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1, "test", new HashedSets<>(),
                 List.of(), Collections.emptyList(), List.of(t1, t2), Collections.emptyList());
 
         FolderEntity folder = loadLegacyTests.createFolder(test);
 
         // Transformer names should be sanitized (spaces → underscores)
-        NodeEntity coalesce = folder.group.sources.stream().filter(v -> v.name.equals("transformer_coalesce")).findFirst().orElse(null);
-        assertNotNull(coalesce, "coalesce node should exist");
+        NodeEntity dataset = folder.group.sources.stream().filter(v -> v.name.equals("dataset")).findFirst().orElse(null);
+        assertNotNull(dataset, "dataset node should exist");
         // Extract parameter list from "(params) => body"
-        String params = coalesce.operation.substring(1, coalesce.operation.indexOf(")"));
-        assertFalse(params.contains(" "), "parameter names should not contain spaces: " + params);
-        assertTrue(params.contains("transformer_My_Transform_1"), "should use sanitized transformer name with ID suffix");
+
+        boolean hasSpace = dataset.sources.stream().anyMatch(v -> v.name.contains(" "));
+        assertFalse(hasSpace,"unexpected space in source names\n"+dataset.sources.stream().map(v->v.name).collect(Collectors.joining("\n")));
     }
 
     @Test
@@ -525,7 +522,7 @@ public class LoadLegacyTestsTest {
         LoadLegacyTests.Label label1 = new LoadLegacyTests.Label(1,"metric","v => v * 2",List.of(ext));
         LoadLegacyTests.Label label2 = new LoadLegacyTests.Label(2,"metric","v => v * 3",List.of(ext));
 
-        HashedLists<String,LoadLegacyTests.Label> schemaPaths = new HashedLists<>();
+        HashedSets<String,LoadLegacyTests.Label> schemaPaths = new HashedSets<>();
         schemaPaths.put("$.\"$schema\"", label1);
         schemaPaths.put("$.\"$schema\"", label2);
 
@@ -550,7 +547,7 @@ public class LoadLegacyTestsTest {
         LoadLegacyTests.Label label1 = new LoadLegacyTests.Label(1,"metric",null,List.of(ext1));
         LoadLegacyTests.Label label2 = new LoadLegacyTests.Label(2,"metric",null,List.of(ext2));
 
-        HashedLists<String,LoadLegacyTests.Label> schemaPaths = new HashedLists<>();
+        HashedSets<String,LoadLegacyTests.Label> schemaPaths = new HashedSets<>();
         schemaPaths.put("$.\"$schema\"", label1);
         schemaPaths.put("$.\"$schema\"", label2);
 

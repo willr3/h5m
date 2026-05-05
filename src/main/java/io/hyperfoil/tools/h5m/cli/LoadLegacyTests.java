@@ -1,13 +1,10 @@
 package io.hyperfoil.tools.h5m.cli;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.google.errorprone.annotations.Var;
 import io.agroal.api.AgroalDataSource;
 import io.agroal.api.configuration.supplier.AgroalPropertiesReader;
-import io.hyperfoil.tools.h5m.api.NodeGroup;
 import io.hyperfoil.tools.h5m.entity.FolderEntity;
 import io.hyperfoil.tools.h5m.entity.NodeEntity;
 import io.hyperfoil.tools.h5m.entity.NodeGroupEntity;
@@ -17,7 +14,6 @@ import io.hyperfoil.tools.h5m.svc.NodeService;
 import io.hyperfoil.tools.yaup.HashedLists;
 import io.hyperfoil.tools.yaup.HashedSets;
 import io.hyperfoil.tools.yaup.StringUtil;
-import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Inject;
 import picocli.CommandLine;
 
@@ -171,7 +167,7 @@ public class LoadLegacyTests implements Callable<Integer> {
     public record Fingerprint(List<String> labels,String filter,List<String> timelineLabels, String timelineFunction){};
     //select id,variable_id,model,config
     public record ChangeDetection(long id,long variableId,String model,ObjectNode config){};
-    public record Test(long id, String name, HashedLists<String,Label> schemaPaths, List<Fingerprint> fingerprints, List<ChangeDetection> changeDetections, List<Transformer> transformers, List<Variable> variables){};
+    public record Test(long id, String name, HashedSets<String,Label> schemaPaths, List<Fingerprint> fingerprints, List<ChangeDetection> changeDetections, List<Transformer> transformers, List<Variable> variables){};
     public record Extractor(String name,String jsonpath,boolean isArray){};
     public record Transformer(long id,String name,String function,String targetUri, List<Extractor> extractors,List<Label> targetSchemaLabels){
         @Override
@@ -335,6 +331,9 @@ public class LoadLegacyTests implements Callable<Integer> {
         return rtrn;
     }
 
+    public static String sanitizeName(String input){
+        return input.replaceAll("[^a-zA-Z0-9_$]","_");
+    }
 
     public FolderEntity createFolder(Test test){
         FolderEntity folder = new FolderEntity();
@@ -343,31 +342,22 @@ public class LoadLegacyTests implements Callable<Integer> {
 
         NodeTracking nodeTracking = new NodeTracking();
 
+        NodeEntity startingNode = folder.group.root;
+
         if(!test.transformers().isEmpty()){
             // Phase 1: Create transformer nodes for each transformer
             List<NodeEntity> transformerNodes = new ArrayList<>();
-            List<Label> allSchemaLabels = null;
             for(Transformer transformer : test.transformers){
-                List<Extractor> renamedExtractors = new ArrayList<>();
-                Map<String,String> extractorAliases = new HashMap<>();
-                transformer.extractors.forEach(e->{
-                    Extractor newE = new Extractor("_"+e.name,e.jsonpath,e.isArray);
-                    renamedExtractors.add(newE);
-                    extractorAliases.put(e.name,newE.name);
-                });
-                String function = NodeService.renameParameters(transformer.function,extractorAliases);
-                //not using function and renamedExtractors
                 String transformerSuffix = test.transformers().size() > 1 ? "_" + transformer.id() : "";
-                Label l  = new Label(-1,"transformer_"+transformer.name.replaceAll("[^a-zA-Z0-9_$]","_") + transformerSuffix,transformer.function,transformer.extractors);
+                String name = "transformer_"+sanitizeName(transformer.name)+transformerSuffix;
+                Label l  = new Label(-1,name,transformer.function,transformer.extractors);
                 NodeEntity transform = createNodesFromLabel(l,folder.group.root,folder.group,nodeTracking,new HashSet<>());
                 folder.group.addNode(transform);
                 nodeTracking.addNode(transform);
                 transformerNodes.add(transform);
 
-                // Keep the first transformer's labels (all transformers target the same schema)
-                if (allSchemaLabels == null) {
-                    allSchemaLabels = transformer.targetSchemaLabels();
-                }
+                String key = (test.transformers.size() > 1 ? name : "$") + ".\"$schema\"";
+                test.schemaPaths.putAll(key,transformer.targetSchemaLabels);
             }
 
             // Phase 2: Coalesce transformers, then split into dataset, then create labels
@@ -376,66 +366,61 @@ public class LoadLegacyTests implements Callable<Integer> {
             // empty sources correctly (maxNodeValuesLength == 1 triggers the simple case).
             NodeEntity transformerSource;
             if (transformerNodes.size() == 1) {
-                transformerSource = transformerNodes.get(0);
+                startingNode = new JqNode("dataset","if type == \"array\" then .[] else . end",List.of(transformerNodes.get(0)));
+                folder.group.addNode(startingNode);
+                nodeTracking.addNode(startingNode);
             } else {
-                StringJoiner coalesceParams = new StringJoiner(",");
-                for (NodeEntity tn : transformerNodes) coalesceParams.add(tn.name);
-                StringBuilder coalesceBody = new StringBuilder();
-                for (int i = 0; i < transformerNodes.size() - 1; i++) {
-                    coalesceBody.append(transformerNodes.get(i).name).append(" != null ? ").append(transformerNodes.get(i).name).append(" : ");
-                }
-                coalesceBody.append(transformerNodes.get(transformerNodes.size() - 1).name);
-                String coalesceFunc = "(" + coalesceParams + ") => " + coalesceBody;
-                transformerSource = new JsNode("transformer_coalesce", coalesceFunc, transformerNodes);
-                folder.group.addNode(transformerSource);
-                nodeTracking.addNode(transformerSource);
-            }
-
-            NodeEntity dataset = new JqNode("dataset","if type == \"array\" then .[] else . end",List.of(transformerSource));
-            folder.group.addNode(dataset);
-            nodeTracking.addNode(dataset);
-
-            if (allSchemaLabels != null) {
-                Set<String> labelNames = new HashSet<>();
-                for (Label schemaLabel : allSchemaLabels) {
-                    log(6, "label=" + schemaLabel.name);
-                    NodeEntity labelNode = createNodesFromLabel(schemaLabel, dataset, folder.group, nodeTracking, labelNames);
-                    if (labelNode != null) {
-                        nodeTracking.tagNodeAsLabel(schemaLabel, labelNode);
-                        folder.group.addNode(labelNode);
-                    } else {
-                        System.out.println("FAILURE NULL NODE FOR LABEL " + schemaLabel);
+                startingNode = new JsNode("dataset", """
+                    function* (value){
+                      const keys = Object.keys(value);
+                      const values = Object.values(value);
+                      const length = Math.max(...Object.values(value).map(v => Array.isArray(v) ? v.length : 1))
+                      for (let i=0; i<length; i++){
+                         let entry = {}
+                         for(const key of keys){
+                           let toAdd = Array.isArray(value[key]) ? value[key].length > i ? value[key][i] : false : value[key]
+                           if(toAdd){
+                             entry[key]=toAdd
+                           }
+                         }
+                         console.log("entry",JSON.stringify(entry,null,2)   )
+                         yield entry;
+                      }
                     }
-                }
+                    """, transformerNodes);
+                folder.group.addNode(startingNode);
+                nodeTracking.addNode(startingNode);
             }
-        }else if(!test.schemaPaths().isEmpty()){
+
+        }
+        if(!test.schemaPaths().isEmpty()){
             List<String> schemaPaths = new ArrayList<>(test.schemaPaths().keys());
             schemaPaths.sort(String::compareTo);
             //stores nodes renamed because multiple labels shared that name
             HashedLists<String,NodeEntity> nodesByOriginalName = new HashedLists<>();
 
-            HashedSets<String,Label> labelsByName = new HashedSets<>();
+            HashedLists<String,Label> labelsByName = new HashedLists<>();
             test.schemaPaths.forEach((p,lbls)->{
                 lbls.forEach(lbl -> labelsByName.put(lbl.name,lbl));
             });
             for(String jsonpath : schemaPaths){
-                List<Label> labelsForJsonpath = test.schemaPaths().get(jsonpath);
+                List<Label> labelsForJsonpath = new ArrayList<>( test.schemaPaths().get(jsonpath) );
                 log(2,jsonpath+" -> "+" "+labelsForJsonpath.size()+" label(s)");
                 if(test.schemaPaths().get(jsonpath).isEmpty()){
                     continue;
                 }
-                NodeEntity sourceNode = folder.group.root;
+                NodeEntity sourceNode = startingNode;
                 if(!jsonpath.equals("$.\"$schema\"")){
                     String sourcePath = jsonpath.substring(0,jsonpath.indexOf(".\"$schema\""));
                     log(4,"Creating a new source node for "+jsonpath+" -> "+sourcePath);
 
-                    sourceNode = new JqNode(sourcePath,sourcePath,folder.group.root);
+                    sourceNode = new JqNode(sourcePath,sourcePath,startingNode);
                     folder.group.addNode(sourceNode);
                     nodeTracking.addNode(sourceNode);
                 }
                 for(Label label : labelsForJsonpath){
                     log(6,"label="+label.name);
-                    Set<Label> labels = labelsByName.get(label.name);
+                    Collection<Label> labels = labelsByName.get(label.name);
 
                     NodeEntity labelNode = createNodesFromLabel(label,sourceNode,folder.group,nodeTracking,labelsByName.keys());
                     if(labelNode!=null){
@@ -465,6 +450,8 @@ public class LoadLegacyTests implements Callable<Integer> {
                     Long sourceId = sn.sources.get(0).id;
                     if (sourceId == null || seenSourceIds.add(sourceId)) {
                         uniqueSourceNodes.add(sn);
+                    }else{
+                        System.out.println("REJECTING duplicate SourceNode "+sn);
                     }
                 }
                 if (uniqueSourceNodes.size() == 1) {
@@ -709,7 +696,7 @@ public class LoadLegacyTests implements Callable<Integer> {
                 testids = List.of(testId);
             }
             for(Long testId : testids){
-                Test test = new Test(testId,testNames.get(testId),new HashedLists<>(),new ArrayList<>(),new ArrayList<>(),new ArrayList<>(),new ArrayList<>());
+                Test test = new Test(testId,testNames.get(testId),new HashedSets<>(),new ArrayList<>(),new ArrayList<>(),new ArrayList<>(),new ArrayList<>());
                 log(String.format("%3d - %s",test.id,test.name));
 
                 if(testToTransformer.has(test.id)){
