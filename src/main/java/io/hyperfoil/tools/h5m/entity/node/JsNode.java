@@ -140,7 +140,7 @@ public class JsNode extends NodeEntity {
             parameters = input.substring("function(".length(), input.indexOf(")")).trim();
         }else if (input.startsWith("function*")) {
             parameters = input.substring("function*".length()).trim();
-            if(parameters.matches("(?s)^[a-zA-Z_$][a-zA-Z0-9_$]*\\([^)]*\\)\\s*\\{.*")){
+            if(parameters.matches("(?s)^(?:[a-zA-Z_$][a-zA-Z0-9_$]*)?\\([^)]*\\)\\s*\\{.*")){
                 parameters = parameters.substring(parameters.indexOf("(")+1, parameters.indexOf(")"));
             }
         }else if (input.contains("=>")) {

@@ -25,6 +25,33 @@ public class JsNodeTest {
         assertTrue(params.isEmpty(),"expect to be empty:"+params);
     }
     @Test
+    public void getParameterNames_named_star_function_single_arg(){
+        List<String> params = JsNode.getParameterNames("""
+                function* (value){
+                  const keys = Object.keys(value);
+                  const values = Object.values(value);
+                  const length = Math.max(...Object.values(value).map(v => Array.isArray(v) ? v.length : 1))
+                  const rtrn = []
+                  for (let i=0; i<length; i++){
+                     let entry = {}
+                     for(const key of keys){
+                       let toAdd = Array.isArray(value[key]) ? value[key].length > i ? value[key][i] : false : value[key]
+                       if(toAdd){
+                         entry[key]=toAdd
+                       }
+                     }
+                     console.log("entry",entry)
+                     rtrn.push(entry)
+                     yield entry;
+                  }
+                  //return rtrn
+                }
+                """);
+        assertNotNull(params);
+        assertEquals(1, params.size(),"expect 1 entry: "+params);
+        assertEquals("value",params.get(0));
+    }
+    @Test
     public void getParameterNames_named_star_function_no_space(){
         List<String> params = JsNode.getParameterNames("function* dataset({foo,  bar, biz}){\nyield foo;\nyield bar;\nyield biz;}");
         assertNotNull(params);
