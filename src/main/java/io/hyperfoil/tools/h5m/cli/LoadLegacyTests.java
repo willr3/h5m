@@ -413,7 +413,7 @@ public class LoadLegacyTests implements Callable<Integer> {
                     String sourcePath = jsonpath.substring(0,jsonpath.indexOf(".\"$schema\""));
                     log(4,"Creating a new source node for "+jsonpath+" -> "+sourcePath);
 
-                    sourceNode = new JqNode(sourcePath,sourcePath,startingNode);
+                    sourceNode = new JqNode("$."+sourcePath,"$."+sourcePath,startingNode);
                     folder.group.addNode(sourceNode);
                     nodeTracking.addNode(sourceNode);
                 }
