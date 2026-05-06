@@ -356,37 +356,26 @@ public class LoadLegacyTests implements Callable<Integer> {
                 nodeTracking.addNode(transform);
                 transformerNodes.add(transform);
 
-                String key = (test.transformers.size() > 1 ? name : "$") + ".\"$schema\"";
-                test.schemaPaths.putAll(key,transformer.targetSchemaLabels);
+                // All transformers target the same schema, so labels go under the root
+                // schema path. Using "$" ensures the schemaPaths loop below sources
+                // labels from startingNode (the dataset) directly, not from a
+                // transformer-named intermediate JQ node.
+                test.schemaPaths.putAll("$.\"$schema\"",transformer.targetSchemaLabels);
             }
 
-            // Phase 2: Coalesce transformers, then split into dataset, then create labels
-            // Both transformers target the same schema — for a given run only one produces output.
-            // Coalesce at transformer level (single value each) so the permutation logic handles
-            // empty sources correctly (maxNodeValuesLength == 1 triggers the simple case).
-            NodeEntity transformerSource;
+            // Phase 2: Create a dataset node from the transformer output(s).
+            // Single transformer: JQ split (array → individual items).
+            // Multiple transformers: JS generator that merges outputs from all
+            // transformers — each transformer produces an array, the generator
+            // interleaves array elements and yields flat workload objects (not
+            // wrapped in transformer name keys).
             if (transformerNodes.size() == 1) {
                 startingNode = new JqNode("dataset","if type == \"array\" then .[] else . end",List.of(transformerNodes.get(0)));
                 folder.group.addNode(startingNode);
                 nodeTracking.addNode(startingNode);
             } else {
-                startingNode = new JsNode("dataset", """
-                    function* (value){
-                      const keys = Object.keys(value);
-                      const values = Object.values(value);
-                      const length = Math.max(...Object.values(value).map(v => Array.isArray(v) ? v.length : 1))
-                      for (let i=0; i<length; i++){
-                         let entry = {}
-                         for(const key of keys){
-                           let toAdd = Array.isArray(value[key]) ? value[key].length > i ? value[key][i] : false : value[key]
-                           if(toAdd){
-                             entry[key]=toAdd
-                           }
-                         }
-                         yield entry;
-                      }
-                    }
-                    """, transformerNodes);
+                // Iterate object values (one per transformer), unwrap arrays, yield flat items
+                startingNode = new JqNode("dataset", "[.[] | if type == \"array\" then .[] else . end][]", transformerNodes);
                 folder.group.addNode(startingNode);
                 nodeTracking.addNode(startingNode);
             }

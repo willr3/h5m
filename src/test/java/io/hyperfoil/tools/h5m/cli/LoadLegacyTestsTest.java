@@ -469,6 +469,57 @@ public class LoadLegacyTestsTest {
     }
 
     @Test
+    public void createFolder_two_transformers_dataset_is_jq_and_labels_source_from_it() {
+        // Mirrors rhivos pattern: two transformers for different schema versions
+        // (old format uses $.workload[*], new format uses $.workload.data[*])
+        // Both target the same schema with labels that extract from the dataset items.
+        LoadLegacyTests.Extractor oldResults = new LoadLegacyTests.Extractor("results", "$.workload[*].results", true);
+        LoadLegacyTests.Extractor oldUuid = new LoadLegacyTests.Extractor("uuid", "$.metadata.uuid", false);
+        LoadLegacyTests.Extractor newResults = new LoadLegacyTests.Extractor("results", "$.workload.data[*].results", true);
+        LoadLegacyTests.Extractor newUuid = new LoadLegacyTests.Extractor("uuid", "$.metadata.uuid", false);
+
+        // Labels on the target schema — extract from each dataset item
+        LoadLegacyTests.Label workloadLabel = new LoadLegacyTests.Label(-1, "Workload", null,
+                List.of(new LoadLegacyTests.Extractor("workload", "$.workload", false)));
+        LoadLegacyTests.Label uuidLabel = new LoadLegacyTests.Label(-1, "UUID", null,
+                List.of(new LoadLegacyTests.Extractor("uuid", "$.metadata.uuid", false)));
+
+        LoadLegacyTests.Transformer t1 = new LoadLegacyTests.Transformer(11, "Results Extraction",
+                "({results, uuid}) => results.map(r => ({...r, uuid}))",
+                "urn:target:1", List.of(oldResults, oldUuid), List.of(workloadLabel, uuidLabel));
+        LoadLegacyTests.Transformer t2 = new LoadLegacyTests.Transformer(4639723, "Results Extraction",
+                "({results, uuid}) => results.map(r => ({...r, uuid}))",
+                "urn:target:1", List.of(newResults, newUuid), List.of(workloadLabel, uuidLabel));
+
+        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1, "test", new HashedSets<>(),
+                List.of(), Collections.emptyList(), List.of(t1, t2), Collections.emptyList());
+
+        FolderEntity folder = loadLegacyTests.createFolder(test);
+
+        // Dataset should be a JQ node that unwraps and flattens transformer outputs
+        NodeEntity dataset = folder.group.sources.stream()
+                .filter(v -> v.name.equals("dataset")).findFirst().orElse(null);
+        assertNotNull(dataset, "dataset node should exist");
+        assertInstanceOf(JqNode.class, dataset, "multi-transformer dataset should use JQ");
+        assertEquals(2, dataset.sources.size(),
+                "dataset should source from both transformers");
+
+        // Labels should source from dataset directly, not from transformer-named intermediates
+        NodeEntity workloadNode = folder.group.sources.stream()
+                .filter(v -> v.name.equals("Workload")).findFirst().orElse(null);
+        assertNotNull(workloadNode, "Workload label node should exist");
+        assertTrue(workloadNode.sources.stream().anyMatch(s -> s.name.equals("dataset")),
+                "Workload should source from dataset\n"
+                + workloadNode.sources.stream().map(NodeEntity::toString).collect(Collectors.joining("\n")));
+
+        // No transformer-named JQ source nodes should exist
+        boolean hasTransformerSourceNode = folder.group.sources.stream()
+                .anyMatch(v -> v instanceof JqNode && v.name.startsWith("transformer_Results"));
+        assertFalse(hasTransformerSourceNode,
+                "should not have transformer-named JQ source nodes — labels source from dataset directly");
+    }
+
+    @Test
     public void createFolder_two_transformers_coalesce_uses_sanitized_names() {
         // Transformer names with spaces must be sanitized for JS parameter names
         LoadLegacyTests.Extractor ext1 = new LoadLegacyTests.Extractor("data", "$.old[*]", true);
