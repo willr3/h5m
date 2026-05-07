@@ -96,7 +96,7 @@ public class LoadLegacyRuns implements Callable<Integer> {
                         while(rs.next()){
                             Long id = rs.getLong(1);
                             System.out.println(name+" "+id);
-                            JsonNode data = mapper.readTree(rs.getString(2));
+                            JsonNode data = mapper.readTree(rs.getCharacterStream("data"));
                             folderService.upload(folder.name(),null,data);
                             count++;
                         }
