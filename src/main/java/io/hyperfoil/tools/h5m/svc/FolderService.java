@@ -211,6 +211,7 @@ public class FolderService implements FolderServiceInterface {
 //        }).toList();
 //        workQueue.addWorks(toQueue);
 
-        workService.create(List.copyOf(folder.group.sources).stream().map(source -> new Work(source, new ArrayList<>(source.sources), List.of(newValue))).toList());
+        workService.create(folder.group.getTopLevelNodes().stream().map(node-> new Work(node,new ArrayList<>(node.sources),List.of(newValue))).toList());
+        //workService.create(List.copyOf(folder.group.sources).stream().map(source -> new Work(source, new ArrayList<>(source.sources), List.of(newValue))).toList());
     }
 }
