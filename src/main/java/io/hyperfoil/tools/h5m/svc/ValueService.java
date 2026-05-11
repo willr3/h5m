@@ -387,7 +387,10 @@ public class ValueService implements ValueServiceInterface {
         List<ValueEntity> rtrn = query
                 .getResultList();
         //reversed
-        return rtrn.reversed();
+        if(preceedingValues){
+            rtrn = rtrn.reversed();
+        }
+        return rtrn;
     }
 
     public List<ValueEntity> getAncestor(ValueEntity value, NodeEntity node){

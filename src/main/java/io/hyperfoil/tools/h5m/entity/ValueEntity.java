@@ -79,6 +79,12 @@ public class ValueEntity extends PanacheEntity {
         this.node = node;
         this.data = data;
     }
+    public ValueEntity(FolderEntity folder, NodeEntity node,JsonNode data,List<ValueEntity> sources){
+        this.sources = new ArrayList<>(sources);
+        this.folder = folder;
+        this.node = node;
+        this.data = data;
+    }
 
     @RegisterForReflection
     public record DataProjection(JsonNode data) {} // field names must match with entity

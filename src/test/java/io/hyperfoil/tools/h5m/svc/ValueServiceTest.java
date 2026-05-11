@@ -12,6 +12,7 @@ import io.hyperfoil.tools.h5m.entity.NodeGroupEntity;
 import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.entity.mapper.ApiMapper;
 import io.hyperfoil.tools.h5m.entity.mapper.CycleAvoidingContext;
+import io.hyperfoil.tools.h5m.entity.node.FingerprintNode;
 import io.hyperfoil.tools.h5m.entity.node.JqNode;
 import io.hyperfoil.tools.h5m.entity.node.RootNode;
 import io.quarkus.test.junit.QuarkusTest;
@@ -672,57 +673,106 @@ public class ValueServiceTest extends FreshDb {
 
     }
     @Test
+    public void findMatchingFingerprint_sorting_cousin_reverse() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException, JsonProcessingException {
+        tm.begin();
+        NodeEntity rootNode = new RootNode();
+        rootNode.persist();
+        NodeEntity aNode = new JqNode("a",".a",rootNode);
+        aNode.persist();
+        NodeEntity bNode = new JqNode("b",".b",rootNode);
+        bNode.persist();
+        NodeEntity cNode = new JqNode("c",".c",rootNode);
+        cNode.persist();
+        NodeEntity caNode = new JqNode("c",".ca",List.of(cNode,aNode));
+        caNode.persist();
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        ValueEntity rootValue01 = new ValueEntity(null,rootNode,
+            objectMapper.readTree("""
+            { "a" : "a", "b" : "b1", "c" : "c1", "ca" : "ca1" }
+            """));
+        ValueEntity rootValue02 = new ValueEntity(null,rootNode,
+                objectMapper.readTree("""
+            { "a" : "a", "b" : "b2", "c" : "c1", "ca" : "ca2" }
+            """));
+        rootValue01.persist();
+        // a values
+        ValueEntity aValue01 = new ValueEntity(null,aNode,rootValue01.data.get("a"),List.of(rootValue01));
+        aValue01.persist();
+        ValueEntity aValue02 = new ValueEntity(null,aNode,rootValue02.data.get("a"),List.of(rootValue02));
+        aValue02.persist();
+        // b values
+        ValueEntity bValue01 = new ValueEntity(null,bNode,rootValue01.data.get("b"),List.of(rootValue01));
+        bValue01.persist();
+        ValueEntity bValue02 = new ValueEntity(null,bNode,rootValue02.data.get("b"),List.of(rootValue02));
+        bValue02.persist();
+        // c values
+        ValueEntity cValue01 = new ValueEntity(null,cNode,rootValue01.data.get("c"),List.of(rootValue01));
+        cValue01.persist();
+        ValueEntity cValue02 = new ValueEntity(null,cNode,rootValue02.data.get("c"),List.of(rootValue02));
+        cValue02.persist();
+        // ca values
+        ValueEntity caValue01 = new ValueEntity(null,caNode,rootValue01.data.get("ca"),List.of(rootValue01));
+        caValue01.persist();
+        ValueEntity caValue02 = new ValueEntity(null,caNode,rootValue02.data.get("ca"),List.of(rootValue02));
+        caValue02.persist();
+
+        tm.commit();
+
+        List<ValueEntity> found = valueService.findMatchingFingerprint(caNode,rootNode,aValue01,bNode,null,-1,-1,false);
+
+        assertNotNull(found);
+        assertEquals(2,found.size(),found.toString());
+        assertTrue(found.contains(caValue01),found.toString());
+        assertTrue(found.contains(caValue02),found.toString());
+
+        assertEquals(caValue01,found.get(0),found.toString());
+        assertEquals(caValue02,found.get(1),found.toString());
+
+    }
+    @Test
     public void findMatchingFingerprint_sorting_cousin() throws SystemException, NotSupportedException, JsonProcessingException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
         tm.begin();
         NodeEntity rootNode = new RootNode();
-        rootNode.persist(rootNode);
-        NodeEntity aNode = new JqNode("a");
-        aNode.sources=List.of(rootNode);
-        aNode.persist(aNode);
-        NodeEntity bNode = new JqNode("b");
-        bNode.sources=List.of(rootNode);
+        rootNode.persist();
+        NodeEntity aNode = new JqNode("a",".a",rootNode);
+        aNode.persist();
+        NodeEntity bNode = new JqNode("b",".b",rootNode);
         bNode.persist();
-        NodeEntity cNode = new JqNode("c");
-        cNode.sources=List.of(rootNode);
+        NodeEntity cNode = new JqNode("c",".c",rootNode);
         cNode.persist();
-        NodeEntity caNode = new JqNode("ca");
-        caNode.sources=List.of(cNode);
+        NodeEntity caNode = new JqNode("c",".ca",List.of(cNode,aNode));
         caNode.persist();
+
         ObjectMapper objectMapper = new ObjectMapper();
-
-        ValueEntity rootValue01 = new ValueEntity(null,rootNode,new TextNode("root1"));
+        ValueEntity rootValue01 = new ValueEntity(null,rootNode,
+                objectMapper.readTree("""
+            { "a" : "a", "b" : "b1", "c" : "c1", "ca" : "ca1" }
+            """));
+        ValueEntity rootValue02 = new ValueEntity(null,rootNode,
+                objectMapper.readTree("""
+            { "a" : "a", "b" : "b2", "c" : "c1", "ca" : "ca2" }
+            """));
         rootValue01.persist();
-        ValueEntity rootValue02 = new ValueEntity(null,rootNode,new TextNode("root2"));
-        rootValue02.persist();
-
-        ValueEntity aValue01 = new ValueEntity(null,aNode,new TextNode("a"));
-        aValue01.sources=List.of(rootValue01);
+        // a values
+        ValueEntity aValue01 = new ValueEntity(null,aNode,rootValue01.data.get("a"),List.of(rootValue01));
         aValue01.persist();
-
-        ValueEntity aValue02 = new ValueEntity(null,aNode,new TextNode("a"));
-        aValue02.sources=List.of(rootValue02);
+        ValueEntity aValue02 = new ValueEntity(null,aNode,rootValue02.data.get("a"),List.of(rootValue02));
         aValue02.persist();
-
-        ValueEntity bValue01 = new ValueEntity(null,bNode,new TextNode("b1"));
-        bValue01.sources=List.of(rootValue01);
+        // b values
+        ValueEntity bValue01 = new ValueEntity(null,bNode,rootValue01.data.get("b"),List.of(rootValue01));
         bValue01.persist();
-        ValueEntity bValue02 = new ValueEntity(null,bNode,new TextNode("b2"));
-        bValue02.sources=List.of(rootValue02);
+        ValueEntity bValue02 = new ValueEntity(null,bNode,rootValue02.data.get("b"),List.of(rootValue02));
         bValue02.persist();
-
-
-        ValueEntity cValue01 = new ValueEntity(null,cNode,new TextNode("c1"));
-        cValue01.sources=List.of(rootValue01);
+        // c values
+        ValueEntity cValue01 = new ValueEntity(null,cNode,rootValue01.data.get("c"),List.of(rootValue01));
         cValue01.persist();
-        ValueEntity cValue02 = new ValueEntity(null,cNode,new TextNode("c2"));
-        cValue02.sources=List.of(rootValue02);
+        ValueEntity cValue02 = new ValueEntity(null,cNode,rootValue02.data.get("c"),List.of(rootValue02));
         cValue02.persist();
-
-        ValueEntity caValue01 = new ValueEntity(null,caNode,new TextNode("ca1"));
-        caValue01.sources=List.of(cValue01);
+        // ca values
+        ValueEntity caValue01 = new ValueEntity(null,caNode,rootValue01.data.get("ca"),List.of(rootValue01));
         caValue01.persist();
-        ValueEntity caValue02 = new ValueEntity(null,caNode,new TextNode("ca2"));
-        caValue02.sources=List.of(cValue02);
+        ValueEntity caValue02 = new ValueEntity(null,caNode,rootValue02.data.get("ca"),List.of(rootValue02));
         caValue02.persist();
 
         tm.commit();
