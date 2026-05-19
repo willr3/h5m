@@ -36,6 +36,12 @@ public class NodeGroupService implements NodeGroupServiceInterface {
 
     @Override
     @Transactional
+    public NodeGroup byId(Long id){
+        return apiMapper.toNodeGroup(NodeGroupEntity.findById(id), new CycleAvoidingContext());
+    }
+
+    @Override
+    @Transactional
     public NodeGroup byName(String name){
         return apiMapper.toNodeGroup(NodeGroupEntity.find("name",name).firstResult(), new CycleAvoidingContext());
     }

@@ -68,7 +68,8 @@ public class FolderService implements FolderServiceInterface {
     @Override
     @Transactional
     public Folder byName(String name){
-        return FolderEntity.find("name",name).project(Folder.class).firstResult();
+        FolderEntity entity = FolderEntity.find("name", name).firstResult();
+        return entity != null ? apiMapper.toFolder(entity) : null;
     }
     @Transactional
     public FolderEntity byPath(String path){

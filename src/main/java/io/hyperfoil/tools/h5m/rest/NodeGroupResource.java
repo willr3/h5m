@@ -20,6 +20,14 @@ public class NodeGroupResource {
     NodeGroupServiceInterface nodeGroupService;
 
     @GET
+    @Path("id/{id}")
+    @PermitAll
+    @Operation(description = "Retrieve a node group by its ID")
+    public NodeGroup byId(@PathParam("id") Long groupId) {
+        return nodeGroupService.byId(groupId);
+    }
+
+    @GET
     @Path("{name}")
     @PermitAll
     @Operation(description = "Retrieve a node group by its name")

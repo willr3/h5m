@@ -11,7 +11,7 @@ public record Node(
         @Schema(description = "Node name") String name,
         @Schema(description = "Fully qualified domain name") String fqdn,
         @Schema(description = "Node type") NodeType type,
-        @Schema(description = "Parent node group") NodeGroup group,
+        @Schema(description = "Node group ID") Long groupId,
         @Schema(description = "Node operation (jq filter, JS function, etc.)") String operation,
         @Schema(description = "Source dependency nodes") List<Node> sources) {
 
@@ -20,7 +20,7 @@ public record Node(
         if (id != null) {
             return Objects.hash(id, name, type);
         }
-        return Objects.hash(name, type, operation, group != null ? group.id() : null);
+        return Objects.hash(name, type, operation, groupId);
     }
 
     @Override
@@ -32,7 +32,7 @@ public record Node(
             return Objects.equals(name, n.name)
                 && Objects.equals(type, n.type)
                 && Objects.equals(operation, n.operation)
-                && Objects.equals(group != null ? group.id() : null, n.group != null ? n.group.id() : null);
+                && Objects.equals(groupId, n.groupId);
         }
         return false;
     }

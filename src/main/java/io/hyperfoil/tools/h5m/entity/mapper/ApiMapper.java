@@ -16,9 +16,11 @@ import org.mapstruct.MappingConstants;
 @Mapper(componentModel = MappingConstants.ComponentModel.JAKARTA)
 public interface ApiMapper {
 
+    @Mapping(target = "groupId", source = "group.id")
     Folder toFolder(FolderEntity folder);
 
     @Mapping(target = "type", expression = "java(node.type())")
+    @Mapping(target = "groupId", source = "group.id")
     Node toNode(NodeEntity node, @Context CycleAvoidingContext context);
 
     NodeGroup toNodeGroup(NodeGroupEntity nodeGroup, @Context CycleAvoidingContext context);

@@ -1,15 +1,12 @@
 package io.hyperfoil.tools.h5m.entity;
 
-import io.hyperfoil.tools.h5m.api.Node;
-import io.hyperfoil.tools.h5m.api.NodeGroup;
-import io.hyperfoil.tools.h5m.api.NodeType;
 import io.hyperfoil.tools.h5m.entity.node.JqNode;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 
-import java.util.*;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -109,32 +106,27 @@ public class NodeTest {
 
     @Test
     public void hashCode_not_infinite_recursion(){
-        List<Node> groupSources = new ArrayList<>();
-        NodeGroup group = new NodeGroup(-1L,"group",new Node(-1L,"root","root", NodeType.ROOT,null,"",Collections.emptyList()),groupSources);
+        NodeGroupEntity group = new NodeGroupEntity("group");
+        NodeEntity n = new JqNode("node","$.",group.root);
+        group.sources.add(n);
 
-        Node n = new Node(1L,"node","fqdn",NodeType.JQ,group,"$.",List.of(group.root()));
-
-        groupSources.add(n);
         try {
             int hash = n.hashCode();
         }catch(StackOverflowError e){
             fail("infinite recursion in Node.hashCode");
         }
-
     }
 
     @Test
     public void equals_not_infinite_recursion(){
-        List<Node> sources1 = new ArrayList<>();
-        List<Node> sources2 = new ArrayList<>();
-        NodeGroup g1 = new NodeGroup(-1L,"group",new Node(-1L,"root","root", NodeType.ROOT,null,"",Collections.emptyList()),sources1);
-        NodeGroup g2 = new NodeGroup(-1L,"group",new Node(-1L,"root","root", NodeType.ROOT,null,"",Collections.emptyList()),sources2);
+        NodeGroupEntity g1 = new NodeGroupEntity("group");
+        NodeGroupEntity g2 = new NodeGroupEntity("group");
 
-        Node n1 = new Node(1L,"node","fqdn",NodeType.JQ,g1,"$.",Collections.emptyList());
-        Node n2 = new Node(1L,"node","fqdn",NodeType.JQ,g2,"$.",Collections.emptyList());
+        NodeEntity n1 = new JqNode("node","$.");
+        NodeEntity n2 = new JqNode("node","$.");
 
-        sources1.add(n1);
-        sources2.add(n2);
+        g1.sources.add(n1);
+        g2.sources.add(n2);
 
         try{
             n1.equals(n2);
