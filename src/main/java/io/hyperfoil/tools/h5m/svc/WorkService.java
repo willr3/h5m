@@ -322,7 +322,7 @@ public class WorkService implements WorkServiceInterface {
                     //we need to trigger more calculations? perhaps for a recalculation we do?
                     // Cascade work inherits sourceValues, so tracker association
                     // is derived automatically via findTrackers()
-                    List<Work> cascadeWork = nodeService.getDependentNodes(node).stream()
+                    List<Work> cascadeWork = nodeService.getDirectDependents(node).stream()
                             .map(n -> new Work(n, n.sources, sourceValues))
                             .toList();
                     create(cascadeWork);
@@ -363,4 +363,12 @@ public class WorkService implements WorkServiceInterface {
         }
     }
 
+    //does work A depend on work B?
+    @Transactional
+    public boolean dependsOn(Work a, Work b){
+        return dependsOn(a,b,false);
+    }
+    public boolean dependsOn(Work a, Work b,boolean cumulative){
+        return a.dependsOn(b);
+    }
 }

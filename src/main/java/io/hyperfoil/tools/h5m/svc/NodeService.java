@@ -90,6 +90,59 @@ public class NodeService implements NodeServiceInterface {
         return node;
     }
 
+    @Transactional
+    public boolean dependsOnCte(NodeEntity a,NodeEntity b){
+        int count = em.createNativeQuery("""
+            with recursive ancestor(vid) as (
+                select ne.child_id as nid 
+                    from node_edge ne where ne.child_id = :nodeAId
+                union
+                select ne.parent_id as nid
+                    from node_edge ne join ancestor a on a.vid = ne.child_id
+                    where ne.depth = 1 --adding depth check becasue of closure use in node_edge table
+            )
+            select 1 from ancestor where vid = :nodeBId
+        """).setParameter("nodeAId",a.getId())
+            .setParameter("nodeBId",b.getId())
+            .getResultList().size();
+
+        return  count > 0;
+    }
+
+    @Transactional
+    public boolean dependsOn(NodeEntity a,NodeEntity b){
+        int count = em.createNativeQuery(
+            """
+            select 1 from node_edge where child_id=:nodeAId and parent_id=:nodeBId and child_id != parent_id
+            """)
+                .setParameter("nodeAId",a.getId())
+                .setParameter("nodeBId",b.getId())
+                .getResultList().size();
+        return count > 0;
+    }
+    @Transactional
+    public boolean dependsOnAny(NodeEntity a, Collection<NodeEntity> b){
+        int count = em.createNativeQuery(
+            """
+                select 1 from node_edge where child_id=:nodeAId and parent_id in (:ids)
+            """
+        ).setParameter("nodeAId",a.getId())
+                .setParameter("ids",b.stream().map(NodeEntity::getId).collect(Collectors.toSet()))
+                .getResultList().size();
+        return count > 0;
+    }
+    @Transactional
+    public boolean dependsOnAny(Collection<NodeEntity> a, Collection<NodeEntity> b){
+        int count = em.createNativeQuery(
+                """
+                select 1 from node_edge where child_id in (:a_ids) and parent_id in (:b_ids)
+                """
+        ).setParameter("a_ids",a.stream().map(NodeEntity::getId).collect(Collectors.toSet()))
+                .setParameter("b_ids",b.stream().map(NodeEntity::getId).collect(Collectors.toSet()))
+                .getResultList().size();
+        return count > 0;
+    }
+
     @Override
     @Transactional
     public Long create(String name, Long groupId, NodeType type, String operation){
@@ -167,8 +220,8 @@ public class NodeService implements NodeServiceInterface {
             NodeEntity existing = NodeEntity.findById(node.id);
             if(!existing.name.equals(node.name)){
                 List<NodeEntity> toChange = em.createNativeQuery(
-                        "select n.* from node n join node_edge ne on n.id = ne.child_id where ne.parent_id=? and n.type='ecma'"
-                , NodeEntity.class).setParameter(1,node.id).getResultList();
+                        "select n.* from node n join node_edge ne on n.id = ne.child_id where ne.parent_id=? and n.type='ecma' and ne.depth = 1"
+                ,NodeEntity.class).setParameter(1,node.id).getResultList();
                 Map<String,String> changes = Map.of(existing.name,node.name);
                 for(NodeEntity n : toChange){
                     n.operation = renameParameters(n.operation, changes);
@@ -181,13 +234,15 @@ public class NodeService implements NodeServiceInterface {
     }
 
     @Transactional
-    public List<NodeEntity> getDependentNodes(NodeEntity n){
-        return em.createQuery(
-                "SELECT DISTINCT n FROM node n LEFT JOIN FETCH n.sources JOIN n.sources s WHERE s.id = :sourceId",
-                NodeEntity.class
-        ).setParameter("sourceId", n.id).getResultList();
+    public List<NodeEntity> getDirectDependents(NodeEntity n){
+        List<NodeEntity> rtrn = em.createNativeQuery("""
+            select * from node where id in (select child_id from node_edge where parent_id = :parentId and depth = 1)
+        """,NodeEntity.class).setParameter("parentId",n.getId()).getResultList();
+        rtrn.forEach(r->r.sources.size());//lazy hack
+        return rtrn;
     }
 
+    //TODO this is probably not closure compatible
     @Transactional
     public long getNodeParentCount(NodeEntity node){
         return EdgeQueries.getParentCount(em, "node_edge", node.id);
@@ -204,7 +259,7 @@ public class NodeService implements NodeServiceInterface {
         if(nodeId!=null) {
             NodeEntity node = NodeEntity.findById(nodeId);
             if(node == null) return;
-            List<NodeEntity> dependents = getDependentNodes(node);
+            List<NodeEntity> dependents = getDirectDependents(node);
             for(NodeEntity dependent : dependents){
                 long parentCount = getNodeParentCount(dependent);
                 if(parentCount <= 1){
@@ -241,7 +296,6 @@ public class NodeService implements NodeServiceInterface {
         }
 
         int maxNodeValuesLength = nodeValues.values().stream().map(Collection::size).max(Integer::compareTo).orElse(0);
-
         //the two cases where we do not need to worry about MultiIterationType
         if(maxNodeValuesLength == 1 || node.sources.size() == 1){//if we don't need to worry about NxN or byLength
             //to ensure sequence

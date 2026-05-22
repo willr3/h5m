@@ -4,6 +4,7 @@ import io.hyperfoil.tools.h5m.api.NodeType;
 import io.hyperfoil.tools.h5m.entity.NodeEntity;
 import jakarta.persistence.DiscriminatorValue;
 import jakarta.persistence.Entity;
+import org.hibernate.annotations.SQLInsert;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

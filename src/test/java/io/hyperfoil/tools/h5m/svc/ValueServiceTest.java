@@ -68,7 +68,38 @@ public class ValueServiceTest extends FreshDb {
         ValueEntity found = ValueEntity.findById(rootValue.id);
         assertNotNull(found);
     }
+    @Test
+    public void dependsOn() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        NodeEntity rootNode = new RootNode();
+        rootNode.name="root";
+        rootNode.persist();
+        ValueEntity rootValue = new ValueEntity(null,rootNode,new TextNode("root"));
+        rootValue.persist();
+        JqNode first = new JqNode("first",".first",rootNode);
+        first.persist();
+        ValueEntity firstValue = new ValueEntity(null,first,new TextNode("first"));
+        firstValue.sources=List.of(rootValue);
+        firstValue.persist();
+        JqNode second = new JqNode("second",".second",first);
+        second.persist();
+        ValueEntity secondValue = new ValueEntity(null,second,new TextNode("second"));
+        secondValue.sources=List.of(firstValue);
+        secondValue.persist();
+        JqNode third = new JqNode("third",".third",second);
+        third.persist();
+        ValueEntity thirdValue = new ValueEntity(null,third,new TextNode("third"));
+        thirdValue.sources=List.of(secondValue);
+        thirdValue.persist();
+        tm.commit();
 
+        assertTrue(valueService.dependsOn(firstValue,firstValue),"a value should depend on itself");
+        assertTrue(valueService.dependsOn(thirdValue,firstValue),"third should depend on first");
+        assertTrue(valueService.dependsOn(secondValue,firstValue),"second should depend on first");
+        assertFalse(valueService.dependsOn(firstValue,thirdValue),"first should not depend on third");
+
+    }
 
     @Test
     public void delete_does_not_cascade_to_shared_child() throws HeuristicRollbackException, SystemException, HeuristicMixedException, RollbackException, NotSupportedException {
@@ -259,8 +290,11 @@ public class ValueServiceTest extends FreshDb {
         sharedChild.persist();
         tm.commit();
 
-        tm.begin();
+
         int purged = valueService.purge(aValue);
+
+
+        tm.begin();
         long aCount = ((Number) em.createNativeQuery("SELECT COUNT(*) FROM value WHERE id = :id")
                 .setParameter("id", aValue.id).getSingleResult()).longValue();
         long childCount = ((Number) em.createNativeQuery("SELECT COUNT(*) FROM value WHERE id = :id")
@@ -614,6 +648,36 @@ public class ValueServiceTest extends FreshDb {
 
     }
     @Test
+    public void findMatchingFIngerprint_from_ancestor_value() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException, JsonProcessingException {
+        tm.begin();
+        NodeEntity rootNode = new RootNode();
+        rootNode.name="root";
+        rootNode.persist();
+        NodeEntity aNode = new JqNode("a",".a",rootNode);
+        aNode.persist();
+        NodeEntity bNode = new JqNode("b",".b",rootNode);
+        bNode.persist();
+        ObjectMapper objectMapper = new ObjectMapper();
+        ValueEntity root1 = new ValueEntity(null,rootNode,objectMapper.readTree("{ \"a\": \"a\", \"b\": \"b1\"}"));
+        root1.persist();
+        ValueEntity a1 = new ValueEntity(null,aNode,root1.data.get("a"),List.of(root1));
+        a1.persist();
+        ValueEntity b1 = new ValueEntity(null,bNode,root1.data.get("b"),List.of(root1));
+        b1.persist();
+        ValueEntity root2 = new ValueEntity(null,rootNode,objectMapper.readTree("{ \"a\": \"a\", \"b\": \"b2\"}"));
+        root2.persist();
+        ValueEntity a2 = new ValueEntity(null,aNode,root2.data.get("a"),List.of(root2));
+        a2.persist();
+        ValueEntity b2 = new ValueEntity(null,bNode,root2.data.get("b"),List.of(root2));
+        b2.persist();
+        tm.commit();
+
+        List<ValueEntity> found = valueService.findMatchingFingerprint(bNode,rootNode,a2,null,null,root2,-1,-1,true);
+
+        assertEquals(1,found.size(),found.toString());
+
+    }
+    @Test
     public void findMatchingFingerprint_sibling() throws SystemException, NotSupportedException, JsonProcessingException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
         tm.begin();
         NodeEntity rootNode = new RootNode();
@@ -776,7 +840,6 @@ public class ValueServiceTest extends FreshDb {
         caValue02.persist();
 
         tm.commit();
-
 
         List<ValueEntity> found = valueService.findMatchingFingerprint(caNode,rootNode,aValue01,bNode);
 
@@ -980,7 +1043,7 @@ public class ValueServiceTest extends FreshDb {
         abc.sources=List.of(ab,ac,a,root);
         abc.persist();
 
-        ValueEntity vr = new ValueEntity();
+        ValueEntity vr = new ValueEntity(null,root);
         vr.persist();
         ValueEntity va = new ValueEntity();
         va.sources=List.of(vr);
@@ -996,18 +1059,21 @@ public class ValueServiceTest extends FreshDb {
         vabc.persist();
         tm.commit();
 
-        tm.begin();
+
         try{
+            tm.begin();
             ValueEntity found = valueService.byId(vabc.id);
             List<ValueEntity> sources = found.sources;
+            int size = sources.size();
+            tm.commit();
             assertNotNull(sources);
-            assertEquals(4, sources.size());
+            assertEquals(4, size);
 
             assertTrue(sources.indexOf(va) < sources.indexOf(vab),"va should come before vab");
             assertTrue(sources.indexOf(va) < sources.indexOf(vac),"va should come before vac");
             assertTrue(sources.indexOf(vr) < sources.indexOf(va),"vr should come before va");
         }finally {
-            tm.commit();
+
         }
 
     }

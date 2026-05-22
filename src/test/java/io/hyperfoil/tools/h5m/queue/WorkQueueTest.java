@@ -131,6 +131,7 @@ public class WorkQueueTest extends FreshDb {
         q.addWorks(List.of(aWork, bWork, cWork));
 
         Runnable firstRunnable = q.poll();
+        assertNotNull(firstRunnable);
         assertFalse(q.isPending(aWork),"a should be removed from the q");
 
         Runnable polled = q.poll();
