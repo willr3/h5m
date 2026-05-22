@@ -32,7 +32,7 @@ public class Work  extends PanacheEntity implements Runnable, Comparable<Work>{
     @BatchSize(size=10)
     @ManyToMany(cascade = {CascadeType.PERSIST}, fetch = FetchType.LAZY)
     @JoinTable(
-            name="work_nodes",
+            name="work_source_nodes",
             joinColumns = @JoinColumn(name = "work_id"),
             inverseJoinColumns = @JoinColumn(name = "node_id")
     )
@@ -40,9 +40,14 @@ public class Work  extends PanacheEntity implements Runnable, Comparable<Work>{
 
     public int retryCount;
 
-    @ManyToOne
-    @JoinColumn(name = "active_node_id")
-    public NodeEntity activeNode;
+    @BatchSize(size=10)
+    @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.EAGER)
+    @JoinTable(
+            name="work_active_nodes",
+            joinColumns = @JoinColumn(name = "work_id"),
+            inverseJoinColumns = @JoinColumn(name = "node_id")
+    )
+    public Set<NodeEntity> activeNodes;
 
     boolean cumulative = false;
 
@@ -51,24 +56,27 @@ public class Work  extends PanacheEntity implements Runnable, Comparable<Work>{
         retryCount = 0;
     }
     public Work(NodeEntity activeNode,List<NodeEntity> sourceNodes,List<ValueEntity> sourceValues){
+        this(Set.of(activeNode),sourceNodes,sourceValues);
+    }
+    public Work(Set<NodeEntity> activeNodes,List<NodeEntity> sourceNodes,List<ValueEntity> sourceValues){
         this();
-        this.activeNode = activeNode;
-        if(this.activeNode instanceof RelativeDifference){
+        this.activeNodes = new HashSet<>(activeNodes); //so that it will be mutable
+        if(activeNodes.stream().anyMatch(node -> node instanceof RelativeDifference)){
             this.cumulative = true;
         }
         this.sourceValues = sourceValues == null ? Collections.emptyList() : new ArrayList(sourceValues);
         this.sourceNodes = sourceNodes == null ? Collections.emptyList() : new ArrayList(sourceNodes);
     }
 
-    public NodeEntity getActiveNode() {
-        return activeNode;
+    public Set<NodeEntity> getActiveNodes() {
+        return activeNodes;
     }
 
-    public void setActiveNode(NodeEntity activeNode) {
-        this.activeNode = activeNode;
-        if(activeNode instanceof RelativeDifference){
+    public void setActiveNodes(Set<NodeEntity> activeNodes) {
+        this.activeNodes = activeNodes;
+        if(activeNodes.stream().anyMatch(node -> node instanceof RelativeDifference)){
             this.cumulative = true;
-        }else {
+        }else{
             this.cumulative = false;
         }
     }
@@ -77,12 +85,12 @@ public class Work  extends PanacheEntity implements Runnable, Comparable<Work>{
     //needs reviewing for the value dependency
     public boolean dependsOn(Work work){
 
-        if(work == null || work.activeNode == null){
+        if(work == null || work.activeNodes == null || work.activeNodes.isEmpty()){
             return false;
         }
         for (int i = 0, size = sourceValues.size(); i < size; i++) {
             ValueEntity sourceValue = sourceValues.get(i);
-            if (sourceValue.node.dependsOn(work.activeNode)) {
+            if (work.activeNodes.stream().anyMatch(sourceValue.node::dependsOn)) {
                 for (int j = 0, wSize = work.sourceValues.size(); j < wSize; j++) {
                     if (sourceValue.dependsOn(work.sourceValues.get(j))) {
                         return true;
@@ -90,7 +98,7 @@ public class Work  extends PanacheEntity implements Runnable, Comparable<Work>{
                 }
             }
         }
-        if (this.activeNode == null || !this.activeNode.dependsOn(work.activeNode)) {
+        if (this.activeNodes == null || this.activeNodes.isEmpty() || !this.activeNodes.stream().anyMatch(t->work.activeNodes.stream().anyMatch(t::dependsOn))) {
             return false;
         }
         if (cumulative || sourceValues.isEmpty()) {
@@ -124,8 +132,8 @@ public class Work  extends PanacheEntity implements Runnable, Comparable<Work>{
     public boolean equals(Object o){
         if(o instanceof Work){
             Work work = (Work)o;
-            boolean sameNode = Objects.equals(this.activeNode, work.activeNode);
-            if(!sameNode){
+            boolean sameNodes =  this.activeNodes.containsAll(work.activeNodes) && work.activeNodes.containsAll(this.activeNodes);  //Objects.equals(this.activeNode, work.activeNode);
+            if(!sameNodes){
                 return false;
             }
             if (this.sourceNodes.size() != work.sourceNodes.size()) {
@@ -154,7 +162,7 @@ public class Work  extends PanacheEntity implements Runnable, Comparable<Work>{
     @Override
     public int hashCode(){
         List<Object> param = new ArrayList<>();
-        param.add(activeNode);
+        param.addAll(activeNodes);
         param.addAll(sourceNodes);
         if(!cumulative) {
             param.addAll(sourceValues);
@@ -179,7 +187,7 @@ public class Work  extends PanacheEntity implements Runnable, Comparable<Work>{
 
     @Override
     public String toString() {
-        return "Work<id="+id+" activeNode="+activeNode+
+        return "Work<id="+id+" activeNodes="+activeNodes+
                 " sourceNodes="+sourceNodes.stream().map(n->""+n.getId()).collect(Collectors.joining(","))+
                 " sourceValues="+sourceValues.stream().map(v->""+v.getId()).collect(Collectors.joining(","))+
                 " retry="+retryCount+

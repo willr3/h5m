@@ -33,7 +33,8 @@ public class FreshDb {
                     stmt.executeUpdate("TRUNCATE TABLE api_key CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE team_members CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE work_values CASCADE");
-                    stmt.executeUpdate("TRUNCATE TABLE work_nodes CASCADE");
+                    stmt.executeUpdate("TRUNCATE TABLE work_active_nodes CASCADE");
+                    stmt.executeUpdate("TRUNCATE TABLE work_source_nodes CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE work CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE value_edge CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE value CASCADE");
@@ -49,7 +50,8 @@ public class FreshDb {
                     stmt.executeUpdate("DELETE from api_key");
                     stmt.executeUpdate("DELETE from team_members");
                     stmt.executeUpdate("DELETE from work_values");
-                    stmt.executeUpdate("DELETE from work_nodes");
+                    stmt.executeUpdate("DELETE from work_active_nodes");
+                    stmt.executeUpdate("DELETE from work_source_nodes");
                     stmt.executeUpdate("DELETE from work");
                     stmt.executeUpdate("DELETE from value_edge");
                     stmt.executeUpdate("DELETE from value");

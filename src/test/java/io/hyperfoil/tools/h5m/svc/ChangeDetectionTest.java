@@ -91,7 +91,7 @@ public class ChangeDetectionTest extends FreshDb {
 
     private Work loadWork(NodeEntity activeNode) throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
         tm.begin();
-        Work work = Work.find("activeNode", activeNode).firstResult();
+        Work work = Work.find("?1 member of activeNodes", activeNode).firstResult();
         work.sourceValues.size();
         work.sourceNodes.size();
         tm.commit();

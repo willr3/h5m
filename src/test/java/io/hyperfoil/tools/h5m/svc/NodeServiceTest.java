@@ -125,6 +125,10 @@ public class NodeServiceTest extends FreshDb {
     public void renameParameter_skip_object_key(){
         assertEquals("buzz=>({foo:buzz})",nodeService.renameParameters("foo=>({foo:foo})",Map.of("foo","buzz")));
     }
+    @Test
+    public void renameParameter_tertiary_refernece(){
+        assertEquals("(_a,_b,_c)=> _a ? _b: _c",nodeService.renameParameters("(a,b,c)=> a ? b: c",Map.of("a","_a","b","_b","c","_c")));
+    }
 
     @Test
     public void update_changes_javascript_argument_name() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
@@ -327,6 +331,67 @@ public class NodeServiceTest extends FreshDb {
     }
 
     @Test
+    public void calculateJqValues_array_miss() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        RootNode rootNode = new RootNode();
+        rootNode.persist();
+        JqNode node = new JqNode("jqall","[.miss[]?]",List.of(rootNode));
+        node.persist();
+        ValueEntity v1 = new ValueEntity();
+        v1.data = mapper.readTree("""
+                {
+                  "foo": [ { "key": "one"}, { "key" : "two" } ],
+                  "bar": [ { "k": "uno" }, { "k": "dos"}, { "k" : "tres"} ],
+                  "biz": "cat",
+                  "buz": "dog"
+                }
+                """);
+        v1.node=rootNode;
+        v1.persist();
+        tm.commit();
+
+        Map<String, ValueEntity> sourceValueMap = new HashMap<>();
+        sourceValueMap.put(rootNode.name,v1);
+
+        List<ValueEntity> calculated = nodeService.calculateJqValues(node,sourceValueMap,0);
+        assertNotNull(calculated);
+        // JQ [.miss[]?] produces an empty array [], which is not null so it gets returned
+        assertEquals(1,calculated.size());
+        assertTrue(calculated.getFirst().data.isArray());
+        assertEquals(0,calculated.getFirst().data.size(),"empty array for missing path");
+    }
+
+    @Test
+    public void calculateJqValues_array_match() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        RootNode rootNode = new RootNode();
+        rootNode.persist();
+        JqNode node = new JqNode("jqall","[.foo[]?]",List.of(rootNode));
+        node.persist();
+        ValueEntity v1 = new ValueEntity();
+        v1.data = mapper.readTree("""
+                {
+                  "foo": [ { "key": "one"}, { "key" : "two" } ],
+                  "biz": "cat"
+                }
+                """);
+        v1.node=rootNode;
+        v1.persist();
+        tm.commit();
+
+        Map<String, ValueEntity> sourceValueMap = new HashMap<>();
+        sourceValueMap.put(rootNode.name,v1);
+
+        List<ValueEntity> calculated = nodeService.calculateJqValues(node,sourceValueMap,0);
+        assertNotNull(calculated);
+        assertEquals(1,calculated.size());
+        assertTrue(calculated.getFirst().data.isArray());
+        assertEquals(2,calculated.getFirst().data.size(),"should contain both foo elements");
+    }
+
+    @Test
     public void calculateSqlAllJsonpathValues_null() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
         ObjectMapper mapper = new ObjectMapper();
         tm.begin();
@@ -502,10 +567,13 @@ public class NodeServiceTest extends FreshDb {
     public void calculateJqValues_single_key_sourceValue() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
         ObjectMapper mapper = new ObjectMapper();
         tm.begin();
+        RootNode root = new RootNode();
+        root.persist();
         NodeEntity upload = new JqNode();//should be a different type of node?
         upload.name="upload";
         upload.persist();
         ValueEntity v1 = new ValueEntity();
+        v1.node = root;
         v1.data = mapper.readTree("""
                 {
                   "foo": [ { "key": "one"}, { "key" : "two" } ],
@@ -528,10 +596,13 @@ public class NodeServiceTest extends FreshDb {
     public void calculateJqValues_single_key_iterating() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
         ObjectMapper mapper = new ObjectMapper();
         tm.begin();
+        RootNode root = new RootNode();
+        root.persist();
         NodeEntity upload = new JqNode();//should be a different type of node?
         upload.name="upload";
         upload.persist();
         ValueEntity v1 = new ValueEntity();
+        v1.node=root;
         v1.data= mapper.readTree("""
                 {
                   "foo": [ { "key": "one"}, { "key" : "two" } ],
@@ -560,10 +631,14 @@ public class NodeServiceTest extends FreshDb {
     @Test
     public void calculateJqValues_multiple_sourceValues() throws IOException, HeuristicRollbackException, SystemException, HeuristicMixedException, RollbackException, NotSupportedException {
         tm.begin();
+        RootNode root = new RootNode();
+        root.persist();
         ValueEntity v1 = new ValueEntity();
+        v1.node=root;
         v1.data=new TextNode("cat");
         v1.persist();
         ValueEntity v2 = new ValueEntity();
+        v2.node=root;
         v2.data=new TextNode("dog");
         v2.persist();
 
@@ -584,6 +659,107 @@ public class NodeServiceTest extends FreshDb {
         assertTrue(read.startsWith("["),"value should be an array: "+read);
         assertTrue(read.endsWith("]"),"value should be an array: "+read);
     }
+    //key based merging using Jsq
+    @Test
+    public void calculatejsValues_dataset_merge() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException, IOException {
+        tm.begin();
+        NodeEntity root = new RootNode();
+        root.persist();
+        NodeEntity transform1 = new JqNode("transform1","$.config");
+        transform1.persist();
+        NodeEntity transform2 = new JqNode("transform2","$.foo");
+        transform2.persist();
+        NodeEntity transform3 = new JqNode("transform3","$.bar");
+        transform3.persist();
+        JsNode dataset = new JsNode("dataset", """
+                function* (value){
+                  const keys = Object.keys(value);
+                  const values = Object.values(value);
+                  const length = Math.max(...Object.values(value).map(v => Array.isArray(v) ? v.length : 1))
+                  const rtrn = []
+                  for (let i=0; i<length; i++){
+                     let entry = {}
+                     for(const key of keys){
+                       let toAdd = Array.isArray(value[key]) ? value[key].length > i ? value[key][i] : false : value[key]
+                       if(toAdd){
+                         entry[key]=toAdd
+                       }
+                     }
+                     console.log("entry",JSON.stringify(entry,null,2)   )
+                     rtrn.push(entry)
+                     yield entry;
+                  }
+                  //return rtrn
+                }
+                """);
+        dataset.persist();
+        ObjectMapper mapper = new ObjectMapper();
+        ValueEntity upload = new ValueEntity(null,root,mapper.readTree("""
+            { "config": { "alpha" : "apple"},
+              "foo": [ { "key" : "fooOne" } , { "key": "fooTwo" } , { "key" : "fooThree" }],
+              "bar": [ { "key" : "barOne" } , { "key": "barTwo" } ]
+            }
+        """));
+        upload.persist();
+        ValueEntity t1 = new ValueEntity(null,transform1,upload.data.get("config"));
+        t1.persist();
+        ValueEntity t2 = new ValueEntity(null,transform1,upload.data.get("foo"));
+        t2.persist();
+        ValueEntity t3 = new ValueEntity(null,transform1,upload.data.get("bar"));
+        t3.persist();
+        tm.commit();
+
+        List<ValueEntity> values = nodeService.calculateJsValues(dataset,Map.of("transform1",t1,"transform2",t2,"transform3",t3),0);
+        assertEquals(3,values.size(),"expect to create a single value from two sources");
+        assertNotNull(values.get(0).data,"value[0] data should not be null");
+        assertTrue(Stream.of("transform1","transform2","transform3").allMatch(values.get(0).data::hasNonNull),"missing expected key from values[0]");
+        assertNotNull(values.get(1).data,"value[1] data should not be null");
+        assertTrue(Stream.of("transform1","transform2","transform3").allMatch(values.get(1).data::hasNonNull),"missing expected key from values[1]");
+        assertNotNull(values.get(2).data,"value[2] data should not be null");
+        assertTrue(Stream.of("transform1","transform2").allMatch(values.get(2).data::hasNonNull),"missing expected key from values[2]");
+
+
+    }
+
+    @Test
+    public void calculatejqValues_dataset_merge() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException, IOException {
+        tm.begin();
+        NodeEntity root = new RootNode();
+        root.persist();
+        NodeEntity transform1 = new JqNode("transform1","$.config");
+        transform1.persist();
+        NodeEntity transform2 = new JqNode("transform2","$.foo");
+        transform2.persist();
+        NodeEntity transform3 = new JqNode("transform3","$.bar");
+        transform3.persist();
+        JqNode dataset = new JqNode("dataset", """
+                . as $a | ([.[]|if type=="array" then length else 1 end]|max) as $m | [range($m)|. as $p | [$a[]|if type=="object" then . elif type=="array" and $p<length then .[$p] else empty end]]
+                """);
+        dataset.persist();
+        ObjectMapper mapper = new ObjectMapper();
+        ValueEntity upload = new ValueEntity(null,root,mapper.readTree("""
+            { "config": { "alpha" : "apple"},
+              "foo": [ { "key" : "fooOne" } , { "key": "fooTwo" } , { "key" : "fooThree" }],
+              "bar": [ { "key" : "barOne" } , { "key": "barTwo" } ]
+            }
+        """));
+        upload.persist();
+        ValueEntity t1 = new ValueEntity(null,transform1,upload.data.get("config"));
+        t1.persist();
+        ValueEntity t2 = new ValueEntity(null,transform1,upload.data.get("foo"));
+        t2.persist();
+        ValueEntity t3 = new ValueEntity(null,transform1,upload.data.get("bar"));
+        t3.persist();
+        tm.commit();
+
+        List<ValueEntity> values = nodeService.calculateJqValues(dataset,Map.of("transform1",t1,"transform2",t2,"transform3",t3),0);
+        assertEquals(1,values.size(),"expect to create a single value from two sources");
+        ValueEntity found = values.get(0);
+        assertNotNull(found.data,"found data should not be null");
+        System.out.println(found.data);
+
+    }
+
     @Test
     public void calculateSourceValuePermutations_returns_non_null_on_length_mismatch() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException, JsonProcessingException {
         tm.begin();
@@ -890,10 +1066,10 @@ public class NodeServiceTest extends FreshDb {
         assertTrue(fourth.contains("dog"),"fourth should have dog: "+second);
 
         //check the multivalues
-        assertTrue(Stream.of("one","uno","cat","dog").allMatch(first::contains),"missing expected key in "+first);
-        assertTrue(Stream.of("one","dos","dog").allMatch(second::contains),"missing expected key in "+second);
-        assertTrue(Stream.of("two","uno","dog").allMatch(third::contains),"missing expected key in "+third);
-        assertTrue(Stream.of("two","dos","dog").allMatch(fourth::contains),"missing expected key in "+fourth);
+        assertTrue(Stream.of("one","uno","cat","dog").allMatch(first::contains),"missing expected key in first: "+first);
+        assertTrue(Stream.of("one","dos","dog").allMatch(second::contains),"missing expected key in second: "+second);
+        assertTrue(Stream.of("two","uno","dog").allMatch(third::contains),"missing expected key in third: "+third);
+        assertTrue(Stream.of("two","dos","dog").allMatch(fourth::contains),"missing expected key in fourth: "+fourth);
 
     }
 
@@ -1613,6 +1789,41 @@ public class NodeServiceTest extends FreshDb {
         assertEquals(3.1, previous3, "Previous range value should be 3.1");
         assertEquals(-32.25806451612903, ratio3, 0.0001, "Ratio should be ~-32.26%");
 
+    }
+
+    @Test
+    public void jsonpathToJq_filter_equals() {
+        assertEquals(
+                ".boot_time[]?.boot_logs[]? | select(.name == \"early-boot-service.service\")",
+                NodeService.jsonpathToJq("$.boot_time[*].boot_logs[*] ? (@.name == \"early-boot-service.service\")"));
+    }
+
+    @Test
+    public void jsonpathToJq_filter_not_equals() {
+        assertEquals(
+                ".results[]? | select(.jobName != \"garbage-collection\")",
+                NodeService.jsonpathToJq("$.results[*] ?(@.jobName != \"garbage-collection\")"));
+    }
+
+    @Test
+    public void jsonpathToJq_filter_like_regex() {
+        assertEquals(
+                ".boot_time[]?.boot_logs[]? | select((.name | test(\"^InitRD$\")))",
+                NodeService.jsonpathToJq("$.boot_time[*].boot_logs[*] ? (@.name like_regex \"^InitRD$\")"));
+    }
+
+    @Test
+    public void jsonpathToJq_filter_with_quoted_fields_and_trailing_path() {
+        assertEquals(
+                ".faban.summary.benchResults.driverSummary[]? | select(.[\"@name\"] == \"MfgDriver\").customStats.stat[0].passed.[\"text()\"]",
+                NodeService.jsonpathToJq("$.faban.summary.benchResults.driverSummary[*] ? (@.\"@name\" == \"MfgDriver\").customStats.stat[0].passed.\"text()\""));
+    }
+
+    @Test
+    public void jsonpathToJq_no_filter() {
+        assertEquals(".foo.bar", NodeService.jsonpathToJq("$.foo.bar"));
+        assertEquals(".foo[]?.bar", NodeService.jsonpathToJq("$.foo[*].bar"));
+        assertEquals(".foo[]?.bar", NodeService.jsonpathToJq("$.foo.*.bar"));
     }
 
     @Test

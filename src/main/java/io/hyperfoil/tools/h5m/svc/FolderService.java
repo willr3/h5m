@@ -58,6 +58,31 @@ public class FolderService implements FolderServiceInterface {
         return entity.id;
     }
 
+    /*        if(!value.isPersistent()){
+            ValueEntity merged = em.merge(value);
+            em.flush();
+            value.id = merged.id;
+            return merged;
+        }else{
+            value.persist();
+        }
+        return value;
+
+     */
+
+    @Transactional
+    public long create(FolderEntity entity){
+        if(!entity.isPersistent()){
+            FolderEntity merged = em.merge(entity);
+            em.flush();
+            entity.id = merged.id;
+            return entity.id;
+        }else{
+            entity.persist();
+        }
+        return entity.id;
+    }
+
     @Transactional
     public long create(String name, String teamName) {
         Team team = Team.find("name", teamName).firstResult();
@@ -197,7 +222,8 @@ public class FolderService implements FolderServiceInterface {
 //        }).toList();
 //        workQueue.addWorks(toQueue);
 
-        workService.create(List.copyOf(folder.group.sources).stream().map(source -> new Work(source, new ArrayList<>(source.sources), List.of(newValue))).toList());
+        workService.create(folder.group.getTopLevelNodes().stream().map(node-> new Work(node,new ArrayList<>(node.sources),List.of(newValue))).toList());
+        //workService.create(List.copyOf(folder.group.sources).stream().map(source -> new Work(source, new ArrayList<>(source.sources), List.of(newValue))).toList());
     }
 
     /**

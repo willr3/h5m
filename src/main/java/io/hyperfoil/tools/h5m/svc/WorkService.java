@@ -1,6 +1,7 @@
 package io.hyperfoil.tools.h5m.svc;
 
 import io.hyperfoil.tools.h5m.api.svc.WorkServiceInterface;
+import io.hyperfoil.tools.h5m.entity.NodeEntity;
 import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.entity.work.Work;
 import io.hyperfoil.tools.h5m.queue.WorkQueue;
@@ -24,11 +25,9 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.hibernate.Hibernate;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @ApplicationScoped
 public class WorkService implements WorkServiceInterface {
@@ -113,9 +112,9 @@ public class WorkService implements WorkServiceInterface {
                         sv.node.dependsOn(sv.node);
                     }
                 }
-                if (work.activeNode != null) {
+                if (work.activeNodes != null) {
                     // Trigger ancestor cache computation while session is open
-                    work.activeNode.dependsOn(work.activeNode);
+                    work.dependsOn(work);
                 }
             }
             workQueue.incrementDeferred(toQueue.size());
@@ -172,7 +171,7 @@ public class WorkService implements WorkServiceInterface {
                 Log.warnf("execute: Work id=%d not found in DB (already processed?), skipping", w.id);
                 return;
             }
-            if(work.activeNode==null || work.sourceValues == null || work.sourceValues.isEmpty()){
+            if(work.activeNodes==null || work.activeNodes.isEmpty() || work.sourceValues == null || work.sourceValues.isEmpty()){
                 //error conditions?
                 //work.activeNode == null is not yet a validation condition but it could be for post processing tasks?
             }
@@ -183,65 +182,70 @@ public class WorkService implements WorkServiceInterface {
             }
             //looping over values works for Jq / Js nodes but what about cross test comparison
             //calculateValue should probably accept all sourceValues and leave it to the node function to decide
-            List<ValueEntity> calculated = nodeService.calculateValues(work.activeNode,work.sourceValues);
-
+            List<ValueEntity> calculated = new  ArrayList<>();
+            for(NodeEntity node : work.activeNodes){
+                List<ValueEntity> thisIteration = nodeService.calculateValues(node,work.sourceValues);
+                calculated.addAll(thisIteration);
+            }
             List<ValueEntity> newOrUpdated = new ArrayList<>();
             for(ValueEntity v : work.sourceValues) {
-                Map<String, ValueEntity> descendants = valueService.getDescendantValueByPath(v, work.activeNode);
-                for(Iterator<ValueEntity> iter = calculated.iterator(); iter.hasNext();){
-                    ValueEntity newValue = iter.next();
-                    String path = newValue.getPath();
-                    if(descendants.containsKey(path)){
-                        ValueEntity existingValue = descendants.get(path);
-                        //existingValue.getId() should not be null because it was fetched from persistence
-                        if(existingValue.getId().equals(newValue.getId())) {
-                            //if it's the same value we don't have to work with it
-                        }else if( newValue.data.equals(existingValue.data)){
-                            if(newValue.id != null){
-                                valueService.delete(newValue);
+                for(NodeEntity activeNode : work.activeNodes){
+                    Map<String, ValueEntity> descendants = valueService.getDescendantValueByPath(v, activeNode);
+                    for(Iterator<ValueEntity> iter = calculated.iterator(); iter.hasNext();){
+                        ValueEntity newValue = iter.next();
+                        String path = newValue.getPath();
+                        if(descendants.containsKey(path)){
+                            ValueEntity existingValue = descendants.get(path);
+                            //existingValue.getId() should not be null because it was fetched from persistence
+                            if(existingValue.getId().equals(newValue.getId())) {
+                                //if it's the same value we don't have to work with it
+                            }else if( newValue.data.equals(existingValue.data)){
+                                if(newValue.id != null){
+                                    valueService.delete(newValue);
+                                }
+                                iter.remove();//we don't need this new ValueEntity
+                            }else{
+                                //update the new value
+                                existingValue.data = newValue.data;
+                                newOrUpdated.add(existingValue);
+                                //should this update the created_at
                             }
-                            iter.remove();//we don't need this new ValueEntity
+                            descendants.remove(path);//remove it so we know what is left over
                         }else{
-                            //update the new value
-                            existingValue.data = newValue.data;
-                            newOrUpdated.add(existingValue);
-                            //should this update the created_at
+                            //we need to persist the newValue
+                            valueService.create(newValue);
                         }
-                        descendants.remove(path);//remove it so we know what is left over
-                    }else{
-                        //we need to persist the newValue
-                        valueService.create(newValue);
                     }
-                }
-                if(!descendants.isEmpty()){//values that need to be deleted
-                    descendants.values().forEach(valueService::delete);
+                    if(!descendants.isEmpty()){//values that need to be deleted
+                        descendants.values().forEach(valueService::delete);
+                    }
                 }
             }
             newOrUpdated.addAll(calculated);
-
-            if(work.activeNode.isDetection() && !newOrUpdated.isEmpty()){
-                List<Long> valueIds = newOrUpdated.stream().map(ValueEntity::getId).toList();
-                // Resolve folderId from source values
-                long folderId = work.sourceValues.stream()
-                    .filter(v -> v.folder != null)
-                    .map(v -> v.folder.id)
-                    .findFirst()
-                    .orElse(-1L);
-                changeDetectedEvent.fire(new ChangeDetectedEvent(folderId, work.activeNode.getId(), work.activeNode.name, valueIds, true));
-            }
-
-            //we need to trigger more calculations? perhaps for a recalculation we do?
             if(!newOrUpdated.isEmpty()){
-                if(work.activeNode!=null){
-                    create(nodeService.getDependentNodes(work.activeNode).stream().map(node -> new Work(node, node.sources, work.sourceValues)).toList());
+                Set<NodeEntity> createdValues = newOrUpdated.stream().map(v->v.node).collect(Collectors.toSet());
+                for(NodeEntity node : createdValues){
+                    if(node.isDetection()){
+                        List<Long> valueIds = newOrUpdated.stream().map(ValueEntity::getId).toList();
+                        long folderId = work.sourceValues.stream()
+                                .filter(v -> v.folder != null)
+                                .map(v -> v.folder.id)
+                                .findFirst()
+                                .orElse(-1L);
+                        changeDetectedEvent.fire(new ChangeDetectedEvent(folderId, node.getId(), node.name, valueIds, true));
+
+                    }
+                    //we need to trigger more calculations? perhaps for a recalculation we do?
+                    create(nodeService.getDependentNodes(node).stream().map(n -> new Work(n, n.sources, work.sourceValues)).toList());
                 }
             }
+
             //not in the finally so that it only happens if the work succeeds
             delete(work);
 
             // Defer decrement until after this transaction commits so that
             // isIdle() cannot return true while the DB commit is still in flight.
-            if(w.activeNode!=null){
+            if(w.activeNodes!=null && !w.activeNodes.isEmpty()){
                 decrementDeferred = true;
                 tm.getTransaction().registerSynchronization(new Synchronization() {
                     @Override public void beforeCompletion() {}
@@ -264,7 +268,7 @@ public class WorkService implements WorkServiceInterface {
         } finally {
             // Only decrement immediately if we couldn't register the afterCompletion
             // (early return for "not found", or exception before registration)
-            if(!decrementDeferred && w.activeNode!=null){
+            if(!decrementDeferred && w.activeNodes!=null && !w.activeNodes.isEmpty()){
                 workQueue.decrement(w);
             }
         }
