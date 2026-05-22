@@ -236,7 +236,7 @@ public class WorkService implements WorkServiceInterface {
 
                     }
                     //we need to trigger more calculations? perhaps for a recalculation we do?
-                    create(nodeService.getDependentNodes(node).stream().map(n -> new Work(n, n.sources, work.sourceValues)).toList());
+                    create(nodeService.getDirectDependents(node).stream().map(n -> new Work(n, n.sources, work.sourceValues)).toList());
                 }
             }
 
@@ -274,4 +274,43 @@ public class WorkService implements WorkServiceInterface {
         }
     }
 
+    //does work A depend on work B?
+    @Transactional
+    public boolean dependsOn(Work a, Work b){
+        return dependsOn(a,b,false);
+    }
+    public boolean dependsOn(Work a, Work b,boolean cumulative){
+        if (a.id == null || b.id == null){
+            return a.dependsOn(b);
+        }
+        if (a.id == b.id){
+            return false; //cannot depend on self
+        }
+        boolean dependentValue = em.createNativeQuery("""
+            select 1 from value_edge 
+                 where child_id in (select value_id from work_values where work_id = :workAId) 
+                   and parent_id in (select value_id from work_values where work_id = :workBId)
+                   and child_id != parent_id 
+        """)
+                .setParameter("workAId",a.id)
+                .setParameter("workBId",b.id)
+                .getResultList().size() > 0;
+        if (dependentValue){
+            return true;
+        }
+        boolean activeNode = a.activeNodes!=null && b.activeNodes != null && nodeService.dependsOnAny(a.activeNodes,b.activeNodes);
+
+        boolean sameValue = em.createNativeQuery("""
+            select 1 from work_values a join work_values b on a.value_id = b.value_id where a.work_id = :workAId and b.work_id = :workBId 
+        """)
+                .setParameter("workAId",a.id)
+                .setParameter("workBId",b.id)
+                .getResultList().size() > 0;
+
+        boolean emptyValues = em.createNativeQuery("select 1 from work_values where work_id = :workId").setParameter("workId",a.id)
+                .getResultList().size() == 0;
+
+
+        return activeNode && (sameValue || cumulative || a.cumulative || emptyValues);
+    }
 }

@@ -169,7 +169,46 @@ public class NodeServiceTest extends FreshDb {
         assertEquals(new TextNode("foo"),data);
         System.out.println(data);
     }
+    @Test
+    public void dependsOnCte() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        NodeEntity rootNode = new RootNode();
+        rootNode.name="root";
+        rootNode.persist();
+        JqNode first = new JqNode("first",".first",rootNode);
+        first.persist();
+        JqNode second = new JqNode("second",".second",first);
+        second.persist();
+        JqNode third = new JqNode("third",".third",second);
+        third.persist();
+        tm.commit();
 
+        assertTrue(nodeService.dependsOnCte(third,first),"third should depend on first");
+        assertTrue(nodeService.dependsOnCte(second,first),"second depends on first");
+        assertFalse(nodeService.dependsOnCte(first,second),"first should not depend on second");
+        assertFalse(nodeService.dependsOnCte(first,third),"first should not depend on third");
+    }
+    @Test
+    public void dependsOn() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        ObjectMapper mapper = new ObjectMapper();
+        tm.begin();
+        NodeEntity rootNode = new RootNode();
+        rootNode.name="root";
+        rootNode.persist();
+        JqNode first = new JqNode("first",".first",rootNode);
+        first.persist();
+        JqNode second = new JqNode("second",".second",first);
+        second.persist();
+        JqNode third = new JqNode("third",".third",second);
+        third.persist();
+        tm.commit();
+
+        assertTrue(nodeService.dependsOn(third,first),"third should depend on first");
+        assertTrue(nodeService.dependsOn(second,first),"second depends on first");
+        assertFalse(nodeService.dependsOn(first,second),"first should not depend on second");
+        assertFalse(nodeService.dependsOn(first,third),"first should not depend on third");
+    }
 
     @Test
     public void calculateJsValue_no_source() throws IOException {
@@ -547,16 +586,21 @@ public class NodeServiceTest extends FreshDb {
     }
 
     @Test
-    public void getDependentNodes() throws HeuristicRollbackException, SystemException, HeuristicMixedException, RollbackException, NotSupportedException {
+    public void getDirectDependents() throws HeuristicRollbackException, SystemException, HeuristicMixedException, RollbackException, NotSupportedException {
         tm.begin();
         RootNode root = new RootNode();
+        root.persist();
         NodeEntity n1 = nodeService.create(new JqNode("n1","n1",root));
+        n1.persist();
         NodeEntity n11 = nodeService.create(new JqNode("n11","n11",n1));
+        n11.persist();
         NodeEntity n12 = nodeService.create(new JqNode("n12","n12",n1));
+        n12.persist();
         NodeEntity n121 = nodeService.create(new JqNode("n121","n121",n12));
+        n121.persist();
         tm.commit();
 
-        List<NodeEntity> found = nodeService.getDependentNodes(n1);
+        List<NodeEntity> found = nodeService.getDirectDependents(n1);
         assertNotNull(found);
         assertEquals(2,found.size(),"should find two nodes: "+found);
         assertTrue(found.contains(n11),"should find node11 "+n11+" : "+found);
@@ -572,16 +616,14 @@ public class NodeServiceTest extends FreshDb {
         NodeEntity upload = new JqNode();//should be a different type of node?
         upload.name="upload";
         upload.persist();
-        ValueEntity v1 = new ValueEntity();
-        v1.node = root;
-        v1.data = mapper.readTree("""
+        ValueEntity v1 = new ValueEntity(null,upload,mapper.readTree("""
                 {
                   "foo": [ { "key": "one"}, { "key" : "two" } ],
                   "bar": [ { "k": "uno" }, { "k": "dos"}, { "k" : "tres"} ],
                   "biz": "cat",
                   "buz": "dog"
                 }
-                """);
+                """));
         v1.persist();
         tm.commit();
 
@@ -1649,8 +1691,8 @@ public class NodeServiceTest extends FreshDb {
 
         List<ValueEntity> exclusiveR1 = nodeService.calculateFixedThresholdValues(ftExclusive, root1, 0);
         List<ValueEntity> exclusiveR2 = nodeService.calculateFixedThresholdValues(ftExclusive, root2, 0);
-        assertEquals(1, exclusiveR1.size(), "minInclusive=false: value 10 should violate min=10");
-        assertEquals(1, exclusiveR2.size(), "maxInclusive=false: value 100 should violate max=100");
+        assertEquals(1, exclusiveR1.size(), "minInclusive=false: value 10 should violate min=10:\n"+exclusiveR1);
+        assertEquals(1, exclusiveR2.size(), "maxInclusive=false: value 100 should violate max=100:\n"+exclusiveR2);
 
         // mixed: minInclusive=false, maxInclusive=true → only min boundary violates
         FixedThreshold ftMixed = new FixedThreshold();

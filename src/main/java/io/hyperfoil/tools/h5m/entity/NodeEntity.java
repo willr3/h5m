@@ -3,9 +3,13 @@ package io.hyperfoil.tools.h5m.entity;
 import com.fasterxml.jackson.annotation.*;
 import io.hyperfoil.tools.h5m.api.NodeType;
 import io.hyperfoil.tools.h5m.entity.node.RootNode;
+import io.hyperfoil.tools.h5m.provided.H5mEntityListener;
 import io.hyperfoil.tools.h5m.queue.KahnDagSort;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import jakarta.persistence.*;
+import jakarta.persistence.CascadeType;
+import org.hibernate.annotations.*;
+import org.hibernate.dialect.PostgreSQLDialect;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -13,6 +17,7 @@ import java.util.stream.Collectors;
 
 @Entity(name = "node")
 @Inheritance(strategy = InheritanceType.SINGLE_TABLE)
+@EntityListeners( H5mEntityListener.class )
 @DiscriminatorColumn(name = "type", discriminatorType =  DiscriminatorType.STRING)
 public abstract class NodeEntity extends PanacheEntity implements Comparable<NodeEntity> {
 
@@ -29,7 +34,7 @@ public abstract class NodeEntity extends PanacheEntity implements Comparable<Nod
     public MultiIterationType multiType = MultiIterationType.Length;
     public ScalarVariableMethod scalarMethod = ScalarVariableMethod.First;
 
-    @ManyToOne(cascade = { CascadeType.PERSIST, CascadeType.MERGE }, fetch = FetchType.LAZY )
+    @ManyToOne(cascade = { CascadeType.PERSIST, CascadeType.REFRESH }, fetch = FetchType.LAZY )
     @JoinColumn(name = "group_id")
     @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "group_id")
 //    @JsonIdentityReference(alwaysAsId = true)
@@ -38,15 +43,116 @@ public abstract class NodeEntity extends PanacheEntity implements Comparable<Nod
 
     //making this eager causes too many joins
     //cannot cascade delete because this entity "owns" the reference to the parent values
-    @ManyToMany(cascade = { CascadeType.PERSIST, CascadeType.MERGE }, fetch = FetchType.LAZY )
+    @ManyToMany(cascade = { CascadeType.PERSIST , CascadeType.REFRESH, CascadeType.MERGE, CascadeType.DETACH }, fetch = FetchType.LAZY )
     @JoinTable(
             name="node_edge",
             joinColumns = @JoinColumn(name = "child_id"),
-            inverseJoinColumns = @JoinColumn(name = "parent_id"),
-            uniqueConstraints = @UniqueConstraint(columnNames = {"child_id", "parent_id"}),
-            indexes = @Index(name = "idx_node_edge_parent", columnList = "parent_id")
+            inverseJoinColumns = @JoinColumn(name = "parent_id", updatable = false, insertable = false),
+            uniqueConstraints = @UniqueConstraint(columnNames = {"child_id", "parent_id", "depth"})
+            //indexes = @Index(name = "idx_node_edge_parent", columnList = "parent_id")
     )
     @OrderColumn(name = "idx")
+    @SQLInsert(sql="""
+        WITH insert_edge (child_id,idx,parent_id) AS (VALUES(?,?,?)),
+        found AS (
+            SELECT l.parent_id, r.child_id, l.depth + r.depth + 1 AS depth, r.count AS count, r.idx AS idx
+            FROM
+                ( SELECT ne.parent_id, ne.depth FROM node_edge ne JOIN insert_edge ie ON ne.child_id = ie.parent_id) l
+            CROSS JOIN
+                ( SELECT ne.child_id, ne.depth, ie.idx, ne.count FROM node_edge ne JOIN insert_edge ie ON ne.parent_id = ie.child_id) r
+        )
+        INSERT INTO node_edge (parent_id,child_id,idx,depth,count)
+        SELECT parent_id,child_id,idx,depth,count FROM found
+        WHERE true
+        ON CONFLICT (child_id, parent_id, depth)
+        DO UPDATE SET count = node_edge.count + 1
+        """)
+
+    @SQLJoinTableRestriction("depth = 1")
+    @SQLDeleteAll(sql = """
+        delete from node_edge where child_id = ? and child_id != parent_id
+        """)
+    @SQLDelete(sql= """
+        with from_hibernate_delete (child_id,idx) as ( values(?,?) ),
+        target_edge as (select ne.child_id,ne.parent_id,ne.depth,ne.count from node_edge ne join from_hibernate_delete fh on ne.child_id = fh.child_id and ne.idx = fh.idx where ne.depth = 1),
+        selected_edge as (
+          select l.parent_id as parent_id, r.child_id as child_id, l.depth + r.depth + 1 as depth
+          from ( select ne.* from node_edge ne join target_edge te on ne.child_id = te.parent_id) l
+          cross join
+          ( select ne.* from node_edge ne join target_edge te on ne.parent_id = te.child_id) r
+        )
+        update node_edge set count = count - 1 where (parent_id,child_id,depth) in (select parent_id, child_id, depth from selected_edge);
+        """
+    )
+    @SQLUpdate(
+        table = "node_edge",
+        sql= """
+        with from_hibernate_update (parent_id,child_id,idx) as (values(?,?,?)),
+        existing (parent_id,child_id,idx) as (select ne.parent_id,ne.child_id,ne.idx from node_edge ne join from_hibernate_update hu on ne.child_id = hu.child_id and ne.idx = hu.idx where ne.depth = 1),
+        --delete the existing 
+        delete_target_edge as (select ne.child_id,ne.parent_id,ne.depth,ne.count from node_edge ne join existing e on ne.child_id = e.child_id and ne.idx = e.idx where ne.depth = 1),
+        delete_selected_edge as (
+          select l.parent_id as parent_id, r.child_id as child_id, l.depth + r.depth + 1 as depth
+          from ( select ne.* from node_edge ne join delete_target_edge te on ne.child_id = te.parent_id) l
+          cross join
+          ( select ne.* from node_edge ne join delete_target_edge te on ne.parent_id = te.child_id) r
+        ),
+        delete_rows (parent_id,child_id,idx,depth,count) as (select parent_id,child_id,idx,depth,count-1 as count from node_edge where (parent_id,child_id,depth) in (select parent_id, child_id, depth from delete_selected_edge)),
+        insert_found (parent_id,child_id,idx,depth,count) AS (
+            SELECT l.parent_id, r.child_id, r.idx AS idx, l.depth + r.depth + 1 AS depth, r.count AS count
+            FROM
+                ( SELECT ne.parent_id, ne.depth FROM node_edge ne JOIN from_hibernate_update fh ON ne.child_id = fh.parent_id) l
+            CROSS JOIN
+                ( SELECT ne.child_id, ne.depth, fh.idx, ne.count FROM node_edge ne JOIN from_hibernate_update fh ON ne.parent_id = fh.child_id) r
+        )
+        INSERT INTO node_edge (parent_id,child_id,idx,depth,count)
+            SELECT 
+                coalesce(d.parent_id,i.parent_id) as parent_id ,
+                coalesce(d.child_id,i.child_id) as child_id ,
+                coalesce(d.idx,i.idx) as idx,
+                coalesce(d.depth,i.depth) as depth, 
+                case when d.count is null then i.count when i.count is null then d.count when d.count = i.count then d.count else -1 end as count 
+            from delete_rows d full outer join insert_found i on d.parent_id = i.parent_id and d.child_id = i.child_id and d.depth = i.depth           
+        WHERE case when d.count is null then i.count when i.count is null then d.count when d.count = i.count then d.count else -1 end >= 0
+        ON CONFLICT (child_id, parent_id, depth)
+        DO UPDATE SET count = EXCLUDED.count
+    """)
+    @DialectOverride.SQLUpdate(
+            dialect = PostgreSQLDialect.class,
+            override = @SQLUpdate(
+                    table = "node_edge",
+                    sql= """
+        with from_hibernate_update (parent_id,child_id,idx) as (values(?,?,?)),
+        existing (parent_id,child_id,idx) as (select ne.parent_id,ne.child_id,ne.idx from node_edge ne join from_hibernate_update hu on ne.child_id = hu.child_id and ne.idx = hu.idx where ne.depth = 1),
+        --delete the existing 
+        delete_target_edge as (select ne.child_id,ne.parent_id,ne.depth,ne.count from node_edge ne join existing e on ne.child_id = e.child_id and ne.idx = e.idx where ne.depth = 1),
+        delete_selected_edge as (
+          select l.parent_id as parent_id, r.child_id as child_id, l.depth + r.depth + 1 as depth
+          from ( select ne.* from node_edge ne join delete_target_edge te on ne.child_id = te.parent_id) l
+          cross join
+          ( select ne.* from node_edge ne join delete_target_edge te on ne.parent_id = te.child_id) r
+        ),
+        delete_rows (parent_id,child_id,idx,depth,count) as (select parent_id,child_id,idx,depth,count-1 as count from node_edge where (parent_id,child_id,depth) in (select parent_id, child_id, depth from delete_selected_edge)),
+        insert_found (parent_id,child_id,idx,depth,count) AS (
+            SELECT l.parent_id, r.child_id, r.idx AS idx, l.depth + r.depth + 1 AS depth, r.count AS count
+            FROM
+                ( SELECT ne.parent_id, ne.depth FROM node_edge ne JOIN from_hibernate_update fh ON ne.child_id = fh.parent_id) l
+            CROSS JOIN
+                ( SELECT ne.child_id, ne.depth, fh.idx, ne.count FROM node_edge ne JOIN from_hibernate_update fh ON ne.parent_id = fh.child_id) r
+        )
+        INSERT INTO node_edge (parent_id,child_id,idx,depth,count)
+            SELECT 
+                coalesce(d.parent_id,i.parent_id) as parent_id ,
+                coalesce(d.child_id,i.child_id) as child_id ,
+                coalesce(d.idx,i.idx) as idx,
+                coalesce(d.depth,i.depth) as depth, 
+                case when d.count is null then i.count when i.count is null then d.count when d.count = i.count then d.count else -1 end as count 
+            from delete_rows d full outer join insert_found i on d.parent_id = i.parent_id and d.child_id = i.child_id and d.depth = i.depth           
+        WHERE true
+        ON CONFLICT (child_id, parent_id, depth)
+        DO UPDATE SET count = EXCLUDED.count
+            """)
+    )
     public List<NodeEntity> sources;
 
     public List<NodeEntity> getSources() {return sources;}

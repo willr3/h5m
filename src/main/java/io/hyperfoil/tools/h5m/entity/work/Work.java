@@ -25,7 +25,10 @@ public class Work  extends PanacheEntity implements Runnable, Comparable<Work>{
     @JoinTable(
             name="work_values",
             joinColumns = @JoinColumn(name = "work_id"),
-            inverseJoinColumns = @JoinColumn(name = "value_id")
+            inverseJoinColumns = @JoinColumn(name = "value_id"),
+            indexes = {
+                    @Index(name = "work_values_work_id", columnList = "work_id")
+            }
     )
     public List<ValueEntity> sourceValues;//multiple values could happen for cross test comparisons and
 
@@ -34,7 +37,10 @@ public class Work  extends PanacheEntity implements Runnable, Comparable<Work>{
     @JoinTable(
             name="work_source_nodes",
             joinColumns = @JoinColumn(name = "work_id"),
-            inverseJoinColumns = @JoinColumn(name = "node_id")
+            inverseJoinColumns = @JoinColumn(name = "node_id"),
+            indexes = {
+                    @Index(name = "work_nodes_work_id", columnList = "work_id")
+            }
     )
     public List<NodeEntity> sourceNodes; //what is going to use a list of sources that are not already listed for the activeNode?
 
@@ -49,7 +55,7 @@ public class Work  extends PanacheEntity implements Runnable, Comparable<Work>{
     )
     public Set<NodeEntity> activeNodes;
 
-    boolean cumulative = false;
+    public boolean cumulative = false;
 
 
     public Work(){
