@@ -1230,16 +1230,16 @@ public class H5mTest {
 
         LaunchResult afterUpload3 = results.get(results.size() - 3);
         String output3 = afterUpload3.getOutput();
-        assertTrue(output3.contains("Count: 17"),
-                "After upload 3, expect 17 values (2 changes total)\n" + output3);
+        assertTrue(output3.contains("Count: 16"),
+                "After upload 3, expect 16 values (2 changes total)\n" + output3);
 
         assertTrue(output3.contains("\"domainvalue\":3") || output3.contains("domainvalue\": 3"),
                 "Change should be detected for domain x=3\n" + output3);
 
         LaunchResult afterUpload4 = results.getLast();
         String output4 = afterUpload4.getOutput();
-        assertTrue(output4.contains("Count: 23"),
-                "After upload 4, expect 23 values (3 changes total)\n" + output4);
+        assertTrue(output4.contains("Count: 22"),
+                "After upload 4, expect 22 values (3 changes total)\n" + output4);
 
         assertTrue(output4.contains("\"domainvalue\":2") || output4.contains("domainvalue\": 2"),
                 "Change should be detected for domain x=2\n" + output4);

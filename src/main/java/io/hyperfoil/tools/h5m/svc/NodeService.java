@@ -41,7 +41,6 @@ import io.hyperfoil.tools.jjq.value.JqArray;
 import io.hyperfoil.tools.jjq.value.JqValue;
 
 import java.io.IOException;
-import java.sql.PreparedStatement;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.DoubleBinaryOperator;
@@ -418,6 +417,7 @@ public class NodeService implements NodeServiceInterface {
                     //perhaps we check if root introduced the maximum domainValue then only calculate new changes for that last window
                     //or get the domainValues greater than domain values from root and calculate all those changes?
                     List<ValueEntity> rootDomainValues = valueService.getDescendantValues(root, relDiff.getDomainNode());
+                    List<ValueEntity> allDomainValues = new ArrayList<>();
                     for (int sdIdx = 0; sdIdx < rootDomainValues.size(); sdIdx++) {
                         ValueEntity uploadedDomainValue = rootDomainValues.get(sdIdx);
                         List<ValueEntity> preceedingDomainValues = valueService.findMatchingFingerprint(
@@ -444,11 +444,8 @@ public class NodeService implements NodeServiceInterface {
                                 false
                         );
                         followingDomainValues.remove(0);
-
-                        List<ValueEntity> allDomainValues = new ArrayList<>();
                         allDomainValues.addAll(preceedingDomainValues);
                         allDomainValues.addAll(followingDomainValues);
-
                         for (int dIdx = 0; dIdx < allDomainValues.size(); dIdx++) {
                             ValueEntity domainValue = allDomainValues.get(dIdx);
                             //todo this does not look for values after previous relDiff observation :(
@@ -532,9 +529,48 @@ public class NodeService implements NodeServiceInterface {
                                     if (foundParents.size() == 1) {
                                         changeValue.sources = foundParents;
                                     }
+
                                     rtrn.add(changeValue);
                                 }
                             }
+                        }
+                        List<ValueEntity> persistedChangeValues = valueService.findMatchingFingerprint(
+                                relDiff,
+                                groupBy,
+                                fingerprintValue,
+                                relDiff.getDomainNode(),
+                                null,
+                                null,
+                                (int) (relDiff.getWindow() + minPrevious),
+                                0,
+                                false
+                        );
+                        List<JsonNode> domainRemoveScope = new ArrayList<>();
+                        for (ValueEntity dv : allDomainValues) {
+                            if (dv.data != null) {
+                                domainRemoveScope.add(dv.data);
+                            }
+                        }
+                        if (!rtrn.isEmpty()) {
+                            for (ValueEntity existingValue : persistedChangeValues) {
+                                JsonNode existingDomainValue = existingValue.data.get("domainvalue"); //4
+                                if (existingDomainValue == null) continue;
+                                if (domainRemoveScope.contains(existingDomainValue)) {
+                                    boolean match = false;
+                                    for (ValueEntity currentValue : rtrn) {
+                                        JsonNode currentDomainValue = currentValue.data.get("domainvalue");//3
+                                        if (currentDomainValue == null) continue;
+                                        if (existingDomainValue.equals(currentDomainValue)) {
+                                            match = true;
+                                            break;
+                                        }
+                                    }
+                                    if (!match) {
+                                        valueService.delete(existingValue);
+                                    }
+                                }
+                            }
+
                         }
                     }
                 }
