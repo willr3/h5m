@@ -15,6 +15,9 @@ public class FolderEntity extends PanacheEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     public Team team;
 
+    @OneToMany(mappedBy = "folder", cascade = CascadeType.ALL, orphanRemoval = true)
+    public java.util.List<ViewEntity> views = new java.util.ArrayList<>();
+
     @Override
     public final boolean equals(Object o) {
         if (!(o instanceof FolderEntity that)) {

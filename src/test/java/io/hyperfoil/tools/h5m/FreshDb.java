@@ -28,6 +28,8 @@ public class FreshDb {
             try(Statement stmt = conn.createStatement()){
 
                 if(dbKind.equals("postgresql")){
+                    stmt.executeUpdate("TRUNCATE TABLE folder_view_component CASCADE");
+                    stmt.executeUpdate("TRUNCATE TABLE folder_view CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE notification_log CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE notification_config CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE api_key CASCADE");
@@ -45,6 +47,8 @@ public class FreshDb {
                     stmt.executeUpdate("TRUNCATE TABLE h5m_user CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE team CASCADE");
                 }else if (dbKind.equals("sqlite")){
+                    stmt.executeUpdate("DELETE from folder_view_component");
+                    stmt.executeUpdate("DELETE from folder_view");
                     stmt.executeUpdate("DELETE from notification_log");
                     stmt.executeUpdate("DELETE from notification_config");
                     stmt.executeUpdate("DELETE from api_key");
