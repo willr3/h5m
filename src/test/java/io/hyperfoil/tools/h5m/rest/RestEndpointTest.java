@@ -525,6 +525,240 @@ public class RestEndpointTest extends FreshDb {
                 .statusCode(404);
     }
 
+    // -- Views --
+
+    @Test
+    public void view_list_empty_for_new_folder() {
+        createFolder("view-empty");
+
+        given()
+                .when().get("/api/folder/view-empty/view/")
+                .then()
+                .statusCode(200)
+                .body("size()", equalTo(0));
+    }
+
+    @Test
+    public void view_create_and_retrieve() throws Exception {
+        // Import rhivos nodes so we have real node IDs to reference
+        folderService.importFolder(Path.of("src/test/resources/rhivos/nodes.json"), false);
+
+        // Find node IDs for "user" and "uuid" by querying the group
+        tm.begin();
+        FolderEntity folder = FolderEntity.find("name", "rhivos-perf-comprehensive").firstResult();
+        Long userNodeId = folder.group.sources.stream()
+                .filter(n -> "user".equals(n.name)).findFirst().get().id;
+        Long uuidNodeId = folder.group.sources.stream()
+                .filter(n -> "uuid".equals(n.name)).findFirst().get().id;
+        tm.commit();
+
+        // Create a view via REST
+        String viewJson = mapper.writeValueAsString(new io.hyperfoil.tools.h5m.api.View(
+                null, "test-view", null,
+                List.of(
+                        new io.hyperfoil.tools.h5m.api.ViewComponent(null, userNodeId, null, null, "User", 0),
+                        new io.hyperfoil.tools.h5m.api.ViewComponent(null, uuidNodeId, null, null, "UUID", 1)
+                )
+        ));
+
+        Long viewId = given()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(viewJson)
+                .when().post("/api/folder/rhivos-perf-comprehensive/view")
+                .then()
+                .statusCode(200)
+                .body("name", equalTo("test-view"))
+                .body("components.size()", equalTo(2))
+                .body("components[0].headerName", equalTo("User"))
+                .body("components[1].headerName", equalTo("UUID"))
+                .extract().jsonPath().getLong("id");
+
+        // Retrieve it
+        given()
+                .when().get("/api/folder/rhivos-perf-comprehensive/view/" + viewId)
+                .then()
+                .statusCode(200)
+                .body("name", equalTo("test-view"))
+                .body("components.size()", equalTo(2));
+
+        // List should contain it
+        given()
+                .when().get("/api/folder/rhivos-perf-comprehensive/view/")
+                .then()
+                .statusCode(200)
+                .body("size()", equalTo(1))
+                .body("[0].name", equalTo("test-view"));
+    }
+
+    @Test
+    public void view_update_changes_components() throws Exception {
+        folderService.importFolder(Path.of("src/test/resources/rhivos/nodes.json"), false);
+
+        tm.begin();
+        FolderEntity folder = FolderEntity.find("name", "rhivos-perf-comprehensive").firstResult();
+        Long userNodeId = folder.group.sources.stream()
+                .filter(n -> "user".equals(n.name)).findFirst().get().id;
+        Long uuidNodeId = folder.group.sources.stream()
+                .filter(n -> "uuid".equals(n.name)).findFirst().get().id;
+        Long descNodeId = folder.group.sources.stream()
+                .filter(n -> "description".equals(n.name)).findFirst().get().id;
+        tm.commit();
+
+        // Create view with user only
+        String createJson = mapper.writeValueAsString(new io.hyperfoil.tools.h5m.api.View(
+                null, "updatable", null,
+                List.of(new io.hyperfoil.tools.h5m.api.ViewComponent(null, userNodeId, null, null, "User", 0))
+        ));
+
+        Long viewId = given()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(createJson)
+                .when().post("/api/folder/rhivos-perf-comprehensive/view")
+                .then()
+                .statusCode(200)
+                .extract().jsonPath().getLong("id");
+
+        // Update to uuid + description
+        String updateJson = mapper.writeValueAsString(new io.hyperfoil.tools.h5m.api.View(
+                null, "updatable-renamed", null,
+                List.of(
+                        new io.hyperfoil.tools.h5m.api.ViewComponent(null, uuidNodeId, null, null, "UUID", 0),
+                        new io.hyperfoil.tools.h5m.api.ViewComponent(null, descNodeId, null, null, "Description", 1)
+                )
+        ));
+
+        given()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(updateJson)
+                .when().put("/api/folder/rhivos-perf-comprehensive/view/" + viewId)
+                .then()
+                .statusCode(200)
+                .body("name", equalTo("updatable-renamed"))
+                .body("components.size()", equalTo(2))
+                .body("components[0].headerName", equalTo("UUID"));
+    }
+
+    @Test
+    public void view_delete_works() throws Exception {
+        folderService.importFolder(Path.of("src/test/resources/rhivos/nodes.json"), false);
+
+        tm.begin();
+        FolderEntity folder = FolderEntity.find("name", "rhivos-perf-comprehensive").firstResult();
+        Long userNodeId = folder.group.sources.stream()
+                .filter(n -> "user".equals(n.name)).findFirst().get().id;
+        tm.commit();
+
+        String createJson = mapper.writeValueAsString(new io.hyperfoil.tools.h5m.api.View(
+                null, "deletable", null,
+                List.of(new io.hyperfoil.tools.h5m.api.ViewComponent(null, userNodeId, null, null, "User", 0))
+        ));
+
+        Long viewId = given()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(createJson)
+                .when().post("/api/folder/rhivos-perf-comprehensive/view")
+                .then()
+                .statusCode(200)
+                .extract().jsonPath().getLong("id");
+
+        // Delete it
+        given()
+                .when().delete("/api/folder/rhivos-perf-comprehensive/view/" + viewId)
+                .then()
+                .statusCode(204);
+
+        // Should be gone
+        given()
+                .when().get("/api/folder/rhivos-perf-comprehensive/view/")
+                .then()
+                .statusCode(200)
+                .body("size()", equalTo(0));
+    }
+
+    @Test
+    public void view_delete_default_rejected() throws Exception {
+        folderService.importFolder(Path.of("src/test/resources/rhivos/nodes.json"), false);
+
+        tm.begin();
+        FolderEntity folder = FolderEntity.find("name", "rhivos-perf-comprehensive").firstResult();
+        Long userNodeId = folder.group.sources.stream()
+                .filter(n -> "user".equals(n.name)).findFirst().get().id;
+        tm.commit();
+
+        // Create a view named "Default"
+        String createJson = mapper.writeValueAsString(new io.hyperfoil.tools.h5m.api.View(
+                null, "Default", null,
+                List.of(new io.hyperfoil.tools.h5m.api.ViewComponent(null, userNodeId, null, null, "User", 0))
+        ));
+
+        Long viewId = given()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(createJson)
+                .when().post("/api/folder/rhivos-perf-comprehensive/view")
+                .then()
+                .statusCode(200)
+                .extract().jsonPath().getLong("id");
+
+        // Attempting to delete "Default" should fail
+        given()
+                .when().delete("/api/folder/rhivos-perf-comprehensive/view/" + viewId)
+                .then()
+                .statusCode(anyOf(equalTo(400), equalTo(500)));
+    }
+
+    @Test
+    public void view_data_returns_filtered_rhivos_values() throws Exception {
+        // Import rhivos nodes and upload a run
+        folderService.importFolder(Path.of("src/test/resources/rhivos/nodes.json"), false);
+
+        try (InputStream is = getClass().getResourceAsStream("/rhivos/40375.json")) {
+            JsonNode runData = mapper.readTree(is);
+            folderService.upload("rhivos-perf-comprehensive", "$", runData);
+        }
+
+        long deadline = System.currentTimeMillis() + 30_000;
+        while (!workService.isIdle() && System.currentTimeMillis() < deadline) {
+            Thread.sleep(100);
+        }
+        assertTrue(workService.isIdle(), "Work queue should be idle");
+
+        // Find node IDs for nodes that produce values with rhivos data
+        tm.begin();
+        FolderEntity folder = FolderEntity.find("name", "rhivos-perf-comprehensive").firstResult();
+        Long startTimeNodeId = folder.group.sources.stream()
+                .filter(n -> "start_time".equals(n.name)).findFirst().get().id;
+        Long endTimeNodeId = folder.group.sources.stream()
+                .filter(n -> "end_time".equals(n.name)).findFirst().get().id;
+        tm.commit();
+
+        // Create a view with start_time and end_time
+        String viewJson = mapper.writeValueAsString(new io.hyperfoil.tools.h5m.api.View(
+                null, "data-view", null,
+                List.of(
+                        new io.hyperfoil.tools.h5m.api.ViewComponent(null, startTimeNodeId, null, null, "Start Time", 0),
+                        new io.hyperfoil.tools.h5m.api.ViewComponent(null, endTimeNodeId, null, null, "End Time", 1)
+                )
+        ));
+
+        Long viewId = given()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(viewJson)
+                .when().post("/api/folder/rhivos-perf-comprehensive/view")
+                .then()
+                .statusCode(200)
+                .extract().jsonPath().getLong("id");
+
+        // Get view data — should return filtered results with only start_time and end_time columns
+        given()
+                .when().get("/api/folder/rhivos-perf-comprehensive/view/" + viewId + "/data")
+                .then()
+                .statusCode(200)
+                .body("size()", greaterThan(0))
+                // Each row should have the selected node columns
+                .body("[0].start_time", notNullValue())
+                .body("[0].end_time", notNullValue());
+    }
+
     // -- OpenAPI spec --
 
     @Test

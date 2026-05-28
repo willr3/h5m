@@ -423,51 +423,64 @@ public class ValueService implements ValueServiceInterface {
 
 
     /**
-     * returns a json object with the values created by child nodes of the groupBy node.
-     * @param groupBy
-     * @return
+     * Returns grouped values for a node, optionally filtered to specific node IDs.
+     * One row per upload, with keys being node names.
+     *
+     * @param nodeId The root node ID to start the value DAG traversal from.
+     * @param filterNodeIds Optional list of node IDs to include. If null, all nodes are included.
+     * @return A list of JSON objects, one per upload.
      */
     @Override
     @Transactional
-    //TODO here thar be dragons
-    public List<JsonNode> getGroupedValues(Long nodeId){
-        return em.unwrap(Session.class).createNativeQuery(
+    public List<JsonNode> getGroupedValues(Long nodeId, List<Long> filterNodeIds){
+        String nodeFilter = filterNodeIds != null ? "where node_id in (:nodeIds)" : "";
+        var query = em.unwrap(Session.class).createNativeQuery(
             switch(dbKind) {
                 case "sqlite" ->
                     """
                     with recursive tree(id,node_id,root_id,idx,data) as (
-                        select v.id,v.node_id,ve.parent_id as root_id,v.idx,v.data 
-                            from value_edge ve left join value v on ve.child_id = v.id 
+                        select v.id,v.node_id,ve.parent_id as root_id,v.idx,v.data
+                            from value_edge ve left join value v on ve.child_id = v.id
                             where ve.parent_id in (select id from value where node_id = :nodeId)
                         union
-                        select v.id,v.node_id,t.root_id,v.idx,v.data 
+                        select v.id,v.node_id,t.root_id,v.idx,v.data
                             from value v join value_edge ve on v.id = ve.child_id join tree t on ve.parent_id = t.id
                     ), bynode as (
-                        select node_id,root_id,json_group_array(json(data)) as data 
-                            from tree group by node_id,root_id order by idx
+                        select node_id,root_id,json_group_array(json(data)) as data
+                            from tree NODE_FILTER group by node_id,root_id order by idx
                     )
-                    select json_group_object(n.name,json( ( case when json_array_length(b.data) > 1 then b.data else b.data->0 end))) as data 
-                        from bynode b join node n on b.node_id = n.id group by root_id; 
-                    """;
+                    select json_group_object(n.name,json( ( case when json_array_length(b.data) > 1 then b.data else b.data->0 end))) as data
+                        from bynode b join node n on b.node_id = n.id group by root_id;
+                    """.replace("NODE_FILTER", nodeFilter);
                 case "postgresql" ->
                     """
                     with recursive tree(id,node_id,root_id,idx,data) as (
-                        select v.id,v.node_id,ve.parent_id as root_id,v.idx,v.data 
-                            from value_edge ve left join value v on ve.child_id = v.id 
+                        select v.id,v.node_id,ve.parent_id as root_id,v.idx,v.data
+                            from value_edge ve left join value v on ve.child_id = v.id
                             where ve.parent_id in (select id from value where node_id = :nodeId)
                         union
-                        select v.id,v.node_id,t.root_id,v.idx,v.data 
+                        select v.id,v.node_id,t.root_id,v.idx,v.data
                             from value v join value_edge ve on v.id = ve.child_id join tree t on ve.parent_id = t.id
                     ), bynode as (
-                        select node_id,root_id,jsonb_agg(to_jsonb(data)) as data 
-                            from tree group by node_id,root_id,idx order by idx
+                        select node_id,root_id,jsonb_agg(to_jsonb(data)) as data
+                            from tree NODE_FILTER group by node_id,root_id,idx order by idx
                     )
-                    select jsonb_object_agg(n.name,to_jsonb( ( case when jsonb_array_length(b.data) > 1 then b.data else b.data->0 end))) as data 
+                    select jsonb_object_agg(n.name,to_jsonb( ( case when jsonb_array_length(b.data) > 1 then b.data else b.data->0 end))) as data
                     from bynode b join node n on b.node_id = n.id group by root_id;
-                    """;
-            default ->"";
+                    """.replace("NODE_FILTER", nodeFilter);
+                default -> "";
             }, JsonNode.class
-        ).setParameter("nodeId",nodeId).getResultList();
+        ).setParameter("nodeId", nodeId);
+        if (filterNodeIds != null) {
+            query.setParameter("nodeIds", filterNodeIds);
+        }
+        return query.getResultList();
+    }
+
+    @Override
+    @Transactional
+    public List<JsonNode> getGroupedValues(Long nodeId){
+        return getGroupedValues(nodeId, null);
     }
     /**
      * get all value that have a value from node as an ancestor

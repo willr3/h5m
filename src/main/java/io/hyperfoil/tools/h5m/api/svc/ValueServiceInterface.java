@@ -32,6 +32,15 @@ public interface ValueServiceInterface {
     List<JsonNode> getGroupedValues(Long nodeId);
 
     /**
+     * Retrieves grouped values for a specific node, optionally filtered to specific node IDs.
+     *
+     * @param nodeId The ID of the root node.
+     * @param filterNodeIds Optional list of node IDs to include. If null, all nodes are included.
+     * @return A list of JSON nodes representing the grouped values.
+     */
+    List<JsonNode> getGroupedValues(Long nodeId, List<Long> filterNodeIds);
+
+    /**
      * Retrieves all values produced by a specific node.
      *
      * @param nodeId The ID of the node.
