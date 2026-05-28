@@ -443,7 +443,9 @@ public class NodeService implements NodeServiceInterface {
                                 0,
                                 false
                         );
-                        followingDomainValues.remove(0);
+                        if(!followingDomainValues.isEmpty()) {
+                            followingDomainValues.remove(0);
+                        }
                         allDomainValues.addAll(preceedingDomainValues);
                         allDomainValues.addAll(followingDomainValues);
                         for (int dIdx = 0; dIdx < allDomainValues.size(); dIdx++) {
@@ -525,7 +527,7 @@ public class NodeService implements NodeServiceInterface {
                                     dIdx += minPrevious;
                                     ValueEntity changeValue = new ValueEntity(root.folder, relDiff, data);
                                     changeValue.idx = startingOrdinal;
-                                    List<ValueEntity> foundParents = valueService.getAncestor(fingerprintValue, groupBy);
+                                    List<ValueEntity> foundParents = valueService.getAncestor(domainValue, groupBy);
                                     if (foundParents.size() == 1) {
                                         changeValue.sources = foundParents;
                                     }
@@ -539,7 +541,7 @@ public class NodeService implements NodeServiceInterface {
                                 groupBy,
                                 fingerprintValue,
                                 relDiff.getDomainNode(),
-                                null,
+                                uploadedDomainValue,
                                 null,
                                 (int) (relDiff.getWindow() + minPrevious),
                                 0,

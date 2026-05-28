@@ -1785,17 +1785,17 @@ public class NodeServiceTest extends FreshDb {
 
         NodeEntity rootNode = new RootNode();
         rootNode.persist();
-        NodeEntity rangeNode = new JqNode("range",".y",rootNode);
-        rangeNode.persist();
-        NodeEntity domainNode = new JqNode("domain",".domain",rootNode);
-        domainNode.persist();
-        NodeEntity fingerprintNode = new JqNode("fingerprint",".fingerprint",rootNode);
-        fingerprintNode.persist();
-
         SplitNode splitNode = new SplitNode("split", "split", List.of(rootNode));
         splitNode.persist();
+        NodeEntity rangeNode = new JqNode("range",".y",splitNode);
+        rangeNode.persist();
+        NodeEntity domainNode = new JqNode("domain",".domain",splitNode);
+        domainNode.persist();
+        NodeEntity fingerprintNode = new JqNode("fingerprint",".fingerprint",splitNode);
+        fingerprintNode.persist();
 
         RelativeDifference relDiff = new RelativeDifference("relativediff", "{}");
+
         relDiff.setNodes(fingerprintNode, splitNode, rangeNode, domainNode);
         relDiff.setWindow(1);
         relDiff.setMinPrevious(1);
@@ -1804,48 +1804,44 @@ public class NodeServiceTest extends FreshDb {
 
         ObjectMapper mapper = new ObjectMapper();
 
-        ValueEntity root1 = new ValueEntity(null, rootNode, mapper.createObjectNode());
+        ValueEntity root1 = new ValueEntity(null,rootNode,mapper.readTree("""
+                { "split": [ { "fingerprint" : "alpha", "domain" : 4, "range" : 400} ] }
+                """));
         root1.persist();
 
-        ValueEntity split1 = new ValueEntity(null, splitNode, mapper.createObjectNode());
-        split1.sources = List.of(root1);
+        ValueEntity split1 = new ValueEntity(null,splitNode,root1.data.get("split").get(0),List.of(root1));
         split1.persist();
 
-        ValueEntity domain1 = new ValueEntity(null, domainNode, new LongNode(4));
-        domain1.sources = List.of(split1);
+        ValueEntity domain1 = new ValueEntity(null,domainNode,split1.data.get("domain"),List.of(split1));
         domain1.persist();
 
-        ValueEntity range1 = new ValueEntity(null, rangeNode, new DoubleNode(400));
-        range1.sources = List.of(split1);
+        ValueEntity range1 = new ValueEntity(null,rangeNode,split1.data.get("range"),List.of(split1));
         range1.persist();
 
-        ValueEntity fp1 = new ValueEntity(null, fingerprintNode, new TextNode("alpha"));
-        fp1.sources = List.of(split1);
-        fp1.persist();
+        ValueEntity fingerprint1 = new ValueEntity(null,fingerprintNode,split1.data.get("fingerprint"),List.of(split1));
+        fingerprint1.persist();
 
         tm.commit();
 
         List<ValueEntity> changes1 = nodeService.calculateRelativeDifferenceValues(relDiff, root1, 0);
 
         tm.begin();
-        ValueEntity root2 = new ValueEntity(null, rootNode, mapper.createObjectNode());
+        ValueEntity root2 = new ValueEntity(null,rootNode,mapper.readTree("""
+                { "split": [ { "fingerprint" : "alpha", "domain" : 2, "range" : 200} ] }
+                """));
         root2.persist();
 
-        ValueEntity split2 = new ValueEntity(null, splitNode, mapper.createObjectNode());
-        split2.sources = List.of(root2);
+        ValueEntity split2 = new ValueEntity(null,splitNode,root2.data.get("split").get(0),List.of(root2));
         split2.persist();
 
-        ValueEntity domain2 = new ValueEntity(null, domainNode, new LongNode(2));
-        domain2.sources = List.of(split2);
+        ValueEntity domain2 = new ValueEntity(null,domainNode,split2.data.get("domain"),List.of(split2));
         domain2.persist();
 
-        ValueEntity range2 = new ValueEntity(null, rangeNode, new DoubleNode(200));
-        range2.sources = List.of(split2);
+        ValueEntity range2 = new ValueEntity(null,rangeNode,split2.data.get("range"),List.of(split2));
         range2.persist();
 
-        ValueEntity fp2 = new ValueEntity(null, fingerprintNode, new TextNode("alpha"));
-        fp2.sources = List.of(split2);
-        fp2.persist();
+        ValueEntity fingerprint2 = new ValueEntity(null,fingerprintNode,split2.data.get("fingerprint"),List.of(split2));
+        fingerprint2.persist();
         tm.commit();
 
         List<ValueEntity> changes2 = nodeService.calculateRelativeDifferenceValues(relDiff, root2, 0);
@@ -1861,24 +1857,22 @@ public class NodeServiceTest extends FreshDb {
         tm.begin();
         em.merge(changes2.get(0));
 
-        ValueEntity root3 = new ValueEntity(null, rootNode, mapper.createObjectNode());
+        ValueEntity root3 = new ValueEntity(null,rootNode,mapper.readTree("""
+                { "split": [ { "fingerprint" : "alpha", "domain" : 1, "range" : 200} ] }
+                """));
         root3.persist();
 
-        ValueEntity split3 = new ValueEntity(null, splitNode, mapper.createObjectNode());
-        split3.sources = List.of(root3);
+        ValueEntity split3 = new ValueEntity(null,splitNode,root3.data.get("split").get(0),List.of(root3));
         split3.persist();
 
-        ValueEntity domain3 = new ValueEntity(null, domainNode, new LongNode(1));
-        domain3.sources = List.of(split3);
+        ValueEntity domain3 = new ValueEntity(null,domainNode,split3.data.get("domain"),List.of(split3));
         domain3.persist();
 
-        ValueEntity range3 = new ValueEntity(null, rangeNode, new DoubleNode(200));
-        range3.sources = List.of(split3);
+        ValueEntity range3 = new ValueEntity(null,rangeNode,split3.data.get("range"),List.of(split3));
         range3.persist();
 
-        ValueEntity fp3 = new ValueEntity(null, fingerprintNode, new TextNode("alpha"));
-        fp3.sources = List.of(split3);
-        fp3.persist();
+        ValueEntity fingerprint3 = new ValueEntity(null,fingerprintNode,split3.data.get("fingerprint"),List.of(split3));
+        fingerprint3.persist();
         tm.commit();
 
         List<ValueEntity> changes3 = nodeService.calculateRelativeDifferenceValues(relDiff, root3, 0);
@@ -1888,24 +1882,22 @@ public class NodeServiceTest extends FreshDb {
 
 
         tm.begin();
-        ValueEntity root4 = new ValueEntity(null, rootNode, mapper.createObjectNode());
+        ValueEntity root4 = new ValueEntity(null,rootNode,mapper.readTree("""
+                { "split": [ { "fingerprint" : "alpha", "domain" : 3, "range" : 400} ] }
+                """));
         root4.persist();
 
-        ValueEntity split4 = new ValueEntity(null, splitNode, mapper.createObjectNode());
-        split4.sources = List.of(root4);
+        ValueEntity split4 = new ValueEntity(null,splitNode,root4.data.get("split").get(0),List.of(root4));
         split4.persist();
 
-        ValueEntity domain4 = new ValueEntity(null, domainNode, new LongNode(3));
-        domain4.sources = List.of(split4);
+        ValueEntity domain4 = new ValueEntity(null,domainNode,split4.data.get("domain"),List.of(split4));
         domain4.persist();
 
-        ValueEntity range4 = new ValueEntity(null, rangeNode, new DoubleNode(400));
-        range4.sources = List.of(split4);
+        ValueEntity range4 = new ValueEntity(null,rangeNode,split4.data.get("range"),List.of(split4));
         range4.persist();
 
-        ValueEntity fp4 = new ValueEntity(null, fingerprintNode, new TextNode("alpha"));
-        fp4.sources = List.of(split4);
-        fp4.persist();
+        ValueEntity fingerprint4 = new ValueEntity(null,fingerprintNode,split4.data.get("fingerprint"),List.of(split4));
+        fingerprint4.persist();
         tm.commit();
 
         List<ValueEntity> changes4 = nodeService.calculateRelativeDifferenceValues(relDiff, root4, 0);
