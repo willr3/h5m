@@ -23,7 +23,7 @@ import java.util.List;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 @QuarkusTest
 public class RestEndpointTest extends FreshDb {
@@ -528,14 +528,30 @@ public class RestEndpointTest extends FreshDb {
     // -- Views --
 
     @Test
-    public void view_list_empty_for_new_folder() {
-        createFolder("view-empty");
+    public void view_default_created_for_new_folder() {
+        createFolder("view-default");
 
         given()
-                .when().get("/api/folder/view-empty/view/")
+                .when().get("/api/folder/view-default/view/")
                 .then()
                 .statusCode(200)
-                .body("size()", equalTo(0));
+                .body("size()", equalTo(1))
+                .body("[0].name", equalTo("Default"))
+                .body("[0].components.size()", equalTo(0));
+    }
+
+    @Test
+    public void view_default_created_on_import_empty() throws Exception {
+        folderService.importFolder(Path.of("src/test/resources/rhivos/nodes.json"), false);
+
+        // Default view should exist but be empty (users configure it)
+        given()
+                .when().get("/api/folder/rhivos-perf-comprehensive/view/")
+                .then()
+                .statusCode(200)
+                .body("size()", equalTo(1))
+                .body("[0].name", equalTo("Default"))
+                .body("[0].components.size()", equalTo(0));
     }
 
     @Test
@@ -581,13 +597,12 @@ public class RestEndpointTest extends FreshDb {
                 .body("name", equalTo("test-view"))
                 .body("components.size()", equalTo(2));
 
-        // List should contain it
+        // List should contain Default + test-view
         given()
                 .when().get("/api/folder/rhivos-perf-comprehensive/view/")
                 .then()
                 .statusCode(200)
-                .body("size()", equalTo(1))
-                .body("[0].name", equalTo("test-view"));
+                .body("size()", equalTo(2));
     }
 
     @Test
@@ -667,37 +682,26 @@ public class RestEndpointTest extends FreshDb {
                 .then()
                 .statusCode(204);
 
-        // Should be gone
+        // Custom view should be gone, only Default remains
         given()
                 .when().get("/api/folder/rhivos-perf-comprehensive/view/")
                 .then()
                 .statusCode(200)
-                .body("size()", equalTo(0));
+                .body("size()", equalTo(1))
+                .body("[0].name", equalTo("Default"));
     }
 
     @Test
     public void view_delete_default_rejected() throws Exception {
         folderService.importFolder(Path.of("src/test/resources/rhivos/nodes.json"), false);
 
-        tm.begin();
-        FolderEntity folder = FolderEntity.find("name", "rhivos-perf-comprehensive").firstResult();
-        Long userNodeId = folder.group.sources.stream()
-                .filter(n -> "user".equals(n.name)).findFirst().get().id;
-        tm.commit();
-
-        // Create a view named "Default"
-        String createJson = mapper.writeValueAsString(new io.hyperfoil.tools.h5m.api.View(
-                null, "Default", null,
-                List.of(new io.hyperfoil.tools.h5m.api.ViewComponent(null, userNodeId, null, null, "User", 0))
-        ));
-
+        // Find the auto-created Default view's ID
         Long viewId = given()
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(createJson)
-                .when().post("/api/folder/rhivos-perf-comprehensive/view")
+                .when().get("/api/folder/rhivos-perf-comprehensive/view/")
                 .then()
                 .statusCode(200)
-                .extract().jsonPath().getLong("id");
+                .body("[0].name", equalTo("Default"))
+                .extract().jsonPath().getLong("[0].id");
 
         // Attempting to delete "Default" should fail
         given()
@@ -757,6 +761,86 @@ public class RestEndpointTest extends FreshDb {
                 // Each row should have the selected node columns
                 .body("[0].start_time", notNullValue())
                 .body("[0].end_time", notNullValue());
+    }
+
+    @Test
+    public void view_data_with_multiple_uploads() throws Exception {
+        folderService.importFolder(Path.of("src/test/resources/rhivos/nodes.json"), false);
+
+        // Upload two runs
+        for (String runFile : List.of("/rhivos/40375.json", "/rhivos/40376.json")) {
+            try (InputStream is = getClass().getResourceAsStream(runFile)) {
+                JsonNode runData = mapper.readTree(is);
+                folderService.upload("rhivos-perf-comprehensive", "$", runData);
+            }
+            long deadline = System.currentTimeMillis() + 30_000;
+            while (!workService.isIdle() && System.currentTimeMillis() < deadline) {
+                Thread.sleep(100);
+            }
+        }
+
+        // Create a view with start_time
+        tm.begin();
+        FolderEntity folder = FolderEntity.find("name", "rhivos-perf-comprehensive").firstResult();
+        Long startTimeNodeId = folder.group.sources.stream()
+                .filter(n -> "start_time".equals(n.name)).findFirst().get().id;
+        tm.commit();
+
+        String viewJson = mapper.writeValueAsString(new io.hyperfoil.tools.h5m.api.View(
+                null, "multi-upload-view", null,
+                List.of(new io.hyperfoil.tools.h5m.api.ViewComponent(null, startTimeNodeId, null, null, "Start Time", 0))
+        ));
+
+        Long viewId = given()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(viewJson)
+                .when().post("/api/folder/rhivos-perf-comprehensive/view")
+                .then()
+                .statusCode(200)
+                .extract().jsonPath().getLong("id");
+
+        // View data should have one row per upload
+        given()
+                .when().get("/api/folder/rhivos-perf-comprehensive/view/" + viewId + "/data")
+                .then()
+                .statusCode(200)
+                .body("size()", equalTo(2))
+                .body("[0].start_time", notNullValue())
+                .body("[1].start_time", notNullValue());
+    }
+
+    @Test
+    public void view_component_ordering() throws Exception {
+        folderService.importFolder(Path.of("src/test/resources/rhivos/nodes.json"), false);
+
+        tm.begin();
+        FolderEntity folder = FolderEntity.find("name", "rhivos-perf-comprehensive").firstResult();
+        Long startTimeNodeId = folder.group.sources.stream()
+                .filter(n -> "start_time".equals(n.name)).findFirst().get().id;
+        Long endTimeNodeId = folder.group.sources.stream()
+                .filter(n -> "end_time".equals(n.name)).findFirst().get().id;
+        tm.commit();
+
+        // Create view with end_time at order 0 and start_time at order 1 (reversed)
+        String viewJson = mapper.writeValueAsString(new io.hyperfoil.tools.h5m.api.View(
+                null, "ordered-view", null,
+                List.of(
+                        new io.hyperfoil.tools.h5m.api.ViewComponent(null, endTimeNodeId, null, null, "End", 0),
+                        new io.hyperfoil.tools.h5m.api.ViewComponent(null, startTimeNodeId, null, null, "Start", 1)
+                )
+        ));
+
+        given()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(viewJson)
+                .when().post("/api/folder/rhivos-perf-comprehensive/view")
+                .then()
+                .statusCode(200)
+                // Components should be ordered by headerOrder
+                .body("components[0].headerName", equalTo("End"))
+                .body("components[0].headerOrder", equalTo(0))
+                .body("components[1].headerName", equalTo("Start"))
+                .body("components[1].headerOrder", equalTo(1));
     }
 
     // -- OpenAPI spec --

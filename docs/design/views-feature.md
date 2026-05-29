@@ -99,11 +99,9 @@ components list — no need for a separate response wrapper.
 
 ## Default View Auto-Creation
 
-When a folder is created, auto-create a "Default" view containing **leaf nodes** — nodes
-that no other node depends on, excluding change detection nodes (ft, rd, ed).
-
-Leaf nodes represent the final computed metrics users care about. For the rhivos test
-(135 nodes), this produces a manageable set of columns rather than showing all 135.
+When a folder is created, auto-create an empty "Default" view. Users configure which
+nodes appear as columns via the REST API or the Configure View Modal (Phase 5b).
+This matches Horreum's approach where the Default view starts empty.
 
 The "Default" view cannot be deleted (same protection as Horreum).
 
@@ -186,7 +184,7 @@ Add a **"Data"** tab to FolderPage:
 - Protect "Default" from deletion
 
 ### Phase 4: Tests
-- Default view auto-created on folder creation (contains leaf nodes, excludes detection)
+- Default view auto-created on folder creation (empty, users configure via REST/UI)
 - CRUD operations on views (create, read, update, delete; "Default" protected)
 - View data endpoint returns correct filtered columns
 - View data with multiple uploads (one row per upload)
@@ -194,8 +192,34 @@ Add a **"Data"** tab to FolderPage:
 - Import/export preserves views (views included in folder export JSON)
 
 ### Phase 5: Web UI (separate PR)
-- Data tab with view selector and data table
-- Configure View modal
+
+#### TypeScript Client Regeneration
+The TypeScript client is regenerated automatically during `mvn package` / `mvn install`:
+1. Quarkus augmentation generates `openapi.yaml` into `src/main/webui/`
+   (configured via `quarkus.smallrye-openapi.store-schema-directory`)
+2. Quinoa runs `npm run build` which calls `openapi-ts` before `tsc` and `vite build`
+
+For local development, run `npm run openapi` in `src/main/webui/` to regenerate
+the client types for IDE autocompletion without doing a full Maven build.
+
+#### 5a. Data Tab
+- New `DataTab` component (`src/main/webui/src/app/components/DataTab.tsx`)
+  - View selector dropdown (Carbon `Dropdown`), defaults to "Default" view
+  - Carbon `DataTable` with columns from view components (headerName, headerOrder)
+  - Rows from `GET /api/folder/{name}/view/{viewId}/data` (one per upload)
+  - Cell values keyed by node name from each row's JSON object
+  - Empty state when no uploads, loading skeleton during fetch
+- Add "Data" as first tab in FolderPage (`TAB_ANCHORS = ['data', 'nodes', 'graph']`)
+- Tests for DataTab: renders selector, renders table, switching views refetches
+
+#### 5b. Configure View Modal (follow-up PR)
+- New `ViewConfigModal` component (`src/main/webui/src/app/components/ViewConfigModal.tsx`)
+  - View name text input
+  - Multi-select node picker from folder's group nodes
+  - Header name override per selected node
+  - Drag-to-reorder for column ordering
+  - Save (create/update), Delete (with confirmation, disabled for Default), Cancel
+- "Configure" button next to the view dropdown in DataTab
 
 ## File Changes
 

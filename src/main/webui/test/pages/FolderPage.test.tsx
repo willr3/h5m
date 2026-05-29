@@ -36,6 +36,10 @@ vi.mock('@client/@tanstack/react-query.gen.ts', () => ({
     queryKey: ['byId'],
     queryFn: () => mockNodeGroup,
   }),
+  getViewsOptions: () => ({
+    queryKey: ['getViews'],
+    queryFn: () => [],
+  }),
 }));
 
 const { FolderPage } = await import('@app/pages/FolderPage');
@@ -48,6 +52,7 @@ function renderFolderPage(folderId: string) {
   });
   queryClient.setQueryData(['listFolders'], mockFolders);
   queryClient.setQueryData(['byId'], mockNodeGroup);
+  queryClient.setQueryData(['getViews'], []);
 
   return render(
     <QueryClientProvider client={queryClient}>
@@ -61,10 +66,11 @@ function renderFolderPage(folderId: string) {
 }
 
 describe('<FolderPage />', () => {
-  it('renders both tabs', async () => {
+  it('renders all three tabs', async () => {
     renderFolderPage('1');
 
     await waitFor(() => {
+      expect(screen.getByText('Data')).toBeDefined();
       expect(screen.getByText('Nodes')).toBeDefined();
       expect(screen.getByText('Graph')).toBeDefined();
     });
@@ -72,11 +78,11 @@ describe('<FolderPage />', () => {
     cleanup();
   });
 
-  it('shows nodes tab by default', async () => {
+  it('shows data tab by default', async () => {
     renderFolderPage('1');
 
     await waitFor(() => {
-      expect(screen.getByText('Nodes')).toBeDefined();
+      expect(screen.getByText('Data')).toBeDefined();
     });
 
     cleanup();
@@ -96,7 +102,7 @@ describe('<FolderPage />', () => {
       </QueryClientProvider>,
     );
 
-    expect(screen.queryByText('Nodes')).toBeNull();
+    expect(screen.queryByText('Data')).toBeNull();
     cleanup();
   });
 });

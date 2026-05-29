@@ -1,5 +1,6 @@
 import type { Node as ApiNode } from '@client/types.gen.ts';
 
+import { DataTab } from '@app/components/DataTab';
 import { NodeGraphVisualizer } from '@app/components/NodeGraphVisualizer';
 import {
   ErrorBoundary,
@@ -58,7 +59,7 @@ const GraphVisualizer = ({ groupId }: { groupId: number }) => {
   return <NodeGraphVisualizer nodeGroup={nodeGroup} />;
 };
 
-const TAB_ANCHORS = ['nodes', 'graph'];
+const TAB_ANCHORS = ['data', 'nodes', 'graph'];
 
 const FolderContent = ({ folderId }: { folderId: number }) => {
   const { data: folders } = useSuspenseQuery(listFoldersOptions());
@@ -75,10 +76,18 @@ const FolderContent = ({ folderId }: { folderId: number }) => {
   return (
     <Tabs selectedIndex={selectedIndex} onChange={onTabChange}>
       <TabList aria-label="Folder tabs">
+        <Tab>Data</Tab>
         <Tab>Nodes</Tab>
         <Tab>Graph</Tab>
       </TabList>
       <TabPanels>
+        <TabPanel>
+          {folder.name ? (
+            <DataTab folderName={folder.name} />
+          ) : (
+            <p>Folder name not available</p>
+          )}
+        </TabPanel>
         <TabPanel>
           {folder.groupId != null ? (
             <ErrorBoundary fallback={<InlineLoading status="error" description="Failed to load nodes" />}>

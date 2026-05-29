@@ -12,6 +12,7 @@ import io.hyperfoil.tools.h5m.entity.NodeEntity;
 import io.hyperfoil.tools.h5m.entity.NodeGroupEntity;
 import io.hyperfoil.tools.h5m.entity.Team;
 import io.hyperfoil.tools.h5m.entity.ValueEntity;
+import io.hyperfoil.tools.h5m.entity.ViewEntity;
 import io.hyperfoil.tools.h5m.entity.mapper.ApiMapper;
 import io.hyperfoil.tools.h5m.entity.node.*;
 import io.hyperfoil.tools.h5m.entity.work.Work;
@@ -27,10 +28,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @ApplicationScoped
 public class FolderService implements FolderServiceInterface {
@@ -67,6 +65,7 @@ public class FolderService implements FolderServiceInterface {
         entity.name = name;
         entity.group = new NodeGroupEntity(name); //TODO do we auto-create a nodeGroup?
         FolderEntity.persist(entity);
+        createDefaultView(entity);
         return entity.id;
     }
 
@@ -203,6 +202,11 @@ public class FolderService implements FolderServiceInterface {
     @Override
     @Transactional
     public long delete(String name){
+        // Delete views and components before folder (bulk delete doesn't cascade)
+        em.createNativeQuery("DELETE FROM folder_view_component WHERE view_id IN (SELECT id FROM folder_view WHERE folder_id IN (SELECT id FROM folder WHERE name = :name))")
+            .setParameter("name", name).executeUpdate();
+        em.createNativeQuery("DELETE FROM folder_view WHERE folder_id IN (SELECT id FROM folder WHERE name = :name)")
+            .setParameter("name", name).executeUpdate();
         return FolderEntity.delete("name", name);
     }
 
@@ -401,8 +405,19 @@ public class FolderService implements FolderServiceInterface {
 
         em.flush();
         em.merge(group);
+
         Log.infof("Imported folder '%s' with %d nodes from %s", folderName, nodeArray.size(), inputPath);
         return folderName;
+    }
+
+    /**
+     * Creates an empty "Default" view for the folder.
+     * Users configure which nodes appear as columns via the REST API.
+     */
+    private void createDefaultView(FolderEntity folder) {
+        ViewEntity view = new ViewEntity("Default", folder);
+        view.persist();
+        folder.views.add(view);
     }
 
     private ObjectNode serializeNode(NodeEntity node) {
