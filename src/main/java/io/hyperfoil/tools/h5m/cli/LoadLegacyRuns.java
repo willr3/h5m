@@ -7,6 +7,7 @@ import io.agroal.api.configuration.supplier.AgroalPropertiesReader;
 import io.hyperfoil.tools.h5m.api.Folder;
 import io.hyperfoil.tools.h5m.entity.FolderEntity;
 import io.hyperfoil.tools.h5m.svc.FolderService;
+import io.hyperfoil.tools.h5m.svc.WorkService;
 import jakarta.inject.Inject;
 import picocli.CommandLine;
 
@@ -16,6 +17,7 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Scanner;
 import java.util.concurrent.Callable;
 
 @CommandLine.Command(name="load-legacy-runs")
@@ -24,11 +26,17 @@ public class LoadLegacyRuns implements Callable<Integer> {
     @Inject
     FolderService folderService;
 
+    @Inject
+    WorkService workService;
+
     @CommandLine.Option(names = {"username"}, description = "legacy db username", defaultValue = "quarkus") String username;
     @CommandLine.Option(names = {"password"}, description = "legacy db password", defaultValue = "quarkus") String password;
     @CommandLine.Option(names = {"url"}, description = "legacy connection url",defaultValue = "jdbc:postgresql://0.0.0.0:") String url;
     @CommandLine.Option(names = {"testId"}, description = "specify which test to load. Loads all if unspecified" ) Long testId;
     @CommandLine.Option(names = {"limit"}, description = "max runs to load", defaultValue = "-1") int limit;
+    @CommandLine.Option(names = {"offset"}, description = "how many runs to skip ", defaultValue = "-1") int offset;
+    @CommandLine.Option(names = {"batch"}, description = "max runs to batch at once", defaultValue = "-1") int batch;
+    @CommandLine.Option(names = {"pause"}, description = "pause for user input after every batch", defaultValue = "false") boolean pause;
 
     @Override
     public Integer call() throws Exception {
@@ -86,12 +94,24 @@ public class LoadLegacyRuns implements Callable<Integer> {
                 String runQuery = limit > 0
                         ? "select id,data from run where testid = ? and trashed = false order by id desc limit ?"
                         : "select id,data from run where testid = ? and trashed = false order by id desc";
+                if(offset > 0){
+                    runQuery+=" offset ?";
+                }
                 connection.setAutoCommit(false);
                 try (PreparedStatement ps = connection.prepareStatement(runQuery)) {
                     ps.setFetchSize(5);
                     ps.setLong(1, testId);
                     if (limit > 0) ps.setInt(2, limit);
+                    if (offset > 0) {
+                        if(limit > 0){
+                            ps.setInt(3, offset);
+                        }else{
+                            ps.setInt(2, limit);
+                        }
+                    }
                     int count = 0;
+                    int batchCount = 0;
+                    Scanner scanner = new Scanner(System.in);
                     try (ResultSet rs = ps.executeQuery()) {
                         while(rs.next()){
                             Long id = rs.getLong(1);
@@ -99,6 +119,18 @@ public class LoadLegacyRuns implements Callable<Integer> {
                             JsonNode data = mapper.readTree(rs.getCharacterStream("data"));
                             folderService.upload(folder.name(),null,data);
                             count++;
+                            batchCount++;
+                            if(batch > 0 && batchCount > batch){
+                                System.out.println("waiting for batch to complete");
+                                while(!workService.isIdle()){
+                                    Thread.sleep(10_000);
+                                }
+                                System.out.println("batch complete");
+                                if(pause){
+                                    scanner.nextLine();
+                                }
+                                batchCount = 0;
+                            }
                         }
                     }
                     System.out.println("loaded " + count + " runs");
