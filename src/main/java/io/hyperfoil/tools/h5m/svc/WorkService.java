@@ -127,7 +127,12 @@ public class WorkService implements WorkServiceInterface {
                     public void afterCompletion(int status) {
                         if (status == Status.STATUS_COMMITTED) {
                             Log.debugf("afterCompletion: queueing %d Work items", toQueue.size());
-                            workQueue.addWorks(toQueue);
+                            Collection<Work> added = workQueue.addWorks(toQueue);
+                            //hack to remove rejected work
+                            newWorks.removeAll(added);
+                            newWorks.forEach(surplusWork -> {
+                                delete(surplusWork);
+                            });
                         } else {
                             Log.warnf("Transaction rolled back (status=%d), %d Work items not queued",
                                     status, toQueue.size());

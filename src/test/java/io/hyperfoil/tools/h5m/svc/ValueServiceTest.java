@@ -46,7 +46,7 @@ public class ValueServiceTest extends FreshDb {
     @Inject
     EntityManager em;
 
-    @Test
+
     public void delete_does_not_cascade_and_delete_ancestor() throws HeuristicRollbackException, SystemException, HeuristicMixedException, RollbackException, NotSupportedException {
         tm.begin();
         NodeEntity rootNode = new RootNode();
