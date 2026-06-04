@@ -268,6 +268,11 @@ public class WorkService implements WorkServiceInterface {
                 List<ValueEntity> thisIteration = nodeService.calculateValues(node, sourceValues);
                 calculated.addAll(thisIteration);
             }
+            if (calculated.isEmpty()) {
+                // Node produced no values (e.g., JQ expression didn't match the data).
+                // Skip the dedup loop and cascade — no DB queries needed.
+                return;
+            }
             List<ValueEntity> newOrUpdated = new ArrayList<>();
             for(ValueEntity v : sourceValues) {
                 for(NodeEntity activeNode : activeNodes){
