@@ -279,11 +279,10 @@ public class UploadPipelineBenchmarkTest extends FreshDb {
         long values = countRows("value");
         long nodeEdges = countRows("node_edge");
         long valueEdges = countRows("value_edge");
-        long workItems = countRows("work");
         String report = String.format(
                 "[PIPELINE] %s: configured_nodes=%d, uploads=%d, total_nodes=%d, total_values=%d, " +
-                        "node_edges=%d, value_edges=%d, pending_work=%d",
-                label, nodeCount, uploadCount, nodes, values, nodeEdges, valueEdges, workItems);
+                        "node_edges=%d, value_edges=%d",
+                label, nodeCount, uploadCount, nodes, values, nodeEdges, valueEdges);
         reports.add(report);
     }
 }

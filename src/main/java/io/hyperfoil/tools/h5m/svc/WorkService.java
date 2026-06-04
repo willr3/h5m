@@ -4,6 +4,7 @@ import io.hyperfoil.tools.h5m.api.svc.WorkServiceInterface;
 import io.hyperfoil.tools.h5m.entity.NodeEntity;
 import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.entity.work.Work;
+import io.hyperfoil.tools.h5m.queue.UploadTracker;
 import io.hyperfoil.tools.h5m.queue.WorkQueue;
 import io.hyperfoil.tools.h5m.queue.WorkQueueExecutor;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -11,6 +12,7 @@ import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
 import io.quarkus.runtime.StartupEvent;
 import io.hyperfoil.tools.h5m.event.ChangeDetectedEvent;
 import jakarta.annotation.PreDestroy;
+import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
 import jakarta.enterprise.event.Observes;
@@ -26,6 +28,8 @@ import org.hibernate.Hibernate;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -63,15 +67,53 @@ public class WorkService implements WorkServiceInterface {
 
     private WorkQueueExecutor workExecutor;
 
+    private final ConcurrentHashMap<Long, UploadTracker> trackers = new ConcurrentHashMap<>();
+
+    /**
+     * Finds trackers associated with the work's source values.
+     * A tracker exists for each root value ID that was registered via createTracked().
+     * This derives the association from sourceValues rather than duplicating state on Work.
+     */
+    private List<UploadTracker> findTrackers(Work work) {
+        if (work.sourceValues == null || trackers.isEmpty()) {
+            return List.of();
+        }
+        List<UploadTracker> found = new ArrayList<>();
+        for (ValueEntity sv : work.sourceValues) {
+            if (sv.id != null) {
+                UploadTracker tracker = trackers.get(sv.id);
+                if (tracker != null) {
+                    found.add(tracker);
+                }
+            }
+        }
+        return found;
+    }
+
+    private void incrementTrackers(Work work, int count) {
+        for (UploadTracker tracker : findTrackers(work)) {
+            tracker.increment(count);
+        }
+    }
+
+    private void decrementTrackers(Work work) {
+        for (UploadTracker tracker : findTrackers(work)) {
+            tracker.decrement();
+        }
+    }
+
+    private void failTrackers(Work work, Throwable t) {
+        for (UploadTracker tracker : findTrackers(work)) {
+            tracker.fail(t);
+        }
+    }
+
     @Transactional
-    void onStart(@Observes StartupEvent ev) {
+    void onStart(@Observes @Priority(1) StartupEvent ev) {
         workExecutor = new WorkQueueExecutor(corePoolSize, maxPoolSize, keepAlive.toSeconds(), TimeUnit.SECONDS, new WorkQueue());
         workExecutor.allowCoreThreadTimeOut(false);
         workExecutor.prestartAllCoreThreads();
         new ExecutorServiceMetrics(workExecutor, "h5mWorkExecutor", null).bindTo(registry);
-
-        //resumes unfinished work from previous execution
-        workExecutor.getWorkQueue().addWorks(Work.listAll());
     }
 
     @PreDestroy
@@ -80,6 +122,13 @@ public class WorkService implements WorkServiceInterface {
             workExecutor.shutdown();
         }
     }
+
+    /**
+     * Creates work items and queues them for execution.
+     * Work items are NOT persisted to the DB — they exist only in memory.
+     * Queue insertion is deferred until the current transaction commits
+     * to ensure source values are visible to worker threads.
+     */
     @Transactional
     public void create(List<Work> works) {
         WorkQueue workQueue = workExecutor.getWorkQueue();
@@ -88,34 +137,20 @@ public class WorkService implements WorkServiceInterface {
             if (workQueue.hasWork(work)) {
                 continue;
             }
-            if (!work.isPersistent()) {
-                work.id = null;
-                Work merged = em.merge(work);
-                em.flush();
-                work.id = merged.id;
-            }
             newWorks.add(work);
         }
         if (!newWorks.isEmpty()) {
-            // Defer queue insertion until this transaction commits.
-            // Worker threads will only see Work items after the DB row is visible,
-            // preventing StaleObjectStateException from the visibility race.
             List<Work> toQueue = List.copyOf(newWorks);
-            // Eagerly initialize lazy proxies that WorkQueue.sort() → dependsOn()
-            // traverses, since addWorks runs in afterCompletion outside the session.
             for (Work work : toQueue) {
-                for (ValueEntity sv : work.sourceValues) {
-                    Hibernate.initialize(sv.node);
-                    Hibernate.initialize(sv.sources);
-                    if (sv.node != null) {
-                        // Trigger ancestor cache computation while session is open
-                        sv.node.dependsOn(sv.node);
-                    }
-                }
+                // Pre-compute ancestor caches while session is open — needed by
+                // WorkQueue.sort() → dependsOn() which runs in afterCompletion
+                // outside the session. Without this, dependsOn() would try to
+                // lazily traverse NodeEntity.sources and fail.
                 if (work.activeNodes != null) {
-                    // Trigger ancestor cache computation while session is open
                     work.dependsOn(work);
                 }
+                // Increment trackers for each work item (before afterCompletion decrement)
+                incrementTrackers(work, 1);
             }
             workQueue.incrementDeferred(toQueue.size());
             try {
@@ -127,27 +162,55 @@ public class WorkService implements WorkServiceInterface {
                     public void afterCompletion(int status) {
                         if (status == Status.STATUS_COMMITTED) {
                             Log.debugf("afterCompletion: queueing %d Work items", toQueue.size());
-                            workQueue.addWorks(toQueue);
+                            Collection<Work> accepted = workQueue.addWorks(toQueue);
+                            // Decrement trackers for rejected duplicates — they were
+                            // counted in the increment but will never be executed
+                            for (Work work : toQueue) {
+                                if (!accepted.contains(work)) {
+                                    decrementTrackers(work);
+                                }
+                            }
                         } else {
                             Log.warnf("Transaction rolled back (status=%d), %d Work items not queued",
                                     status, toQueue.size());
+                            // Decrement trackers for rolled-back work
+                            for (Work work : toQueue) {
+                                decrementTrackers(work);
+                            }
                         }
                         workQueue.decrementDeferred(toQueue.size());
                     }
                 });
             } catch (Exception e) {
                 workQueue.decrementDeferred(toQueue.size());
+                // Undo tracker increments
+                for (Work work : toQueue) {
+                    decrementTrackers(work);
+                }
                 throw new IllegalStateException(
                         "Failed to register transaction synchronization; refusing to queue before commit", e);
             }
         }
     }
 
-    @Transactional
-    public void delete(Work work){
-        if(work.id!=null){
-            Work.deleteById(work.id);
+    /**
+     * Creates work items with upload completion tracking.
+     * Trackers are keyed by root value IDs. The association between Work
+     * and trackers is derived from Work.sourceValues — no duplicated state.
+     * For cross-upload Work, a single Work can have source values from
+     * multiple uploads, and all relevant trackers are updated automatically.
+     * Returns a CompletableFuture that completes when all trackers complete.
+     */
+    public CompletableFuture<Void> createTracked(List<Work> works, Set<Long> rootValueIds) {
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+        for (long rootValueId : rootValueIds) {
+            UploadTracker tracker = trackers.computeIfAbsent(rootValueId, UploadTracker::new);
+            // Clean up tracker when its future completes
+            tracker.getFuture().whenComplete((v, t) -> trackers.remove(rootValueId));
+            futures.add(tracker.getFuture());
         }
+        create(works);
+        return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
     }
 
     @Override
@@ -166,44 +229,61 @@ public class WorkService implements WorkServiceInterface {
         WorkQueue workQueue = workExecutor.getWorkQueue();
         boolean decrementDeferred = false;
         try {
-            Work work = em.find(Work.class, w.id);
-            if (work == null) {
-                Log.warnf("execute: Work id=%d not found in DB (already processed?), skipping", w.id);
+            // Use source values from the Work. If data is already initialized (normal
+            // pipeline path via work queue), use it directly to avoid DB round-trip +
+            // JSON deserialization. If data is not initialized (e.g., test calling
+            // execute() directly with committed entities), reload from DB.
+            List<ValueEntity> sourceValues = new ArrayList<>();
+            for (ValueEntity sv : w.sourceValues) {
+                if (Hibernate.isPropertyInitialized(sv, "data")) {
+                    sourceValues.add(sv);
+                } else {
+                    ValueEntity managed = em.find(ValueEntity.class, sv.id);
+                    if (managed != null) {
+                        Hibernate.initialize(managed.data);
+                        sourceValues.add(managed);
+                    }
+                }
+            }
+
+            // Reload active nodes in this transaction's persistence context —
+            // calculateValues() accesses node.sources which is lazy
+            Set<NodeEntity> activeNodes = new HashSet<>();
+            for (NodeEntity an : w.activeNodes) {
+                NodeEntity managed = em.find(NodeEntity.class, an.id);
+                if (managed != null) {
+                    activeNodes.add(managed);
+                }
+            }
+            if(activeNodes.isEmpty() || sourceValues.isEmpty()){
+                // Nothing to process — still need to decrement trackers
+                decrementTrackers(w);
                 return;
             }
-            if(work.activeNodes==null || work.activeNodes.isEmpty() || work.sourceValues == null || work.sourceValues.isEmpty()){
-                //error conditions?
-                //work.activeNode == null is not yet a validation condition but it could be for post processing tasks?
-            }
-            // Eagerly initialize lazy-loaded data fields to avoid LazyInitializationException
-            // when accessed later in calculateValues (ValueEntity.data is @Basic(fetch = LAZY))
-            for (ValueEntity sv : work.sourceValues) {
-                Hibernate.initialize(sv.data);
-            }
+
             //looping over values works for Jq / Js nodes but what about cross test comparison
             //calculateValue should probably accept all sourceValues and leave it to the node function to decide
-            List<ValueEntity> calculated = new  ArrayList<>();
-            for(NodeEntity node : work.activeNodes){
-                List<ValueEntity> thisIteration = nodeService.calculateValues(node,work.sourceValues);
+            List<ValueEntity> calculated = new ArrayList<>();
+            for(NodeEntity node : activeNodes){
+                List<ValueEntity> thisIteration = nodeService.calculateValues(node, sourceValues);
                 calculated.addAll(thisIteration);
             }
             List<ValueEntity> newOrUpdated = new ArrayList<>();
-            for(ValueEntity v : work.sourceValues) {
-                for(NodeEntity activeNode : work.activeNodes){
+            for(ValueEntity v : sourceValues) {
+                for(NodeEntity activeNode : activeNodes){
                     Map<String, ValueEntity> descendants = valueService.getDescendantValueByPath(v, activeNode);
                     for(Iterator<ValueEntity> iter = calculated.iterator(); iter.hasNext();){
                         ValueEntity newValue = iter.next();
                         String path = newValue.getPath();
                         if(descendants.containsKey(path)){
                             ValueEntity existingValue = descendants.get(path);
-                            //existingValue.getId() should not be null because it was fetched from persistence
                             if(existingValue.getId().equals(newValue.getId())) {
                                 //if it's the same value we don't have to work with it
                             }else if( newValue.data.equals(existingValue.data)){
                                 if(newValue.id != null){
                                     valueService.delete(newValue);
                                 }
-                                iter.remove();//we don't need this new ValueEntity
+                                iter.remove();
                             }else{
                                 //update the new value
                                 existingValue.data = newValue.data;
@@ -227,49 +307,53 @@ public class WorkService implements WorkServiceInterface {
                 for(NodeEntity node : createdValues){
                     if(node.isDetection()){
                         List<Long> valueIds = newOrUpdated.stream().map(ValueEntity::getId).toList();
-                        long folderId = work.sourceValues.stream()
+                        long folderId = sourceValues.stream()
                                 .filter(v -> v.folder != null)
                                 .map(v -> v.folder.id)
                                 .findFirst()
                                 .orElse(-1L);
                         changeDetectedEvent.fire(new ChangeDetectedEvent(folderId, node.getId(), node.name, valueIds, true));
-
                     }
                     //we need to trigger more calculations? perhaps for a recalculation we do?
-                    create(nodeService.getDependentNodes(node).stream().map(n -> new Work(n, n.sources, work.sourceValues)).toList());
+                    // Cascade work inherits sourceValues, so tracker association
+                    // is derived automatically via findTrackers()
+                    List<Work> cascadeWork = nodeService.getDependentNodes(node).stream()
+                            .map(n -> new Work(n, n.sources, sourceValues))
+                            .toList();
+                    create(cascadeWork);
                 }
             }
 
-            //not in the finally so that it only happens if the work succeeds
-            delete(work);
-
             // Defer decrement until after this transaction commits so that
             // isIdle() cannot return true while the DB commit is still in flight.
-            if(w.activeNodes!=null && !w.activeNodes.isEmpty()){
+            if(w.activeNodes != null && !w.activeNodes.isEmpty()){
                 decrementDeferred = true;
                 tm.getTransaction().registerSynchronization(new Synchronization() {
                     @Override public void beforeCompletion() {}
                     @Override public void afterCompletion(int status) {
                         workQueue.decrement(w);
+                        decrementTrackers(w);
                     }
                 });
             }
         }catch( Exception e){
-            //TODO how to handle the exception, adding it back to the todo list
-            System.err.println("WorkRunner caught: "+e.getMessage()+"\n work="+w);
-            e.printStackTrace();
+            Log.errorf(e, "WorkRunner caught: %s\n work=%s", e.getMessage(), w);
             w.retryCount++;
             if(w.retryCount > RETRY_LIMIT){
-                System.err.println("Work exceeded retry limit");
+                Log.error("Work exceeded retry limit");
+                // Fail trackers so CompletableFutures complete exceptionally
+                failTrackers(w, e);
             } else {
-                System.err.println("Adding work to retry in queue");
+                Log.info("Adding work to retry in queue");
                 workQueue.add(w);
+                // Skip decrement in finally — work is re-queued and will be
+                // decremented when the retry completes
+                decrementDeferred = true;
             }
         } finally {
-            // Only decrement immediately if we couldn't register the afterCompletion
-            // (early return for "not found", or exception before registration)
-            if(!decrementDeferred && w.activeNodes!=null && !w.activeNodes.isEmpty()){
+            if(!decrementDeferred && w.activeNodes != null && !w.activeNodes.isEmpty()){
                 workQueue.decrement(w);
+                decrementTrackers(w);
             }
         }
     }

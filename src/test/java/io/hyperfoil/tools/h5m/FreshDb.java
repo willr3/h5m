@@ -28,16 +28,13 @@ public class FreshDb {
             try(Statement stmt = conn.createStatement()){
 
                 if(dbKind.equals("postgresql")){
+                    stmt.executeUpdate("TRUNCATE TABLE upload_processing CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE folder_view_component CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE folder_view CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE notification_log CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE notification_config CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE api_key CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE team_members CASCADE");
-                    stmt.executeUpdate("TRUNCATE TABLE work_values CASCADE");
-                    stmt.executeUpdate("TRUNCATE TABLE work_active_nodes CASCADE");
-                    stmt.executeUpdate("TRUNCATE TABLE work_source_nodes CASCADE");
-                    stmt.executeUpdate("TRUNCATE TABLE work CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE value_edge CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE value CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE folder CASCADE");
@@ -47,16 +44,13 @@ public class FreshDb {
                     stmt.executeUpdate("TRUNCATE TABLE h5m_user CASCADE");
                     stmt.executeUpdate("TRUNCATE TABLE team CASCADE");
                 }else if (dbKind.equals("sqlite")){
+                    stmt.executeUpdate("DELETE from upload_processing");
                     stmt.executeUpdate("DELETE from folder_view_component");
                     stmt.executeUpdate("DELETE from folder_view");
                     stmt.executeUpdate("DELETE from notification_log");
                     stmt.executeUpdate("DELETE from notification_config");
                     stmt.executeUpdate("DELETE from api_key");
                     stmt.executeUpdate("DELETE from team_members");
-                    stmt.executeUpdate("DELETE from work_values");
-                    stmt.executeUpdate("DELETE from work_active_nodes");
-                    stmt.executeUpdate("DELETE from work_source_nodes");
-                    stmt.executeUpdate("DELETE from work");
                     stmt.executeUpdate("DELETE from value_edge");
                     stmt.executeUpdate("DELETE from value");
                     stmt.executeUpdate("DELETE from folder");

@@ -188,8 +188,8 @@ public class WorkQueue implements BlockingQueue<Runnable> {
             List<Work> acceptedWork = works.stream().filter(w -> {
                 boolean has = hasWork(w);
                 if (has) {
-                    log.warn("addWorks: REJECTED duplicate work id={} hash={} pending={} active={}",
-                            w.id, w.hashCode(), isPending(w), isActive(w));
+                    log.warn("addWorks: REJECTED duplicate work hash={} pending={} active={}",
+                            w.hashCode(), isPending(w), isActive(w));
                 }
                 return !has;
             }).peek(w-> {

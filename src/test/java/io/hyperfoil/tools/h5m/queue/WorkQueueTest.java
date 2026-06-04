@@ -40,9 +40,7 @@ public class WorkQueueTest extends FreshDb {
         ValueEntity rootValue2 = new ValueEntity(null,rootNode,new TextNode("text2"));
 
         Work work1 = new Work(relativeDifference,List.of(rootNode),List.of(rootValue1));
-        work1.persist();
         Work work2 = new Work(relativeDifference,List.of(rootNode),List.of(rootValue2));
-        work2.persist();
 
         assertEquals(work1.hashCode(),work2.hashCode(),"both worth should have the same hashcode despite different values");
 
@@ -69,9 +67,7 @@ public class WorkQueueTest extends FreshDb {
 
 
         Work first = new Work(aNode,aNode.sources,List.of(rootValue));
-        first.persist();
         Work second = new Work(aNode,aNode.sources,List.of(rootValue));
-        second.persist();
 
         assertEquals(first.hashCode(),second.hashCode(),"work with different id but same scope should have the same hash");
         q.addWorks(List.of(first, second));
@@ -92,9 +88,7 @@ public class WorkQueueTest extends FreshDb {
         bNode.persist();
 
         Work aWork = new Work(aNode,null,null);
-        aWork.persist();
         Work bWork = new Work(bNode,null,null);
-        bWork.persist();
         tm.commit();
 
         q.addWorks(List.of(bWork));
@@ -130,11 +124,8 @@ public class WorkQueueTest extends FreshDb {
         cNode.persist();
 
         Work aWork = new Work(aNode,null,null);
-        aWork.persist();
         Work bWork = new Work(bNode,null,null);
-        bWork.persist();
         Work cWork = new Work(cNode,null,null);
-        cWork.persist();
         tm.commit();
 
         q.addWorks(List.of(aWork, bWork, cWork));

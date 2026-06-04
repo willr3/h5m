@@ -4,53 +4,25 @@ import io.hyperfoil.tools.h5m.entity.NodeEntity;
 import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.entity.node.RelativeDifference;
 import io.hyperfoil.tools.h5m.svc.WorkService;
-import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import jakarta.enterprise.inject.spi.CDI;
-import jakarta.persistence.*;
-import org.hibernate.annotations.BatchSize;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 
-@Entity(name = "work")
-@DiscriminatorColumn(name = "type")
-@DiscriminatorValue("node")
 //cross test comparison could use sourceNodes and not have an activeNode?
 //custom post nodegroup actions could have sourceNodes without activeNode
-public class Work  extends PanacheEntity implements Runnable, Comparable<Work>{
+public class Work implements Runnable, Comparable<Work>{
 
-    @BatchSize(size=10)
-    @ManyToMany(cascade = {CascadeType.PERSIST}, fetch = FetchType.LAZY)
-    @JoinTable(
-            name="work_values",
-            joinColumns = @JoinColumn(name = "work_id"),
-            inverseJoinColumns = @JoinColumn(name = "value_id")
-    )
     public List<ValueEntity> sourceValues;//multiple values could happen for cross test comparisons and
 
-    @BatchSize(size=10)
-    @ManyToMany(cascade = {CascadeType.PERSIST}, fetch = FetchType.LAZY)
-    @JoinTable(
-            name="work_source_nodes",
-            joinColumns = @JoinColumn(name = "work_id"),
-            inverseJoinColumns = @JoinColumn(name = "node_id")
-    )
     public List<NodeEntity> sourceNodes; //what is going to use a list of sources that are not already listed for the activeNode?
 
     public int retryCount;
 
-    @BatchSize(size=10)
-    @ManyToMany(cascade = {CascadeType.PERSIST}, fetch = FetchType.EAGER)
-    @JoinTable(
-            name="work_active_nodes",
-            joinColumns = @JoinColumn(name = "work_id"),
-            inverseJoinColumns = @JoinColumn(name = "node_id")
-    )
     public Set<NodeEntity> activeNodes;
 
-    boolean cumulative = false;
-
+    public boolean cumulative = false;
 
     public Work(){
         retryCount = 0;
@@ -187,7 +159,7 @@ public class Work  extends PanacheEntity implements Runnable, Comparable<Work>{
 
     @Override
     public String toString() {
-        return "Work<id="+id+" activeNodes="+activeNodes+
+        return "Work<activeNodes="+activeNodes+
                 " sourceNodes="+sourceNodes.stream().map(n->""+n.getId()).collect(Collectors.joining(","))+
                 " sourceValues="+sourceValues.stream().map(v->""+v.getId()).collect(Collectors.joining(","))+
                 " retry="+retryCount+

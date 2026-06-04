@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Service interface for managing Folders.
@@ -55,12 +56,15 @@ public interface FolderServiceInterface {
 
     /**
      * Uploads data to a specific path within a folder.
+     * Returns a CompletableFuture that completes when all processing
+     * (including cascaded work) finishes for this upload.
      *
      * @param name The name of the folder.
      * @param path The path within the folder.
      * @param data The JSON data to upload.
+     * @return A future that completes when all work for this upload is done.
      */
-    void upload(String name, String path, JsonNode data);
+    CompletableFuture<Void> upload(String name, String path, JsonNode data);
 
     /**
      * Recalculates the contents or state of a folder by its name.

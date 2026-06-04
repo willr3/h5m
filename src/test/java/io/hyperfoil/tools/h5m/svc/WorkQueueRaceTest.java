@@ -8,7 +8,6 @@ import io.hyperfoil.tools.h5m.entity.NodeEntity;
 import io.hyperfoil.tools.h5m.entity.NodeGroupEntity;
 import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.entity.node.JqNode;
-import io.hyperfoil.tools.h5m.entity.work.Work;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.transaction.TransactionManager;
@@ -100,9 +99,8 @@ public class WorkQueueRaceTest extends FreshDb {
     }
 
     private void assertNoRaceConditionSymptoms() {
-        long remainingWork = Work.count();
-        assertEquals(0, remainingWork,
-                remainingWork + " Work items stuck in DB — this indicates work was " +
+        assertTrue(workService.isIdle(),
+                "Work queue is not idle -- this indicates work was " +
                 "queued but never successfully processed. See #50");
 
         long valueCount = ValueEntity.count();
@@ -148,16 +146,16 @@ public class WorkQueueRaceTest extends FreshDb {
 
     private void awaitWorkQueue(long timeoutMs) throws InterruptedException {
         long deadline = System.currentTimeMillis() + timeoutMs;
-        // Require both queue-idle AND no persisted Work rows for several consecutive
-        // checks. The Work.count() gate catches the afterCompletion gap where the
-        // queue is briefly idle between a parent work completing and its cascade
-        // children being enqueued after the transaction commits.
+        // Require queue-idle for several consecutive checks. The multiple-check
+        // gate catches the afterCompletion gap where the queue is briefly idle
+        // between a parent work completing and its cascade children being enqueued
+        // after the transaction commits.
         int stableChecks = 0;
         while (stableChecks < 5) {
             if (System.currentTimeMillis() > deadline) {
                 fail("Work queue drain timed out after " + timeoutMs + "ms");
             }
-            if (workService.isIdle() && Work.count() == 0) {
+            if (workService.isIdle()) {
                 stableChecks++;
             } else {
                 stableChecks = 0;

@@ -10,11 +10,16 @@ import io.hyperfoil.tools.h5m.api.svc.FolderServiceInterface;
 import io.hyperfoil.tools.h5m.entity.FolderEntity;
 import io.hyperfoil.tools.h5m.entity.NodeEntity;
 import io.hyperfoil.tools.h5m.entity.NodeGroupEntity;
+import io.hyperfoil.tools.h5m.entity.UploadProcessingEntity;
 import io.hyperfoil.tools.h5m.entity.Team;
 import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.entity.ViewEntity;
 import io.hyperfoil.tools.h5m.entity.mapper.ApiMapper;
 import io.hyperfoil.tools.h5m.entity.node.*;
+import io.quarkus.runtime.StartupEvent;
+import jakarta.annotation.Priority;
+import jakarta.enterprise.event.Observes;
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.hyperfoil.tools.h5m.entity.work.Work;
 import io.hyperfoil.tools.yaup.json.Json;
 import io.quarkus.logging.Log;
@@ -27,6 +32,7 @@ import org.hibernate.query.NativeQuery;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.CompletableFuture;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -57,6 +63,56 @@ public class FolderService implements FolderServiceInterface {
 
     @Inject
     ApiMapper apiMapper;
+
+    /**
+     * On startup, re-trigger processing for any uploads that were interrupted
+     * (e.g., by a crash). Uses all source nodes (not just top-level) so that
+     * mid-cascade crashes are recovered correctly — the deduplication logic in
+     * execute() skips already-computed values while ensuring missing children
+     * are still calculated.
+     */
+    @Transactional
+    public void recoverIncompleteUploads(@Observes @Priority(2) StartupEvent ev) {
+        List<UploadProcessingEntity> incomplete = UploadProcessingEntity.find("completed", false).list();
+        if (!incomplete.isEmpty()) {
+            Log.infof("Found %d incomplete uploads to recover", incomplete.size());
+            for (UploadProcessingEntity tracking : incomplete) {
+                ValueEntity rootValue = ValueEntity.findById(tracking.rootValueId);
+                if (rootValue == null) {
+                    Log.warnf("Root value %d not found for incomplete upload, removing tracking record", tracking.rootValueId);
+                    tracking.delete();
+                    continue;
+                }
+                FolderEntity folder = em.createQuery(
+                        "SELECT f FROM folder f JOIN FETCH f.group g LEFT JOIN FETCH g.sources LEFT JOIN FETCH g.root WHERE f.name = :name",
+                        FolderEntity.class
+                ).setParameter("name", tracking.folderName).getResultStream().findFirst().orElse(null);
+                if (folder == null) {
+                    Log.warnf("Folder '%s' not found for incomplete upload, removing tracking record", tracking.folderName);
+                    tracking.delete();
+                    continue;
+                }
+                Log.infof("Re-triggering processing for upload %d in folder '%s'", tracking.rootValueId, tracking.folderName);
+                // Use all source nodes (not just top-level) to handle mid-cascade crashes
+                List<Work> works = List.copyOf(folder.group.sources).stream()
+                        .map(node -> new Work(node, new ArrayList<>(node.sources), List.of(rootValue)))
+                        .toList();
+                if (!works.isEmpty()) {
+                    CompletableFuture<Void> future = workService.createTracked(works, Set.of(rootValue.id));
+                    future.whenComplete((v, t) -> {
+                        QuarkusTransaction.requiringNew().run(() -> {
+                            UploadProcessingEntity entity = UploadProcessingEntity.find("rootValueId", rootValue.id).firstResult();
+                            if (entity != null) {
+                                entity.completed = true;
+                            }
+                        });
+                    });
+                } else {
+                    tracking.completed = true;
+                }
+            }
+        }
+    }
 
     @Override
     @Transactional
@@ -253,36 +309,50 @@ public class FolderService implements FolderServiceInterface {
         workService.create(newWorks);
     }
 
+    /**
+     * Uploads data and returns a future that completes when all processing finishes.
+     * Uses QuarkusTransaction to control the transaction boundary explicitly —
+     * the transaction commits when the lambda returns, before we return the future.
+     * This avoids the deadlock that occurs with @Transactional + CompletableFuture
+     * return types (Quarkus defers commit waiting for the future to complete).
+     */
     @Override
-    @Transactional
-    public void upload(String name, String path, JsonNode data){
-        FolderEntity folder = em.createQuery(
-                "SELECT f FROM folder f JOIN FETCH f.group g LEFT JOIN FETCH g.sources LEFT JOIN FETCH g.root WHERE f.name = :name",
-                FolderEntity.class
-        ).setParameter("name", name).getSingleResult();
-        ValueEntity newValue = new ValueEntity(folder,folder.group.root,data);
-        valueService.create(newValue);
+    public CompletableFuture<Void> upload(String name, String path, JsonNode data){
+        return QuarkusTransaction.requiringNew().call(() -> {
+            FolderEntity folder = em.createQuery(
+                    "SELECT f FROM folder f JOIN FETCH f.group g LEFT JOIN FETCH g.sources LEFT JOIN FETCH g.root WHERE f.name = :name",
+                    FolderEntity.class
+            ).setParameter("name", name).getSingleResult();
+            ValueEntity newValue = new ValueEntity(folder, folder.group.root, data);
+            valueService.create(newValue);
 
-        //do we only queue the top level and let new values queue the remaining?
-        //that would match the re-calculation workflow
-        //or do we rely on workQueue for de-duplication?
-/*
-        folder.group.getTopLevelNodes().forEach(source ->{
-            Work newWork = new Work(source,new ArrayList<>(source.sources),List.of(newValue));
-            workService.create(newWork);
-            workQueue.addWork(newWork);
+            // Track this upload for crash recovery — marked completed when all work finishes
+            UploadProcessingEntity tracking = new UploadProcessingEntity(newValue.id, name);
+            tracking.persist();
+
+            //only queue the top level and let new values queue the remaining
+            //that matches the re-calculation workflow
+            List<Work> works = folder.group.getTopLevelNodes().stream()
+                    .map(node -> new Work(node, new ArrayList<>(node.sources), List.of(newValue)))
+                    .toList();
+
+            if (works.isEmpty()) {
+                tracking.completed = true;
+                return CompletableFuture.<Void>completedFuture(null);
+            }
+
+            CompletableFuture<Void> future = workService.createTracked(works, Set.of(newValue.id));
+            // Mark completed when all work finishes
+            future.whenComplete((v, t) -> {
+                QuarkusTransaction.requiringNew().run(() -> {
+                    UploadProcessingEntity entity = UploadProcessingEntity.find("rootValueId", newValue.id).firstResult();
+                    if (entity != null) {
+                        entity.completed = true;
+                    }
+                });
+            });
+            return future;
         });
-*/
-        //List.copyOf is a hack to get around ConcurrentModificationException that is likely due to using entity list and panache setSources
-//        List<Work> toQueue = List.copyOf(folder.group.sources).stream().map(source -> {
-//            Work newWork = new Work(source,new ArrayList<>(source.sources),List.of(newValue));
-//            workService.create(newWork);
-//            return newWork;
-//        }).toList();
-//        workQueue.addWorks(toQueue);
-
-        workService.create(folder.group.getTopLevelNodes().stream().map(node-> new Work(node,new ArrayList<>(node.sources),List.of(newValue))).toList());
-        //workService.create(List.copyOf(folder.group.sources).stream().map(source -> new Work(source, new ArrayList<>(source.sources), List.of(newValue))).toList());
     }
 
     /**

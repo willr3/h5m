@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
@@ -441,12 +442,8 @@ public class RestEndpointTest extends FreshDb {
 
         try (InputStream is = getClass().getResourceAsStream("/rhivos/40375.json")) {
             JsonNode runData = mapper.readTree(is);
-            folderService.upload("rhivos-perf-comprehensive", "$", runData);
-        }
-
-        long deadline = System.currentTimeMillis() + 30_000;
-        while (!workService.isIdle() && System.currentTimeMillis() < deadline) {
-            Thread.sleep(100);
+            folderService.upload("rhivos-perf-comprehensive", "$", runData)
+                    .orTimeout(30, TimeUnit.SECONDS).join();
         }
 
         given()
@@ -468,12 +465,8 @@ public class RestEndpointTest extends FreshDb {
         for (String runFile : List.of("/rhivos/40375.json", "/rhivos/40376.json")) {
             try (InputStream is = getClass().getResourceAsStream(runFile)) {
                 JsonNode runData = mapper.readTree(is);
-                folderService.upload("rhivos-perf-comprehensive", "$", runData);
-            }
-
-            long deadline = System.currentTimeMillis() + 30_000;
-            while (!workService.isIdle() && System.currentTimeMillis() < deadline) {
-                Thread.sleep(100);
+                folderService.upload("rhivos-perf-comprehensive", "$", runData)
+                        .orTimeout(30, TimeUnit.SECONDS).join();
             }
         }
 
@@ -493,12 +486,8 @@ public class RestEndpointTest extends FreshDb {
 
         try (InputStream is = getClass().getResourceAsStream("/rhivos/40375.json")) {
             JsonNode runData = mapper.readTree(is);
-            folderService.upload("rhivos-perf-comprehensive", "$", runData);
-        }
-
-        long deadline = System.currentTimeMillis() + 30_000;
-        while (!workService.isIdle() && System.currentTimeMillis() < deadline) {
-            Thread.sleep(100);
+            folderService.upload("rhivos-perf-comprehensive", "$", runData)
+                    .orTimeout(30, TimeUnit.SECONDS).join();
         }
 
         // Find the root value ID — the upload itself
@@ -717,14 +706,9 @@ public class RestEndpointTest extends FreshDb {
 
         try (InputStream is = getClass().getResourceAsStream("/rhivos/40375.json")) {
             JsonNode runData = mapper.readTree(is);
-            folderService.upload("rhivos-perf-comprehensive", "$", runData);
+            folderService.upload("rhivos-perf-comprehensive", "$", runData)
+                    .orTimeout(30, TimeUnit.SECONDS).join();
         }
-
-        long deadline = System.currentTimeMillis() + 30_000;
-        while (!workService.isIdle() && System.currentTimeMillis() < deadline) {
-            Thread.sleep(100);
-        }
-        assertTrue(workService.isIdle(), "Work queue should be idle");
 
         // Find node IDs for nodes that produce values with rhivos data
         tm.begin();
@@ -771,11 +755,8 @@ public class RestEndpointTest extends FreshDb {
         for (String runFile : List.of("/rhivos/40375.json", "/rhivos/40376.json")) {
             try (InputStream is = getClass().getResourceAsStream(runFile)) {
                 JsonNode runData = mapper.readTree(is);
-                folderService.upload("rhivos-perf-comprehensive", "$", runData);
-            }
-            long deadline = System.currentTimeMillis() + 30_000;
-            while (!workService.isIdle() && System.currentTimeMillis() < deadline) {
-                Thread.sleep(100);
+                folderService.upload("rhivos-perf-comprehensive", "$", runData)
+                        .orTimeout(30, TimeUnit.SECONDS).join();
             }
         }
 

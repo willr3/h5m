@@ -15,9 +15,13 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Callable;
 
 @CommandLine.Command(name="load-legacy-runs")
@@ -112,26 +116,35 @@ public class LoadLegacyRuns implements Callable<Integer> {
                     int count = 0;
                     int batchCount = 0;
                     Scanner scanner = new Scanner(System.in);
+                    List<CompletableFuture<Void>> batchFutures = new ArrayList<>();
                     try (ResultSet rs = ps.executeQuery()) {
                         while(rs.next()){
                             Long id = rs.getLong(1);
                             System.out.println(name+" "+id);
                             JsonNode data = mapper.readTree(rs.getCharacterStream("data"));
-                            folderService.upload(folder.name(),null,data);
+                            batchFutures.add(folderService.upload(folder.name(),null,data));
                             count++;
                             batchCount++;
-                            if(batch > 0 && batchCount > batch){
-                                System.out.println("waiting for batch to complete");
-                                while(!workService.isIdle()){
-                                    Thread.sleep(10_000);
-                                }
+                            if(batch > 0 && batchCount >= batch){
+                                System.out.println("waiting for batch of " + batchCount + " to complete");
+                                CompletableFuture.allOf(batchFutures.toArray(new CompletableFuture[0]))
+                                        .orTimeout(10, TimeUnit.MINUTES)
+                                        .join();
                                 System.out.println("batch complete");
+                                batchFutures.clear();
                                 if(pause){
                                     scanner.nextLine();
                                 }
                                 batchCount = 0;
                             }
                         }
+                    }
+                    // Wait for any remaining uploads
+                    if (!batchFutures.isEmpty()) {
+                        System.out.println("waiting for final " + batchFutures.size() + " uploads to complete");
+                        CompletableFuture.allOf(batchFutures.toArray(new CompletableFuture[0]))
+                                .orTimeout(10, TimeUnit.MINUTES)
+                                .join();
                     }
                     System.out.println("loaded " + count + " runs");
                 } finally {

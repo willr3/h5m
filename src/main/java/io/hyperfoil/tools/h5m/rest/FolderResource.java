@@ -83,6 +83,9 @@ public class FolderResource {
             @QueryParam("path") @Parameter(description = "Path within the folder") String path,
             JsonNode data) {
         folderService.upload(name, path, data);
+        // The upload() now returns a CompletableFuture, but the REST endpoint
+        // doesn't need to wait for it — the caller can poll for results.
+        // Future enhancement: return CompletionStage<Void> for async response.
     }
 
     @POST
