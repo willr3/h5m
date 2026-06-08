@@ -224,6 +224,18 @@ describe('<DataTab />', () => {
     cleanup();
   });
 
+  it('shows configure prompt when view has no columns', async () => {
+    const views: View[] = [emptyDefaultView];
+
+    renderDataTab(views);
+
+    await waitFor(() => {
+      expect(screen.getByText(/no columns configured/i)).toBeDefined();
+    });
+
+    cleanup();
+  });
+
   it('opens config modal in create mode when New View is clicked', async () => {
     const user = userEvent.setup();
     renderDataTab();

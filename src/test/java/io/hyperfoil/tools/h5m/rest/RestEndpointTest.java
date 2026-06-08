@@ -643,6 +643,59 @@ public class RestEndpointTest extends FreshDb {
     }
 
     @Test
+    public void view_update_with_same_header_names() throws Exception {
+        folderService.importFolder(Path.of("src/test/resources/rhivos/nodes.json"), false);
+
+        tm.begin();
+        FolderEntity folder = FolderEntity.find("name", "rhivos-perf-comprehensive").firstResult();
+        Long userNodeId = folder.group.sources.stream()
+                .filter(n -> "user".equals(n.name)).findFirst().get().id;
+        Long uuidNodeId = folder.group.sources.stream()
+                .filter(n -> "uuid".equals(n.name)).findFirst().get().id;
+        tm.commit();
+
+        // Create view with user and uuid
+        String createJson = mapper.writeValueAsString(new io.hyperfoil.tools.h5m.api.View(
+                null, "same-headers", null,
+                List.of(
+                        new io.hyperfoil.tools.h5m.api.ViewComponent(null, userNodeId, null, null, "User", 0),
+                        new io.hyperfoil.tools.h5m.api.ViewComponent(null, uuidNodeId, null, null, "UUID", 1)
+                )
+        ));
+
+        Long viewId = given()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(createJson)
+                .when().post("/api/folder/rhivos-perf-comprehensive/view")
+                .then()
+                .statusCode(200)
+                .extract().jsonPath().getLong("id");
+
+        // Update with the same header names but reversed order — this previously
+        // caused a unique constraint violation because Hibernate inserted new
+        // components before deleting old ones with the same (view_id, header_name)
+        String updateJson = mapper.writeValueAsString(new io.hyperfoil.tools.h5m.api.View(
+                null, "same-headers", null,
+                List.of(
+                        new io.hyperfoil.tools.h5m.api.ViewComponent(null, uuidNodeId, null, null, "UUID", 0),
+                        new io.hyperfoil.tools.h5m.api.ViewComponent(null, userNodeId, null, null, "User", 1)
+                )
+        ));
+
+        given()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(updateJson)
+                .when().put("/api/folder/rhivos-perf-comprehensive/view/" + viewId)
+                .then()
+                .statusCode(200)
+                .body("components.size()", equalTo(2))
+                .body("components[0].headerName", equalTo("UUID"))
+                .body("components[0].headerOrder", equalTo(0))
+                .body("components[1].headerName", equalTo("User"))
+                .body("components[1].headerOrder", equalTo(1));
+    }
+
+    @Test
     public void view_delete_works() throws Exception {
         folderService.importFolder(Path.of("src/test/resources/rhivos/nodes.json"), false);
 

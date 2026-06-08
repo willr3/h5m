@@ -9,10 +9,11 @@ import {
   ModalHeader,
   TextInput,
 } from '@carbon/react';
+import { ArrowUp, ArrowDown, Close } from '@carbon/icons-react';
 import { byIdOptions } from '@client/@tanstack/react-query.gen.ts';
 import { ViewService } from '@client/sdk.gen.ts';
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 interface ViewConfigModalProps {
   open: boolean;
@@ -34,26 +35,8 @@ export const ViewConfigModal = ({ open, onClose, folderName, groupId, view }: Vi
   const isEditing = view != null && view.id != null;
   const isDefault = view?.name === 'Default';
 
-  const [viewName, setViewName] = useState(view?.name ?? '');
-  const [selectedNodes, setSelectedNodes] = useState<NodeItem[]>([]);
-
-  // Initialize from existing view when editing
-  useEffect(() => {
-    if (view) {
-      setViewName(view.name);
-      const items = (view.components ?? []).map((c: ViewComponent) => ({
-        id: String(c.nodeId),
-        text: c.headerName ?? c.nodeName ?? '',
-        nodeId: c.nodeId!,
-      }));
-      setSelectedNodes(items);
-    } else {
-      setViewName('');
-      setSelectedNodes([]);
-    }
-  }, [view]);
-
   // Available nodes for the multi-select (exclude detection nodes)
+  // Built once and stable so FilterableMultiSelect can match by reference
   const availableNodes: NodeItem[] = (nodeGroup.sources ?? [])
     .filter((n: ApiNode) => !['FIXED_THRESHOLD', 'RELATIVE_DIFFERENCE', 'EDIVISIVE'].includes(n.type ?? ''))
     .map((n: ApiNode) => ({
@@ -62,6 +45,52 @@ export const ViewConfigModal = ({ open, onClose, folderName, groupId, view }: Vi
       nodeId: n.id!,
     }));
 
+  const [viewName, setViewName] = useState(view?.name ?? '');
+  // Initialize selectedNodes from the view's components, preserving the
+  // existing headerOrder. Find matching items in availableNodes (same
+  // object references required by Carbon's FilterableMultiSelect).
+  const [selectedNodes, setSelectedNodes] = useState<NodeItem[]>(() => {
+    if (!view?.components || view.components.length === 0) return [];
+    // Sort components by headerOrder to preserve column ordering
+    const sorted = [...view.components].sort(
+      (a: ViewComponent, b: ViewComponent) => (a.headerOrder ?? 0) - (b.headerOrder ?? 0)
+    );
+    const ordered: NodeItem[] = [];
+    for (const c of sorted) {
+      const match = availableNodes.find((n) => n.id === String(c.nodeId));
+      if (match) ordered.push(match);
+    }
+    return ordered;
+  });
+
+  const moveUp = useCallback((index: number) => {
+    if (index <= 0) return;
+    setSelectedNodes((prev) => {
+      const next = [...prev];
+      const temp = next[index - 1]!;
+      next[index - 1] = next[index]!;
+      next[index] = temp;
+      return next;
+    });
+  }, []);
+
+  const moveDown = useCallback((index: number) => {
+    setSelectedNodes((prev) => {
+      if (index >= prev.length - 1) return prev;
+      const next = [...prev];
+      const temp = next[index]!;
+      next[index] = next[index + 1]!;
+      next[index + 1] = temp;
+      return next;
+    });
+  }, []);
+
+  const removeNode = useCallback((index: number) => {
+    setSelectedNodes((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const createMutation = useMutation({
     mutationFn: (data: View) =>
       ViewService.createView({
@@ -69,8 +98,16 @@ export const ViewConfigModal = ({ open, onClose, folderName, groupId, view }: Vi
         body: data,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['getViews'] });
+      setSaveError(null);
+      void queryClient.refetchQueries({ predicate: (q) => {
+        const key = q.queryKey[0];
+        return typeof key === 'object' && key !== null && '_id' in key &&
+          (key._id === 'getViews' || key._id === 'getViewData');
+      }});
       onClose();
+    },
+    onError: (e: Error) => {
+      setSaveError(e.message ?? 'Failed to create view');
     },
   });
 
@@ -81,8 +118,16 @@ export const ViewConfigModal = ({ open, onClose, folderName, groupId, view }: Vi
         body: data,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['getViews'] });
+      setSaveError(null);
+      void queryClient.refetchQueries({ predicate: (q) => {
+        const key = q.queryKey[0];
+        return typeof key === 'object' && key !== null && '_id' in key &&
+          (key._id === 'getViews' || key._id === 'getViewData');
+      }});
       onClose();
+    },
+    onError: (e: Error) => {
+      setSaveError(e.message ?? 'Failed to update view');
     },
   });
 
@@ -92,7 +137,11 @@ export const ViewConfigModal = ({ open, onClose, folderName, groupId, view }: Vi
         path: { name: folderName, viewId: view!.id! },
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['getViews'] });
+      void queryClient.refetchQueries({ predicate: (q) => {
+        const key = q.queryKey[0];
+        return typeof key === 'object' && key !== null && '_id' in key &&
+          (key._id === 'getViews' || key._id === 'getViewData');
+      }});
       onClose();
     },
   });
@@ -144,9 +193,71 @@ export const ViewConfigModal = ({ open, onClose, folderName, groupId, view }: Vi
           itemToString={(item: NodeItem) => item?.text ?? ''}
           initialSelectedItems={selectedNodes}
           onChange={({ selectedItems }: { selectedItems: NodeItem[] }) => {
-            setSelectedNodes(selectedItems);
+            // Preserve existing order: keep items that are still selected
+            // in their current position, append newly added items at the end
+            const existingIds = new Set(selectedNodes.map((n) => n.id));
+            const newIds = new Set(selectedItems.map((n) => n.id));
+            const kept = selectedNodes.filter((n) => newIds.has(n.id));
+            const added = selectedItems.filter((n) => !existingIds.has(n.id));
+            setSelectedNodes([...kept, ...added]);
           }}
         />
+        {selectedNodes.length > 0 && (
+          <div style={{ marginTop: 'var(--cds-spacing-05)' }}>
+            <div style={{ fontSize: '0.75rem', opacity: 0.7, marginBottom: 'var(--cds-spacing-02)' }}>
+              Column order (drag or use arrows to reorder)
+            </div>
+            {selectedNodes.map((node, idx) => (
+              <div
+                key={node.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--cds-spacing-02)',
+                  padding: '4px 8px',
+                  marginBottom: '2px',
+                  background: 'var(--cds-layer-02)',
+                  borderRadius: '4px',
+                  fontSize: '0.875rem',
+                }}
+              >
+                <span style={{ opacity: 0.5, minWidth: '20px' }}>{String(idx + 1)}.</span>
+                <span style={{ flex: 1 }}>{node.text}</span>
+                <Button
+                  kind="ghost"
+                  size="sm"
+                  hasIconOnly
+                  renderIcon={ArrowUp}
+                  iconDescription="Move up"
+                  onClick={() => moveUp(idx)}
+                  disabled={idx === 0}
+                />
+                <Button
+                  kind="ghost"
+                  size="sm"
+                  hasIconOnly
+                  renderIcon={ArrowDown}
+                  iconDescription="Move down"
+                  onClick={() => moveDown(idx)}
+                  disabled={idx === selectedNodes.length - 1}
+                />
+                <Button
+                  kind="ghost"
+                  size="sm"
+                  hasIconOnly
+                  renderIcon={Close}
+                  iconDescription="Remove"
+                  onClick={() => removeNode(idx)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+        {saveError && (
+          <div style={{ color: 'var(--cds-support-error)', marginTop: 'var(--cds-spacing-03)' }}>
+            {saveError}
+          </div>
+        )}
       </ModalBody>
       <ModalFooter>
         {isEditing && !isDefault && (

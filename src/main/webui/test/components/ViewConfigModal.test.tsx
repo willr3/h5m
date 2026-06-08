@@ -280,4 +280,177 @@ describe('<ViewConfigModal />', () => {
 
     cleanup();
   });
+
+  it('shows column ordering list when editing a view with components', async () => {
+    const view: View = {
+      id: 1,
+      name: 'Ordered View',
+      components: [
+        { id: 1, nodeId: 2, nodeName: 'cpu', headerName: 'CPU', headerOrder: 0 },
+        { id: 2, nodeId: 3, nodeName: 'mem', headerName: 'Memory', headerOrder: 1 },
+      ],
+    };
+
+    renderModal({ view });
+
+    await waitFor(() => {
+      // Should show the column order label
+      expect(screen.getByText(/column order/i)).toBeDefined();
+      // Should show numbered positions with node names
+      expect(screen.getByText('1.')).toBeDefined();
+      expect(screen.getByText('2.')).toBeDefined();
+      expect(screen.getByText('cpu')).toBeDefined();
+      expect(screen.getByText('mem')).toBeDefined();
+    });
+
+    cleanup();
+  });
+
+  it('preserves column order from existing view headerOrder', async () => {
+    const view: View = {
+      id: 1,
+      name: 'Reversed View',
+      components: [
+        { id: 1, nodeId: 3, nodeName: 'mem', headerName: 'Memory', headerOrder: 0 },
+        { id: 2, nodeId: 2, nodeName: 'cpu', headerName: 'CPU', headerOrder: 1 },
+      ],
+    };
+
+    renderModal({ view });
+
+    await waitFor(() => {
+      // mem should be first (headerOrder 0), cpu second (headerOrder 1)
+      const items = screen.getAllByText(/^(cpu|mem)$/);
+      expect(items.at(0)?.textContent).toBe('mem');
+      expect(items.at(1)?.textContent).toBe('cpu');
+    });
+
+    cleanup();
+  });
+
+  it('does not show column ordering list when no nodes are selected', async () => {
+    renderModal({ view: null });
+
+    await waitFor(() => {
+      expect(screen.getByText('Create View')).toBeDefined();
+    });
+
+    expect(screen.queryByText(/column order/i)).toBeNull();
+
+    cleanup();
+  });
+
+  it('shows move up, move down, and remove buttons for each column', async () => {
+    const view: View = {
+      id: 1,
+      name: 'Test View',
+      components: [
+        { id: 1, nodeId: 2, nodeName: 'cpu', headerName: 'CPU', headerOrder: 0 },
+        { id: 2, nodeId: 3, nodeName: 'mem', headerName: 'Memory', headerOrder: 1 },
+      ],
+    };
+
+    renderModal({ view });
+
+    await waitFor(() => {
+      // Each column row should have Move up, Move down, and Remove buttons
+      const moveUpButtons = screen.getAllByLabelText('Move up');
+      const moveDownButtons = screen.getAllByLabelText('Move down');
+      const removeButtons = screen.getAllByLabelText('Remove');
+      expect(moveUpButtons.length).toBe(2);
+      expect(moveDownButtons.length).toBe(2);
+      expect(removeButtons.length).toBe(2);
+    });
+
+    cleanup();
+  });
+
+  it('disables move up for first item and move down for last item', async () => {
+    const view: View = {
+      id: 1,
+      name: 'Test View',
+      components: [
+        { id: 1, nodeId: 2, nodeName: 'cpu', headerName: 'CPU', headerOrder: 0 },
+        { id: 2, nodeId: 3, nodeName: 'mem', headerName: 'Memory', headerOrder: 1 },
+      ],
+    };
+
+    renderModal({ view });
+
+    await waitFor(() => {
+      const moveUpButtons = screen.getAllByLabelText('Move up');
+      const moveDownButtons = screen.getAllByLabelText('Move down');
+      // First item's move up should be disabled
+      expect((moveUpButtons.at(0) as HTMLButtonElement)?.disabled).toBe(true);
+      // Last item's move down should be disabled
+      expect((moveDownButtons.at(1) as HTMLButtonElement)?.disabled).toBe(true);
+      // Other buttons should be enabled
+      expect((moveUpButtons.at(1) as HTMLButtonElement)?.disabled).toBe(false);
+      expect((moveDownButtons.at(0) as HTMLButtonElement)?.disabled).toBe(false);
+    });
+
+    cleanup();
+  });
+
+  it('reorders columns when move down is clicked', async () => {
+    const user = userEvent.setup();
+    const view: View = {
+      id: 1,
+      name: 'Test View',
+      components: [
+        { id: 1, nodeId: 2, nodeName: 'cpu', headerName: 'CPU', headerOrder: 0 },
+        { id: 2, nodeId: 3, nodeName: 'mem', headerName: 'Memory', headerOrder: 1 },
+      ],
+    };
+
+    renderModal({ view });
+
+    await waitFor(() => {
+      expect(screen.getByText('cpu')).toBeDefined();
+    });
+
+    // Click move down on first item (cpu)
+    const moveDownButtons = screen.getAllByLabelText('Move down');
+    await user.click(moveDownButtons.at(0)!);
+
+    // Now mem should be first, cpu second
+    await waitFor(() => {
+      const items = screen.getAllByText(/^(cpu|mem)$/);
+      expect(items.at(0)?.textContent).toBe('mem');
+      expect(items.at(1)?.textContent).toBe('cpu');
+    });
+
+    cleanup();
+  });
+
+  it('removes a column when remove button is clicked', async () => {
+    const user = userEvent.setup();
+    const view: View = {
+      id: 1,
+      name: 'Test View',
+      components: [
+        { id: 1, nodeId: 2, nodeName: 'cpu', headerName: 'CPU', headerOrder: 0 },
+        { id: 2, nodeId: 3, nodeName: 'mem', headerName: 'Memory', headerOrder: 1 },
+      ],
+    };
+
+    renderModal({ view });
+
+    await waitFor(() => {
+      expect(screen.getAllByLabelText('Remove').length).toBe(2);
+    });
+
+    // Remove the first item (cpu)
+    const removeButtons = screen.getAllByLabelText('Remove');
+    await user.click(removeButtons.at(0)!);
+
+    // Only mem should remain
+    await waitFor(() => {
+      expect(screen.getAllByLabelText('Remove').length).toBe(1);
+      expect(screen.getByText('mem')).toBeDefined();
+      expect(screen.queryByText('cpu')).toBeNull();
+    });
+
+    cleanup();
+  });
 });

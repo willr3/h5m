@@ -86,6 +86,9 @@ public class ViewService implements ViewServiceInterface {
 
         entity.name = view.name();
         entity.components.clear();
+        // Flush the deletes before inserting new components to avoid
+        // unique constraint violations on (view_id, header_name)
+        entity.flush();
 
         if (view.components() != null) {
             for (int i = 0; i < view.components().size(); i++) {

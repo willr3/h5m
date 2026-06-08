@@ -90,6 +90,7 @@ export const DataTab = ({ folderName, groupId }: { folderName: string; groupId: 
   const [selectedViewId, setSelectedViewId] = useState<number | null>(null);
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const [editingView, setEditingView] = useState<View | null>(null);
+  const [modalKey, setModalKey] = useState(0);
 
   const selectedView = useMemo((): View | null => {
     if (!views || views.length === 0) return null;
@@ -132,24 +133,39 @@ export const DataTab = ({ folderName, groupId }: { folderName: string; groupId: 
         <Button
           kind="ghost"
           size="md"
-          onClick={() => { setEditingView(selectedView); setConfigModalOpen(true); }}
+          onClick={() => {
+            const latestView = views?.find((v: View) => v.id === selectedView?.id) ?? selectedView;
+            setEditingView(latestView);
+            setModalKey((k) => k + 1);
+            setConfigModalOpen(true);
+          }}
         >
           Configure
         </Button>
         <Button
           kind="ghost"
           size="md"
-          onClick={() => { setEditingView(null); setConfigModalOpen(true); }}
+          onClick={() => { setEditingView(null); setModalKey((k) => k + 1); setConfigModalOpen(true); }}
         >
           New View
         </Button>
       </div>
-      {selectedView && (
-        <ViewDataTable folderName={folderName} view={selectedView} />
+      {selectedView && (!selectedView.components || selectedView.components.length === 0) && (
+        <p style={{ opacity: 0.7 }}>
+          This view has no columns configured. Click <strong>Configure</strong> to select which nodes to display.
+        </p>
+      )}
+      {selectedView && selectedView.components && selectedView.components.length > 0 && (
+        <ViewDataTable
+          key={`${String(selectedView.id)}-${String(selectedView.components?.length ?? 0)}-${selectedView.components?.map(c => String(c.nodeId)).join(',') ?? ''}`}
+          folderName={folderName}
+          view={selectedView}
+        />
       )}
       <ErrorBoundary fallback={<InlineLoading status="error" description="Failed to load modal" />}>
         <Suspense fallback={<SkeletonText paragraph={true} lineCount={3} />}>
           <ViewConfigModal
+            key={modalKey}
             open={configModalOpen}
             onClose={() => setConfigModalOpen(false)}
             folderName={folderName}
