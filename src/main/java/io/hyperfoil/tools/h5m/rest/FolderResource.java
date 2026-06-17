@@ -46,7 +46,7 @@ public class FolderResource {
     @Path("{name}")
     @PermitAll
     @Operation(description = "Retrieve a folder by its name")
-    public Folder byName(@PathParam("name") String name) {
+    public Folder byFolderName(@PathParam("name") String name) {
         return folderService.byName(name);
     }
 
@@ -62,7 +62,7 @@ public class FolderResource {
     @Path("{name}")
     @Authenticated
     @Operation(description = "Create a new folder")
-    public long create(@PathParam("name") String name) {
+    public long createFolder(@PathParam("name") String name) {
         return folderService.create(name);
     }
 
@@ -70,7 +70,7 @@ public class FolderResource {
     @Path("{name}")
     @Authenticated
     @Operation(description = "Delete a folder by its name")
-    public long delete(@PathParam("name") String name) {
+    public long deleteFolder(@PathParam("name") String name) {
         return folderService.delete(name);
     }
 

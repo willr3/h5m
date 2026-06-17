@@ -37,7 +37,7 @@ public class NodeResource {
     @POST
     @Authenticated
     @Operation(description = "Create a new node with an operation")
-    public Long create(
+    public Long createNode(
             @QueryParam("name") @NotEmpty String name,
             @QueryParam("groupId") @NotNull Long groupId,
             @QueryParam("type") @NotNull NodeType type,
@@ -68,7 +68,7 @@ public class NodeResource {
     @Path("{id}")
     @Authenticated
     @Operation(description = "Delete a node by its ID")
-    public void delete(@PathParam("id") Long nodeId) {
+    public void deleteNode(@PathParam("id") Long nodeId) {
         nodeService.delete(nodeId);
     }
 

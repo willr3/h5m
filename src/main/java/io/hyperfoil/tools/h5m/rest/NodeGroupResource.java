@@ -31,7 +31,7 @@ public class NodeGroupResource {
     @Path("{name}")
     @PermitAll
     @Operation(description = "Retrieve a node group by its name")
-    public NodeGroup byName(@PathParam("name") String groupName) {
+    public NodeGroup byGroupName(@PathParam("name") String groupName) {
         return nodeGroupService.byName(groupName);
     }
 
@@ -39,7 +39,7 @@ public class NodeGroupResource {
     @Path("{id}")
     @Authenticated
     @Operation(description = "Delete a node group by its ID")
-    public void delete(@PathParam("id") Long groupId) {
+    public void deleteNodeGroup(@PathParam("id") Long groupId) {
         nodeGroupService.delete(groupId);
     }
 }
