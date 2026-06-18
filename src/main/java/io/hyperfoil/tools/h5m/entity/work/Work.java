@@ -22,7 +22,6 @@ public class Work implements Runnable, Comparable<Work>{
 
     public Set<NodeEntity> activeNodes;
 
-    public boolean cumulative = false;
 
     public Work(){
         retryCount = 0;
@@ -33,9 +32,6 @@ public class Work implements Runnable, Comparable<Work>{
     public Work(Set<NodeEntity> activeNodes,List<NodeEntity> sourceNodes,List<ValueEntity> sourceValues){
         this();
         this.activeNodes = new HashSet<>(activeNodes); //so that it will be mutable
-        if(activeNodes.stream().anyMatch(node -> node instanceof RelativeDifference)){
-            this.cumulative = true;
-        }
         this.sourceValues = sourceValues == null ? Collections.emptyList() : new ArrayList(sourceValues);
         this.sourceNodes = sourceNodes == null ? Collections.emptyList() : new ArrayList(sourceNodes);
     }
@@ -46,11 +42,6 @@ public class Work implements Runnable, Comparable<Work>{
 
     public void setActiveNodes(Set<NodeEntity> activeNodes) {
         this.activeNodes = activeNodes;
-        if(activeNodes.stream().anyMatch(node -> node instanceof RelativeDifference)){
-            this.cumulative = true;
-        }else{
-            this.cumulative = false;
-        }
     }
 
     //work A depends on work B if A.activeNode depends on B.activeNode or
@@ -73,7 +64,7 @@ public class Work implements Runnable, Comparable<Work>{
         if (this.activeNodes == null || this.activeNodes.isEmpty() || !this.activeNodes.stream().anyMatch(t->work.activeNodes.stream().anyMatch(t::dependsOn))) {
             return false;
         }
-        if (cumulative || sourceValues.isEmpty()) {
+        if (sourceValues.isEmpty()) {
             return true;
         }
         for (int i = 0, size = sourceValues.size(); i < size; i++) {
@@ -116,9 +107,6 @@ public class Work implements Runnable, Comparable<Work>{
                     return false;
                 }
             }
-            if(cumulative){
-                return true;
-            }
             if (this.sourceValues.size() != work.sourceValues.size()) {
                 return false;
             }
@@ -136,9 +124,7 @@ public class Work implements Runnable, Comparable<Work>{
         List<Object> param = new ArrayList<>();
         param.addAll(activeNodes);
         param.addAll(sourceNodes);
-        if(!cumulative) {
-            param.addAll(sourceValues);
-        }
+        param.addAll(sourceValues);
         return Objects.hash(param);
     }
 
