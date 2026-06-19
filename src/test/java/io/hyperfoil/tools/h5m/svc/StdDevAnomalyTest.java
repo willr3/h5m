@@ -400,17 +400,21 @@ public class StdDevAnomalyTest extends FreshDb {
         tm.commit();
 
         // Verify the persisted change exists
+        tm.begin();
         List<ValueEntity> persistedBefore = valueService.findMatchingFingerprint(
                 t.sd, NodeEntity.findById(t.sd.getGroupByNode().getId()),
                 valueService.getDescendantValues(anomalyRoot, t.fingerprint).getFirst(),
                 t.sd.getDomainNode(), null, null, -1, -1, true);
         assertFalse(persistedBefore.isEmpty(), "Should have a persisted change value");
+        tm.commit();
 
         // Reprocess with the SAME data — anomaly should still be detected
         // because baseline window (domain <= 6) is still [100,100,100,100,100]
+        tm.begin();
         List<ValueEntity> reprocessed = nodeService.calculateStdDevAnomalyValues(t.sd, anomalyRoot, 0);
         assertEquals(1, reprocessed.size(),
                 "Reprocessing same upload should still detect the anomaly (baseline unchanged)");
+        tm.commit();
     }
 
     @Test

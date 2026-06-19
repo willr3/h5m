@@ -28,6 +28,7 @@ import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.PessimisticLockException;
 import jakarta.transaction.Transactional;
 import org.hibernate.query.NativeQuery;
 
@@ -240,6 +241,15 @@ public class FolderService implements FolderServiceInterface {
         return processingService.recalculateNode(nodeId);
     }
 
+    private static final int UPLOAD_RETRY_LIMIT = 3;
+
+    private static boolean isPessimisticLock(Throwable t) {
+        for (; t != null; t = t.getCause()) {
+            if (t instanceof PessimisticLockException) return true;
+        }
+        return false;
+    }
+
     /**
      * Uploads data and returns an UploadHandle containing the upload ID and a future
      * that completes when all processing finishes.
@@ -250,6 +260,23 @@ public class FolderService implements FolderServiceInterface {
      */
     @Override
     public Upload upload(String name, String path, JqValue data) {
+        // SQLite allows only one writer at a time. Under concurrent uploads the
+        // transaction can fail with SQLITE_BUSY (surfaced as PessimisticLockException)
+        // when another connection commits between our read and write, invalidating
+        // the WAL snapshot. Retry with a fresh transaction to get a current snapshot.
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return doUpload(name, path, data);
+            } catch (Throwable t) {
+                if (attempt >= UPLOAD_RETRY_LIMIT || !isPessimisticLock(t)) {
+                    throw t;
+                }
+                Log.debugf("Database busy during upload (attempt %d/%d), retrying", attempt, UPLOAD_RETRY_LIMIT);
+            }
+        }
+    }
+
+    private Upload doUpload(String name, String path, JqValue data) {
         return QuarkusTransaction.requiringNew().call(() -> {
             FolderEntity folder = em.createQuery(
                     "SELECT f FROM folder f JOIN FETCH f.group g LEFT JOIN FETCH g.sources LEFT JOIN FETCH g.root WHERE f.name = :name",
@@ -364,6 +391,8 @@ public class FolderService implements FolderServiceInterface {
                 return folderName;
             }
             delete(folderName);
+            em.flush();
+            em.clear();
         }
 
         long folderId = create(folderName);

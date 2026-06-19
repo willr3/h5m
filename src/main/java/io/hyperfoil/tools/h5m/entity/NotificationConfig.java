@@ -1,7 +1,7 @@
 package io.hyperfoil.tools.h5m.entity;
 
 import io.hyperfoil.tools.h5m.notification.NotificationMethod;
-import io.quarkus.hibernate.orm.panache.PanacheEntity;
+import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 
 /**
@@ -9,7 +9,11 @@ import jakarta.persistence.*;
  * Each folder can have multiple notification configs (e.g., one for email, one for Slack).
  */
 @Entity(name = "notification_config")
-public class NotificationConfig extends PanacheEntity {
+public class NotificationConfig extends PanacheEntityBase {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    public Long id;
 
     /**
      * The folder this notification config belongs to.

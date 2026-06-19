@@ -1,6 +1,5 @@
 package io.hyperfoil.tools.h5m.cli;
 
-import io.hyperfoil.tools.h5m.provided.DatasourceConfiguration;
 import io.quarkus.test.junit.TestProfile;
 import io.quarkus.test.junit.main.LaunchResult;
 import io.quarkus.test.junit.main.QuarkusMainLauncher;
@@ -29,13 +28,12 @@ public class H5mTest {
     }
     @BeforeEach
     public void dropDb(){
-        ///tmp/h5m-test.db-shm, /tmp/h5m-test.db-wal, /tmp/h5m-test.db
-        String path = DatasourceConfiguration.getPath();
+        String path = CliProfile.TEST_DB_PATH;
         List.of("","-shm","-wal").forEach(suffix->{
             File f = new File(path+suffix);
             if(f.exists()){
                 f.delete();
-            } else{ }
+            }
         });
     }
 

@@ -4,7 +4,7 @@ import io.hyperfoil.tools.h5m.api.EphemeralMode;
 import io.hyperfoil.tools.h5m.api.NodeType;
 import io.hyperfoil.tools.h5m.entity.node.RootNode;
 import io.hyperfoil.tools.h5m.queue.KahnDagSort;
-import io.quarkus.hibernate.orm.panache.PanacheEntity;
+import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 import org.hibernate.annotations.Cache;
 import org.hibernate.annotations.CacheConcurrencyStrategy;
@@ -18,7 +18,11 @@ import java.util.stream.Collectors;
 @DiscriminatorColumn(name = "type", discriminatorType =  DiscriminatorType.STRING)
 @Cacheable
 @Cache(usage = CacheConcurrencyStrategy.READ_WRITE)
-public abstract class NodeEntity extends PanacheEntity implements Comparable<NodeEntity> {
+public abstract class NodeEntity extends PanacheEntityBase implements Comparable<NodeEntity> {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    public Long id;
 
     public static String FQDN_SEPARATOR = ":";
     public static String NAME_SEPARATOR = "=";

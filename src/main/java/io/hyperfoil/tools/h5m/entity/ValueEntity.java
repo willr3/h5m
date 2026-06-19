@@ -1,7 +1,7 @@
 package io.hyperfoil.tools.h5m.entity;
 
 import io.hyperfoil.tools.jjq.value.JqValue;
-import io.quarkus.hibernate.orm.panache.PanacheEntity;
+import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
@@ -27,7 +27,11 @@ import java.util.stream.Collectors;
 @Immutable
 @Cacheable
 @Cache(usage = CacheConcurrencyStrategy.READ_ONLY)
-public class ValueEntity extends PanacheEntity {
+public class ValueEntity extends PanacheEntityBase {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    public Long id;
 
     @Column(columnDefinition = "JSONB")
     @JdbcTypeCode(SqlTypes.JSON)

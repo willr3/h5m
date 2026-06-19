@@ -7,6 +7,12 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [postgresql, sqlite]
+
+    name: build (${{ matrix.database }})
 
     steps:
       - uses: actions/checkout@v4
@@ -18,14 +24,19 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Build and test
+      - name: Build and test (PostgreSQL)
+        if: matrix.database == 'postgresql'
         run: mvn -B clean verify
+
+      - name: Build and test (SQLite)
+        if: matrix.database == 'sqlite'
+        run: mvn -B clean verify -Dsqlite
 
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: test-reports
+          name: test-reports-${{ matrix.database }}
           path: |
             **/target/surefire-reports/
             **/target/failsafe-reports/

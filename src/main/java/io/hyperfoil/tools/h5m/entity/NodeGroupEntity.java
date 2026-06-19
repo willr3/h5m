@@ -2,7 +2,7 @@ package io.hyperfoil.tools.h5m.entity;
 
 import io.hyperfoil.tools.h5m.entity.node.RootNode;
 import io.hyperfoil.tools.h5m.entity.validation.ValidNode;
-import io.quarkus.hibernate.orm.panache.PanacheEntity;
+import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 
@@ -10,7 +10,11 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Entity(name = "node_group")
-public class NodeGroupEntity extends PanacheEntity {
+public class NodeGroupEntity extends PanacheEntityBase {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    public Long id;
 
     public String name;
 

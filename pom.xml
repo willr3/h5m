@@ -56,7 +56,6 @@
         <lib.aesh>3.5</lib.aesh>
 
         <!-- dependencies -->
-        <lib.duckdb>1.4.4.0</lib.duckdb>
         <lib.jdbi>3.41.3</lib.jdbi>
         <lib.jhunter>0.1.0</lib.jhunter>
         <lib.jjq>0.1.6</lib.jjq>
@@ -208,11 +207,6 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-math3</artifactId>
             <version>${lib.math3}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.duckdb</groupId>
-            <artifactId>duckdb_jdbc</artifactId>
-            <version>${lib.duckdb}</version>
         </dependency>
         <dependency>
             <groupId>org.graalvm.polyglot</groupId>
@@ -414,6 +408,7 @@
                         <exclude>**/*IT.java</exclude>
                         <exclude>**/benchmark/**</exclude>
                     </excludes>
+                    <excludedGroups>sqlite-only</excludedGroups>
                     <systemPropertyVariables>
                         <projectArtifactId>${project.artifactId}-${project.version}</projectArtifactId>
                         <projectDir>${project.build.outputDirectory}</projectDir>
@@ -531,6 +526,31 @@
                                 </configuration>
                             </execution>
                         </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>sqlite</id>
+            <activation>
+                <property>
+                    <name>sqlite</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>${build.maven-surefire-plugin}</version>
+                        <configuration>
+                            <excludedGroups>postgresql-only</excludedGroups>
+                            <systemPropertyVariables>
+                                <quarkus.datasource.db-kind>sqlite</quarkus.datasource.db-kind>
+                                <quarkus.datasource.devservices.enabled>false</quarkus.datasource.devservices.enabled>
+                                <quarkus.datasource.jdbc.url>jdbc:sqlite:${java.io.tmpdir}/h5m-test.db</quarkus.datasource.jdbc.url>
+                            </systemPropertyVariables>
+                        </configuration>
                     </plugin>
                 </plugins>
             </build>

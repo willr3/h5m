@@ -3,7 +3,8 @@ package io.hyperfoil.tools.h5m;
 import io.agroal.api.AgroalDataSource;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManagerFactory;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
+import jakarta.transaction.Status;
+import jakarta.transaction.TransactionManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 
@@ -21,51 +22,36 @@ public class FreshDb {
     @Inject
     EntityManagerFactory emf;
 
-    @ConfigProperty(name="quarkus.datasource.db-kind")
-    String dbKind;
+    @Inject
+    TransactionManager tm;
 
     @BeforeEach
     @AfterEach
-    public void dropRows() throws SQLException {
+    public void dropRows() throws Exception {
         // Evict 2LC before truncating tables — prevents stale cached entities
         emf.getCache().evictAll();
-        try(Connection conn = ds.getConnection()){
-            conn.setAutoCommit(true);
-            try(Statement stmt = conn.createStatement()){
 
-                if(dbKind.equals("postgresql")){
-                    stmt.executeUpdate("TRUNCATE TABLE processing_tracker CASCADE");
-                    stmt.executeUpdate("TRUNCATE TABLE folder_view_component CASCADE");
-                    stmt.executeUpdate("TRUNCATE TABLE folder_view CASCADE");
-                    stmt.executeUpdate("TRUNCATE TABLE notification_log CASCADE");
-                    stmt.executeUpdate("TRUNCATE TABLE notification_config CASCADE");
-                    stmt.executeUpdate("TRUNCATE TABLE api_key CASCADE");
-                    stmt.executeUpdate("TRUNCATE TABLE team_members CASCADE");
-                    stmt.executeUpdate("TRUNCATE TABLE value_edge CASCADE");
-                    stmt.executeUpdate("TRUNCATE TABLE value CASCADE");
-                    stmt.executeUpdate("TRUNCATE TABLE folder CASCADE");
-                    stmt.executeUpdate("TRUNCATE TABLE node_group CASCADE");
-                    stmt.executeUpdate("TRUNCATE TABLE node_edge CASCADE");
-                    stmt.executeUpdate("TRUNCATE TABLE node CASCADE");
-                    stmt.executeUpdate("TRUNCATE TABLE h5m_user CASCADE");
-                    stmt.executeUpdate("TRUNCATE TABLE team CASCADE");
-                }else if (dbKind.equals("sqlite")){
-                    stmt.executeUpdate("DELETE from processing_tracker");
-                    stmt.executeUpdate("DELETE from folder_view_component");
-                    stmt.executeUpdate("DELETE from folder_view");
-                    stmt.executeUpdate("DELETE from notification_log");
-                    stmt.executeUpdate("DELETE from notification_config");
-                    stmt.executeUpdate("DELETE from api_key");
-                    stmt.executeUpdate("DELETE from team_members");
-                    stmt.executeUpdate("DELETE from value_edge");
-                    stmt.executeUpdate("DELETE from value");
-                    stmt.executeUpdate("DELETE from folder");
-                    stmt.executeUpdate("DELETE from node_group");
-                    stmt.executeUpdate("DELETE from node_edge");
-                    stmt.executeUpdate("DELETE from node");
-                    stmt.executeUpdate("DELETE from h5m_user");
-                    stmt.executeUpdate("DELETE from team");
-                }
+        if (tm.getStatus() != Status.STATUS_NO_TRANSACTION) {
+            tm.rollback();
+        }
+        try(Connection conn = ds.getConnection()){
+            try(Statement stmt = conn.createStatement()){
+                stmt.executeUpdate("DELETE from processing_tracker");
+                stmt.executeUpdate("DELETE from folder_view_component");
+                stmt.executeUpdate("DELETE from folder_view");
+                stmt.executeUpdate("DELETE from notification_log");
+                stmt.executeUpdate("DELETE from notification_config");
+                stmt.executeUpdate("DELETE from api_key");
+                stmt.executeUpdate("DELETE from team_members");
+                stmt.executeUpdate("DELETE from value_edge");
+                stmt.executeUpdate("DELETE from value");
+                stmt.executeUpdate("DELETE from folder");
+                stmt.executeUpdate("UPDATE node SET group_id = NULL, original_group_id = NULL, target_group_id = NULL, previous_version_id = NULL, original_node_id = NULL");
+                stmt.executeUpdate("DELETE from node_edge");
+                stmt.executeUpdate("DELETE from node_group");
+                stmt.executeUpdate("DELETE from node");
+                stmt.executeUpdate("DELETE from h5m_user");
+                stmt.executeUpdate("DELETE from team");
             }
         }
     }

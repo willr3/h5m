@@ -69,7 +69,7 @@ public class UploadPipelineBenchmarkTest extends FreshDb {
     };
 
     @Override
-    public void dropRows() throws SQLException {
+    public void dropRows() throws Exception {
         try {
             awaitWorkQueue();
         } catch (InterruptedException e) {

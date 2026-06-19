@@ -1,7 +1,7 @@
 package io.hyperfoil.tools.h5m.entity;
 
 import io.hyperfoil.tools.h5m.api.ProcessingType;
-import io.quarkus.hibernate.orm.panache.PanacheEntity;
+import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 
@@ -19,7 +19,11 @@ import java.time.LocalDateTime;
  * </ul>
  */
 @Entity(name = "processing_tracker")
-public class ProcessingTrackerEntity extends PanacheEntity {
+public class ProcessingTrackerEntity extends PanacheEntityBase {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    public Long id;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, updatable = false)

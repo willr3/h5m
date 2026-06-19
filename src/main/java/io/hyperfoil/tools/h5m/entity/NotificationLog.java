@@ -1,6 +1,6 @@
 package io.hyperfoil.tools.h5m.entity;
 
-import io.quarkus.hibernate.orm.panache.PanacheEntity;
+import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 
@@ -14,7 +14,11 @@ import java.time.LocalDateTime;
     @Index(name = "idx_notification_log_folder", columnList = "folder_id"),
     @Index(name = "idx_notification_log_sent_at", columnList = "sentAt")
 })
-public class NotificationLog extends PanacheEntity {
+public class NotificationLog extends PanacheEntityBase {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    public Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "folder_id")

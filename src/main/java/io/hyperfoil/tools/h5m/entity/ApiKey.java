@@ -1,16 +1,23 @@
 package io.hyperfoil.tools.h5m.entity;
 
-import io.quarkus.hibernate.orm.panache.PanacheEntity;
+import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
 import jakarta.persistence.ManyToOne;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
 @Entity(name = "api_key")
-public class ApiKey extends PanacheEntity {
+public class ApiKey extends PanacheEntityBase {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    public Long id;
 
     @Column(name = "key_hash")
     public String keyHash; // SHA-256 hex

@@ -1,10 +1,14 @@
 package io.hyperfoil.tools.h5m.entity;
 
-import io.quarkus.hibernate.orm.panache.PanacheEntity;
+import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 
 @Entity(name="folder")
-public class FolderEntity extends PanacheEntity {
+public class FolderEntity extends PanacheEntityBase {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    public Long id;
 
     @Column(unique = true)
     public String name;

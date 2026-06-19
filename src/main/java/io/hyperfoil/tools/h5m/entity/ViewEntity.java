@@ -1,6 +1,6 @@
 package io.hyperfoil.tools.h5m.entity;
 
-import io.quarkus.hibernate.orm.panache.PanacheEntity;
+import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 
@@ -9,7 +9,11 @@ import java.util.List;
 
 @Entity(name = "folder_view")
 @Table(uniqueConstraints = @UniqueConstraint(columnNames = {"folder_id", "name"}))
-public class ViewEntity extends PanacheEntity {
+public class ViewEntity extends PanacheEntityBase {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    public Long id;
 
     @NotNull
     public String name;

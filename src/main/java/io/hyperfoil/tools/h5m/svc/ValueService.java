@@ -35,10 +35,6 @@ public class ValueService implements ValueServiceInterface {
     @Inject
     EntityManager em;
 
-//    @Inject
-//    @Named("duckdb")
-//    AgroalDataSource duckDatasource;
-
     @Inject
     ApiMapper apiMapper;
 

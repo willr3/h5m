@@ -825,7 +825,8 @@ public class RestEndpointTest extends FreshDb {
         tm.begin();
         FolderEntity folder = FolderEntity.find("name", "rhivos-perf-comprehensive").firstResult();
         Long startTimeNodeId = folder.group.sources.stream()
-                .filter(n -> "start_time".equals(n.name)).findFirst().get().id;
+                .filter(n -> "start_time".equals(n.name) && n.sources.contains(folder.group.root))
+                .findFirst().get().id;
         Long endTimeNodeId = folder.group.sources.stream()
                 .filter(n -> "end_time".equals(n.name)).findFirst().get().id;
         tm.commit();
@@ -874,7 +875,8 @@ public class RestEndpointTest extends FreshDb {
         tm.begin();
         FolderEntity folder = FolderEntity.find("name", "rhivos-perf-comprehensive").firstResult();
         Long startTimeNodeId = folder.group.sources.stream()
-                .filter(n -> "start_time".equals(n.name)).findFirst().get().id;
+                .filter(n -> "start_time".equals(n.name) && n.sources.contains(folder.group.root))
+                .findFirst().get().id;
         tm.commit();
 
         String viewJson = viewToJson(new io.hyperfoil.tools.h5m.api.View(
@@ -916,7 +918,8 @@ public class RestEndpointTest extends FreshDb {
         tm.begin();
         FolderEntity folder = FolderEntity.find("name", "rhivos-perf-comprehensive").firstResult();
         Long startTimeNodeId = folder.group.sources.stream()
-                .filter(n -> "start_time".equals(n.name)).findFirst().get().id;
+                .filter(n -> "start_time".equals(n.name) && n.sources.contains(folder.group.root))
+                .findFirst().get().id;
         Long endTimeNodeId = folder.group.sources.stream()
                 .filter(n -> "end_time".equals(n.name)).findFirst().get().id;
         tm.commit();

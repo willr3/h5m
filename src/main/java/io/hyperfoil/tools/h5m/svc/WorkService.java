@@ -36,7 +36,7 @@ import java.util.stream.Collectors;
 @ApplicationScoped
 public class WorkService implements WorkServiceInterface {
 
-    private static final int RETRY_LIMIT = 0;
+    private static final int RETRY_LIMIT = 3;
 
     @Inject
     EntityManager em;
@@ -365,14 +365,14 @@ public class WorkService implements WorkServiceInterface {
                 });
             }
         }catch( Exception e){
-            Log.errorf(e, "WorkRunner caught: %s\n work=%s", e.getMessage(), w);
+            Log.debugf(e, "WorkRunner caught: %s\n work=%s", e.getMessage(), w);
             w.retryCount++;
             if(w.retryCount > RETRY_LIMIT){
                 Log.error("Work exceeded retry limit");
                 // Fail trackers so CompletableFutures complete exceptionally
                 failTrackers(w, e);
             } else {
-                Log.info("Adding work to retry in queue");
+                Log.infof("Retry work %s due to: %s", w, e.getMessage());
                 workQueue.add(w);
                 // Skip decrement in finally — work is re-queued and will be
                 // decremented when the retry completes

@@ -57,22 +57,37 @@ public class ProcessingService {
      * top-level) so that mid-cascade crashes are recovered correctly — the
      * deduplication logic in execute() skips already-computed values while
      * ensuring missing children are still calculated.
+     * <p>
+     * Recovery is split into two phases to avoid SQLITE_BUSY_SNAPSHOT errors.
+     * <ul>
+     *   <li>Phase 1 (inside the transaction): reads incomplete trackers, updates
+     *       their state (marking old ones completed, persisting new recovery
+     *       trackers), and collects the actual recovery work
+     *       (recalculate/createTracked calls) as deferred actions.</li>
+     *   <li>Phase 2 (after the transaction commits): runs the deferred actions.
+     *       These open their own transactions (via requiringNew), which would
+     *       deadlock with SQLite's single-writer constraint if they ran inside
+     *       the Phase 1 transaction.</li>
+     * </ul>
      */
-    @Transactional
     public void recoverIncompleteProcessing(@Observes @Priority(2) StartupEvent ev) {
         //ev == null when forced to recover
         if(!ConfigUtils.getProfiles().contains("cli") || ev == null) {
-            List<ProcessingTrackerEntity> incomplete = ProcessingTrackerEntity.find("completed", false).list();
-            if (!incomplete.isEmpty()) {
-                Log.infof("Found %d incomplete processing operations to recover", incomplete.size());
-                for (ProcessingTrackerEntity tracking : incomplete) {
-                    switch (tracking.type) {
-                        case UPLOAD -> recoverUpload(tracking);
-                        case RECALCULATE -> recoverRecalculate(tracking);
-                        case RECALCULATE_NODE -> recoverRecalculateNode(tracking);
+            List<Runnable> deferred = new ArrayList<>();
+            QuarkusTransaction.requiringNew().run(() -> {
+                List<ProcessingTrackerEntity> incomplete = ProcessingTrackerEntity.find("completed", false).list();
+                if (!incomplete.isEmpty()) {
+                    Log.infof("Found %d incomplete processing operations to recover", incomplete.size());
+                    for (ProcessingTrackerEntity tracking : incomplete) {
+                        switch (tracking.type) {
+                            case UPLOAD -> recoverUpload(tracking, deferred);
+                            case RECALCULATE -> recoverRecalculate(tracking, deferred);
+                            case RECALCULATE_NODE -> recoverRecalculateNode(tracking, deferred);
+                        }
                     }
                 }
-            }
+            });
+            deferred.forEach(Runnable::run);
         }
     }
 
@@ -88,7 +103,7 @@ public class ProcessingService {
         return incomplete.size();
     }
 
-    private void recoverUpload(ProcessingTrackerEntity tracking) {
+    private void recoverUpload(ProcessingTrackerEntity tracking, List<Runnable> deferred) {
         ValueEntity rootValue = ValueEntity.findById(tracking.referenceId);
         if (rootValue == null) {
             Log.warnf("Root value %d not found for incomplete upload, removing tracking record", tracking.referenceId);
@@ -107,9 +122,9 @@ public class ProcessingService {
                 .map(node -> new Work(node, new ArrayList<>(node.sources), List.of(rootValue)))
                 .toList();
         if (!works.isEmpty()) {
-            CompletableFuture<Void> future = workService.createTracked(works, Set.of(rootValue.id));
-            future.whenComplete((v, t) -> {
-                QuarkusTransaction.requiringNew().run(() -> {
+            // Defer work creation until after the recovery transaction commits — createTracked opens its own transaction via afterCompletion
+            deferred.add(() ->
+                workService.createTracked(works, Set.of(rootValue.id)).whenComplete((_, _) -> QuarkusTransaction.requiringNew().run(() -> {
                     ProcessingTrackerEntity entity = ProcessingTrackerEntity.find(
                             "type = ?1 and referenceId = ?2", ProcessingType.UPLOAD, rootValue.id).firstResult();
                     if (entity != null) {
@@ -118,14 +133,14 @@ public class ProcessingService {
                     valueService.nullifyEphemeralData(rootValue.id);
                     // Evict cached ValueEntity instances since data was nullified via native SQL
                     em.getEntityManagerFactory().getCache().evict(ValueEntity.class);
-                });
-            });
+                }))
+            );
         } else {
             tracking.completed = true;
         }
     }
 
-    private void recoverRecalculate(ProcessingTrackerEntity tracking) {
+    private void recoverRecalculate(ProcessingTrackerEntity tracking, List<Runnable> deferred) {
         FolderEntity folder = findFolderById(tracking.folderId);
         if (folder == null) {
             Log.warnf("Folder %d not found for incomplete recalculation, removing tracking record", tracking.folderId);
@@ -134,10 +149,10 @@ public class ProcessingService {
         }
         Log.infof("Re-triggering full recalculation for folder '%s' (id=%d)", folder.name, tracking.folderId);
         tracking.completed = true;
-        recalculate(folder.name);
+        deferred.add(() -> recalculate(folder.name));
     }
 
-    private void recoverRecalculateNode(ProcessingTrackerEntity tracking) {
+    private void recoverRecalculateNode(ProcessingTrackerEntity tracking, List<Runnable> deferred) {
         FolderEntity folder = findFolderById(tracking.folderId);
         if (folder == null) {
             Log.warnf("Folder %d not found for incomplete node recalculation, removing tracking record", tracking.folderId);
@@ -190,9 +205,9 @@ public class ProcessingService {
         }
         if (!works.isEmpty()) {
             long recoveryTrackerId = recoveryTracker.id;
-            CompletableFuture<Void> future = workService.createTracked(works, rootValueIds);
-            future.whenComplete((v, t) -> {
-                QuarkusTransaction.requiringNew().run(() -> {
+            // Defer work creation until after the recovery transaction commits — createTracked opens its own transaction via afterCompletion
+            deferred.add(() -> {
+                workService.createTracked(works, rootValueIds).whenComplete((_, _) -> QuarkusTransaction.requiringNew().run(() -> {
                     ProcessingTrackerEntity entity = ProcessingTrackerEntity.findById(recoveryTrackerId);
                     if (entity != null) {
                         entity.completed = true;
@@ -202,7 +217,7 @@ public class ProcessingService {
                     }
                     // Evict cached ValueEntity instances since data was nullified via native SQL
                     em.getEntityManagerFactory().getCache().evict(ValueEntity.class);
-                });
+                }));
             });
         } else {
             recoveryTracker.completed = true;
