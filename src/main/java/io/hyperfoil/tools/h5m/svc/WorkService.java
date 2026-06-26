@@ -284,6 +284,7 @@ public class WorkService implements WorkServiceInterface {
                 return;
             }
             List<ValueEntity> newOrUpdated = new ArrayList<>();
+            List<ValueEntity> toPersist = new ArrayList<>();
             for(ValueEntity v : sourceValues) {
                 for(NodeEntity activeNode : activeNodes){
                     Map<String, ValueEntity> descendants = valueService.getDescendantValueByPath(v, activeNode);
@@ -317,14 +318,16 @@ public class WorkService implements WorkServiceInterface {
                             }
                             descendants.remove(path);//remove it so we know what is left over
                         }else{
-                            //we need to persist the newValue
-                            valueService.create(newValue);
+                            toPersist.add(newValue);
                         }
                     }
                     if(!descendants.isEmpty()){//values that need to be deleted
                         descendants.values().forEach(valueService::delete);
                     }
                 }
+            }
+            if (!toPersist.isEmpty()) {
+                valueService.createAll(toPersist);
             }
             newOrUpdated.addAll(calculated);
             if(!newOrUpdated.isEmpty()){

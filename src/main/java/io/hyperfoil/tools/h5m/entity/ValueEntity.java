@@ -12,6 +12,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.Immutable;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.Mutability;
+import org.hibernate.annotations.NativeGenerator;
 import org.hibernate.type.SqlTypes;
 import org.hibernate.type.descriptor.java.Immutability;
 
@@ -30,7 +31,7 @@ import java.util.stream.Collectors;
 public class ValueEntity extends PanacheEntityBase {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @NativeGenerator
     public Long id;
 
     @Column(columnDefinition = "JSONB")

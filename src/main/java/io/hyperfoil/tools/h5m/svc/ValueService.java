@@ -64,6 +64,24 @@ public class ValueService implements ValueServiceInterface {
     }
 
     @Transactional
+    public List<ValueEntity> createAll(List<ValueEntity> values){
+        List<ValueEntity> result = new ArrayList<>(values.size());
+        for (ValueEntity value : values) {
+            if (!value.isPersistent()) {
+                result.add(em.merge(value));
+            } else {
+                value.persist();
+                result.add(value);
+            }
+        }
+        em.flush();
+        for (int i = 0; i < values.size(); i++) {
+            values.get(i).id = result.get(i).id;
+        }
+        return result;
+    }
+
+    @Transactional
     public List<ValueEntity> getDependentValues(ValueEntity v){
         return ValueEntity.list("SELECT DISTINCT v FROM value v JOIN v.sources s WHERE s.id = ?1",v.id);
     }
