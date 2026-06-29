@@ -9,19 +9,18 @@ import io.hyperfoil.tools.jjq.value.JqValue;
 import io.hyperfoil.tools.jjq.value.JqValues;
 import io.hyperfoil.tools.h5m.api.Folder;
 import io.hyperfoil.tools.h5m.api.FolderSummary;
+
 import io.hyperfoil.tools.h5m.api.svc.FolderServiceInterface;
 import io.hyperfoil.tools.h5m.entity.FolderEntity;
 import io.hyperfoil.tools.h5m.entity.NodeEntity;
 import io.hyperfoil.tools.h5m.entity.NodeGroupEntity;
-import io.hyperfoil.tools.h5m.entity.UploadProcessingEntity;
+import io.hyperfoil.tools.h5m.entity.ProcessingTrackerEntity;
+import io.hyperfoil.tools.h5m.api.ProcessingType;
 import io.hyperfoil.tools.h5m.entity.Team;
 import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.entity.ViewEntity;
 import io.hyperfoil.tools.h5m.entity.mapper.ApiMapper;
 import io.hyperfoil.tools.h5m.entity.node.*;
-import io.quarkus.runtime.StartupEvent;
-import jakarta.annotation.Priority;
-import jakarta.enterprise.event.Observes;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.hyperfoil.tools.h5m.entity.work.Work;
 import io.quarkus.logging.Log;
@@ -59,63 +58,14 @@ public class FolderService implements FolderServiceInterface {
     WorkService workService;
 
     @Inject
+    ProcessingService processingService;
+
+    @Inject
     AuthorizationService authService;
 
     @Inject
     ApiMapper apiMapper;
 
-    /**
-     * On startup, re-trigger processing for any uploads that were interrupted
-     * (e.g., by a crash). Uses all source nodes (not just top-level) so that
-     * mid-cascade crashes are recovered correctly — the deduplication logic in
-     * execute() skips already-computed values while ensuring missing children
-     * are still calculated.
-     */
-    @Transactional
-    public void recoverIncompleteUploads(@Observes @Priority(2) StartupEvent ev) {
-        List<UploadProcessingEntity> incomplete = UploadProcessingEntity.find("completed", false).list();
-        if (!incomplete.isEmpty()) {
-            Log.infof("Found %d incomplete uploads to recover", incomplete.size());
-            for (UploadProcessingEntity tracking : incomplete) {
-                ValueEntity rootValue = ValueEntity.findById(tracking.rootValueId);
-                if (rootValue == null) {
-                    Log.warnf("Root value %d not found for incomplete upload, removing tracking record", tracking.rootValueId);
-                    tracking.delete();
-                    continue;
-                }
-                FolderEntity folder = em.createQuery(
-                        "SELECT f FROM folder f JOIN FETCH f.group g LEFT JOIN FETCH g.sources LEFT JOIN FETCH g.root WHERE f.name = :name",
-                        FolderEntity.class
-                ).setParameter("name", tracking.folderName).getResultStream().findFirst().orElse(null);
-                if (folder == null) {
-                    Log.warnf("Folder '%s' not found for incomplete upload, removing tracking record", tracking.folderName);
-                    tracking.delete();
-                    continue;
-                }
-                Log.infof("Re-triggering processing for upload %d in folder '%s'", tracking.rootValueId, tracking.folderName);
-                // Use all source nodes (not just top-level) to handle mid-cascade crashes
-                List<Work> works = List.copyOf(folder.group.sources).stream()
-                        .map(node -> new Work(node, new ArrayList<>(node.sources), List.of(rootValue)))
-                        .toList();
-                if (!works.isEmpty()) {
-                    CompletableFuture<Void> future = workService.createTracked(works, Set.of(rootValue.id));
-                    future.whenComplete((v, t) -> {
-                        QuarkusTransaction.requiringNew().run(() -> {
-                            UploadProcessingEntity entity = UploadProcessingEntity.find("rootValueId", rootValue.id).firstResult();
-                            if (entity != null) {
-                                entity.completed = true;
-                            }
-                            valueService.nullifyEphemeralData(rootValue.id);
-                            // Evict cached ValueEntity instances since data was nullified via native SQL
-                            em.getEntityManagerFactory().getCache().evict(ValueEntity.class);
-                        });
-                    });
-                } else {
-                    tracking.completed = true;
-                }
-            }
-        }
-    }
 
     @Override
     @Transactional
@@ -278,28 +228,14 @@ public class FolderService implements FolderServiceInterface {
     }
 
 
-    /**
-     * Schedules recalculation of all Values in the FolderEntity.
-     * At the moment that means replacing all calculated values (no equality checking).
-     * @param folder
-     */
     @Override
-    @Transactional
-    public void recalculate(String name){
-        FolderEntity folder = em.createQuery(
-                "SELECT f FROM folder f JOIN FETCH f.group g LEFT JOIN FETCH g.sources LEFT JOIN FETCH g.root WHERE f.name = :name",
-                FolderEntity.class
-        ).setParameter("name", name).getSingleResult();
-        NodeEntity root = folder.group.root;
-        List<ValueEntity> rootValues = valueService.getValues(root);
-        rootValues.forEach(ValueEntity::getPath); // this fixes the LazyException, por que?
-        List<Work> newWorks = new ArrayList<>();
-        for(ValueEntity rootValue: rootValues){
-            for(NodeEntity source : List.copyOf(folder.group.sources)){
-                newWorks.add(new Work(source,new ArrayList<>(source.sources),List.of(rootValue)));
-            }
-        }
-        workService.create(newWorks);
+    public RecalculationTracker recalculate(String name) {
+        return processingService.recalculate(name);
+    }
+
+    @Override
+    public RecalculationTracker recalculateNode(long nodeId) {
+        return processingService.recalculateNode(nodeId);
     }
 
     /**
@@ -320,7 +256,7 @@ public class FolderService implements FolderServiceInterface {
             valueService.create(newValue);
 
             // Track this upload for crash recovery — marked completed when all work finishes
-            UploadProcessingEntity tracking = new UploadProcessingEntity(newValue.id, name);
+            ProcessingTrackerEntity tracking = new ProcessingTrackerEntity(ProcessingType.UPLOAD, folder.id, newValue.id);
             tracking.persist();
 
             //only queue the top level and let new values queue the remaining
@@ -338,7 +274,8 @@ public class FolderService implements FolderServiceInterface {
             // Mark completed and null out ephemeral data when all work finishes
             future.whenComplete((v, t) -> {
                 QuarkusTransaction.requiringNew().run(() -> {
-                    UploadProcessingEntity entity = UploadProcessingEntity.find("rootValueId", newValue.id).firstResult();
+                    ProcessingTrackerEntity entity = ProcessingTrackerEntity.find(
+                            "type = ?1 and referenceId = ?2", ProcessingType.UPLOAD, newValue.id).firstResult();
                     if (entity != null) {
                         entity.completed = true;
                     }

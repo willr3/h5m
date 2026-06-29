@@ -3,8 +3,11 @@ package io.hyperfoil.tools.h5m.rest;
 import io.hyperfoil.tools.jjq.value.JqValue;
 import io.hyperfoil.tools.h5m.api.Folder;
 import io.hyperfoil.tools.h5m.api.FolderSummary;
+import io.hyperfoil.tools.h5m.api.RecalculationStatus;
 import io.hyperfoil.tools.h5m.api.svc.FolderServiceInterface;
 import io.hyperfoil.tools.h5m.api.svc.ValueServiceInterface;
+import io.hyperfoil.tools.h5m.svc.RecalculationService;
+import io.hyperfoil.tools.h5m.svc.RecalculationTracker;
 import io.quarkus.security.Authenticated;
 import jakarta.annotation.security.PermitAll;
 import jakarta.inject.Inject;
@@ -15,8 +18,11 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
+import io.smallrye.common.annotation.Blocking;
+
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletionStage;
 
 @Path("/api/folder")
 @Produces(MediaType.APPLICATION_JSON)
@@ -29,6 +35,9 @@ public class FolderResource {
 
     @Inject
     ValueServiceInterface valueService;
+
+    @Inject
+    RecalculationService recalculationService;
 
     @GET
     @PermitAll
@@ -80,23 +89,33 @@ public class FolderResource {
     @POST
     @Path("{name}/upload")
     @Authenticated
-    @Operation(description = "Upload JSON data to a folder")
-    public void upload(
+    @Blocking
+    @Operation(description = "Upload JSON data to a folder. Returns when all processing completes.")
+    public CompletionStage<Void> upload(
             @PathParam("name") String name,
             @QueryParam("path") @Parameter(description = "Path within the folder") String path,
             JqValue data) {
-        folderService.upload(name, path, data);
-        // The upload() now returns a CompletableFuture, but the REST endpoint
-        // doesn't need to wait for it — the caller can poll for results.
-        // Future enhancement: return CompletionStage<Void> for async response.
+        return folderService.upload(name, path, data);
     }
 
     @POST
     @Path("{name}/recalculate")
     @Authenticated
-    @Operation(description = "Recalculate all values in a folder")
-    public void recalculate(@PathParam("name") String name) {
-        folderService.recalculate(name);
+    @Operation(description = "Start recalculation of all values in a folder. Returns immediately with a status for progress polling.")
+    public RecalculationStatus recalculate(@PathParam("name") String name) {
+        return folderService.recalculate(name).toStatus();
+    }
+
+    @GET
+    @Path("/recalculation/{id}")
+    @Authenticated
+    @Operation(description = "Get the progress of a recalculation operation.")
+    public RecalculationStatus getRecalculationStatus(@PathParam("id") String id) {
+        RecalculationTracker tracker = recalculationService.get(id);
+        if (tracker == null) {
+            throw new NotFoundException("Recalculation not found: " + id);
+        }
+        return tracker.toStatus();
     }
 
     @GET

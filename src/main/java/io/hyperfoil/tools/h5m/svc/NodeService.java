@@ -220,6 +220,7 @@ public class NodeService implements NodeServiceInterface {
                 }
             }
             em.merge(node);
+            em.flush();
         }
         return node.id;
     }

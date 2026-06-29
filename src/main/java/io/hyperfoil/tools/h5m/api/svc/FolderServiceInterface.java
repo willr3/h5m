@@ -3,7 +3,7 @@ package io.hyperfoil.tools.h5m.api.svc;
 import io.hyperfoil.tools.jjq.value.JqValue;
 import io.hyperfoil.tools.h5m.api.Folder;
 import io.hyperfoil.tools.h5m.api.FolderSummary;
-
+import io.hyperfoil.tools.h5m.svc.RecalculationTracker;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -67,11 +67,21 @@ public interface FolderServiceInterface {
     CompletableFuture<Void> upload(String name, String path, JqValue data);
 
     /**
-     * Recalculates the contents or state of a folder by its name.
+     * Recalculates all values in the folder by reprocessing each root value
+     * through the node graph. Returns a status tracker with progress information.
      *
      * @param name The name of the folder to recalculate.
+     * @return tracker with progress and completion future
      */
-    void recalculate(String name);
+    RecalculationTracker recalculate(String name);
+
+    /**
+     * Selectively recalculates values for a specific node and its dependents.
+     *
+     * @param nodeId The ID of the node to recalculate.
+     * @return tracker with progress and completion future
+     */
+    RecalculationTracker recalculateNode(long nodeId);
 
     /**
      * Retrieves the structural representation of a folder.

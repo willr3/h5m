@@ -25,6 +25,10 @@ public class Work implements Runnable, Comparable<Work>{
 
     public boolean cumulative = false;
 
+    /** Whether external notifications should be dispatched for detection results.
+     *  Set to false for recalculations and bulk imports. */
+    public boolean dispatch = true;
+
     public Work(){
         retryCount = 0;
     }

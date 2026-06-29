@@ -5,7 +5,8 @@ import io.hyperfoil.tools.h5m.api.EphemeralMode;
 import io.hyperfoil.tools.h5m.FreshDb;
 import io.hyperfoil.tools.h5m.entity.FolderEntity;
 import io.hyperfoil.tools.h5m.entity.NodeEntity;
-import io.hyperfoil.tools.h5m.entity.UploadProcessingEntity;
+import io.hyperfoil.tools.h5m.entity.ProcessingTrackerEntity;
+import io.hyperfoil.tools.h5m.api.ProcessingType;
 import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.entity.node.JqNode;
 import io.quarkus.test.junit.QuarkusTest;
@@ -27,6 +28,9 @@ public class FolderServiceTest extends FreshDb {
 
     @Inject
     FolderService folderService;
+
+    @Inject
+    ProcessingService processingService;
 
     @Inject
     WorkService workService;
@@ -75,7 +79,7 @@ public class FolderServiceTest extends FreshDb {
         valueService.create(rootValue);
 
         // Create an incomplete tracking record (simulating crash before completion)
-        UploadProcessingEntity tracking = new UploadProcessingEntity(rootValue.id, "recovery-test");
+        ProcessingTrackerEntity tracking = new ProcessingTrackerEntity(ProcessingType.UPLOAD, folderId, rootValue.id);
         tracking.persist();
         tm.commit();
 
@@ -86,7 +90,7 @@ public class FolderServiceTest extends FreshDb {
         tm.commit();
 
         // Trigger recovery
-        folderService.recoverIncompleteUploads(null);
+        processingService.recoverIncompleteProcessing(null);
         awaitIdle(10_000);
 
         // Verify the value was computed by the recovery
@@ -97,7 +101,7 @@ public class FolderServiceTest extends FreshDb {
                 "Recovered value should match the uploaded data");
 
         // Verify the tracking record is now completed
-        UploadProcessingEntity updatedTracking = UploadProcessingEntity.find("rootValueId", rootValue.id).firstResult();
+        ProcessingTrackerEntity updatedTracking = ProcessingTrackerEntity.find("referenceId", rootValue.id).firstResult();
         assertTrue(updatedTracking.completed, "Tracking record should be marked completed after recovery");
         tm.commit();
     }
@@ -106,17 +110,17 @@ public class FolderServiceTest extends FreshDb {
     public void recovery_skips_missing_root_value() throws Exception {
         // Create an incomplete tracking record pointing to a non-existent root value
         tm.begin();
-        UploadProcessingEntity tracking = new UploadProcessingEntity(999999L, "no-such-folder");
+        ProcessingTrackerEntity tracking = new ProcessingTrackerEntity(ProcessingType.UPLOAD, 999999L, 999999L);
         tracking.persist();
         long trackingId = tracking.id;
         tm.commit();
 
         // Trigger recovery — should log warning and delete the tracking record
-        folderService.recoverIncompleteUploads(null);
+        processingService.recoverIncompleteProcessing(null);
 
         // Verify the tracking record was deleted
         tm.begin();
-        UploadProcessingEntity deleted = UploadProcessingEntity.findById(trackingId);
+        ProcessingTrackerEntity deleted = ProcessingTrackerEntity.findById(trackingId);
         assertNull(deleted, "Tracking record should be deleted when root value is missing");
         tm.commit();
     }
@@ -132,17 +136,17 @@ public class FolderServiceTest extends FreshDb {
         valueService.create(rootValue);
         long rootValueId = rootValue.id;
 
-        UploadProcessingEntity tracking = new UploadProcessingEntity(rootValueId, "deleted-folder");
+        ProcessingTrackerEntity tracking = new ProcessingTrackerEntity(ProcessingType.UPLOAD, 888888L, rootValueId);
         tracking.persist();
         long trackingId = tracking.id;
         tm.commit();
 
         // Trigger recovery — "deleted-folder" doesn't exist
-        folderService.recoverIncompleteUploads(null);
+        processingService.recoverIncompleteProcessing(null);
 
         // Verify the tracking record was deleted
         tm.begin();
-        UploadProcessingEntity deleted = UploadProcessingEntity.findById(trackingId);
+        ProcessingTrackerEntity deleted = ProcessingTrackerEntity.findById(trackingId);
         assertNull(deleted, "Tracking record should be deleted when folder is missing");
         tm.commit();
     }
@@ -187,7 +191,7 @@ public class FolderServiceTest extends FreshDb {
         valueService.create(valValue);
 
         // But tracking was never marked completed (crash happened here)
-        UploadProcessingEntity tracking = new UploadProcessingEntity(rootValue.id, "already-computed");
+        ProcessingTrackerEntity tracking = new ProcessingTrackerEntity(ProcessingType.UPLOAD, folderId, rootValue.id);
         tracking.persist();
         long rootValueId = rootValue.id;
         tm.commit();
@@ -198,7 +202,7 @@ public class FolderServiceTest extends FreshDb {
         tm.commit();
 
         // Trigger recovery — should dedup everything and complete
-        folderService.recoverIncompleteUploads(null);
+        processingService.recoverIncompleteProcessing(null);
         awaitIdle(10_000);
 
         // Verify no new values were created (everything was deduped)
@@ -208,7 +212,7 @@ public class FolderServiceTest extends FreshDb {
                 "No new values should be created when all work was already computed");
 
         // Verify tracking is now completed
-        UploadProcessingEntity updatedTracking = UploadProcessingEntity.find("rootValueId", rootValueId).firstResult();
+        ProcessingTrackerEntity updatedTracking = ProcessingTrackerEntity.find("referenceId", rootValueId).firstResult();
         assertTrue(updatedTracking.completed,
                 "Tracking record should be marked completed even when all values were already computed");
         tm.commit();
@@ -373,13 +377,13 @@ public class FolderServiceTest extends FreshDb {
                 JqValues.parse("{\"key\": \"k1\", \"value\": \"v1\"}"));
         valueService.create(rootValue);
 
-        UploadProcessingEntity tracking = new UploadProcessingEntity(rootValue.id, "multi-node-test");
+        ProcessingTrackerEntity tracking = new ProcessingTrackerEntity(ProcessingType.UPLOAD, folderId, rootValue.id);
         tracking.persist();
         long rootValueId = rootValue.id;
         tm.commit();
 
         // Trigger recovery
-        folderService.recoverIncompleteUploads(null);
+        processingService.recoverIncompleteProcessing(null);
         awaitIdle(10_000);
 
         // Verify both nodes computed values
@@ -393,7 +397,7 @@ public class FolderServiceTest extends FreshDb {
         assertEquals("v1", valValues.get(0).data.asText());
 
         // Verify tracking completed
-        UploadProcessingEntity updatedTracking = UploadProcessingEntity.find("rootValueId", rootValueId).firstResult();
+        ProcessingTrackerEntity updatedTracking = ProcessingTrackerEntity.find("referenceId", rootValueId).firstResult();
         assertTrue(updatedTracking.completed, "Tracking record should be marked completed after recovery");
         tm.commit();
     }

@@ -3,9 +3,14 @@ package io.hyperfoil.tools.h5m.rest;
 import io.hyperfoil.tools.h5m.api.EphemeralMode;
 import io.hyperfoil.tools.h5m.api.Node;
 import io.hyperfoil.tools.h5m.api.NodeType;
+import io.hyperfoil.tools.h5m.api.RecalculationStatus;
+import io.hyperfoil.tools.h5m.api.svc.FolderServiceInterface;
 import io.hyperfoil.tools.h5m.api.svc.NodeServiceInterface;
+import io.hyperfoil.tools.h5m.entity.FolderEntity;
 import io.hyperfoil.tools.h5m.entity.NodeEntity;
-import io.hyperfoil.tools.h5m.entity.UploadProcessingEntity;
+import io.hyperfoil.tools.h5m.entity.ProcessingTrackerEntity;
+import io.hyperfoil.tools.h5m.api.ProcessingType;
+import io.hyperfoil.tools.h5m.svc.NodeService;
 import io.hyperfoil.tools.h5m.svc.ValueService;
 import io.quarkus.security.Authenticated;
 import jakarta.annotation.security.PermitAll;
@@ -20,6 +25,7 @@ import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import java.util.List;
+import java.util.Objects;
 
 @Path("/api/node")
 @Produces(MediaType.APPLICATION_JSON)
@@ -29,6 +35,12 @@ public class NodeResource {
 
     @Inject
     NodeServiceInterface nodeService;
+
+    @Inject
+    NodeService nodeServiceImpl; // for update() which is not on the interface
+
+    @Inject
+    FolderServiceInterface folderService;
 
     @Inject
     ValueService valueService;
@@ -59,6 +71,51 @@ public class NodeResource {
         } catch (IllegalArgumentException e) {
             throw new BadRequestException("Invalid node configuration request: " + e.getMessage(), e);
         }
+    }
+
+    public record NodeUpdateRequest(String name, String operation) {}
+    public record NodeUpdateResponse(long nodeId, RecalculationStatus recalculation) {}
+
+    @PUT
+    @Path("{id}")
+    @Authenticated
+    @Transactional
+    @Operation(description = "Update a node's name and/or operation. If the operation changes, triggers selective recalculation.")
+    public NodeUpdateResponse update(@PathParam("id") Long id, NodeUpdateRequest request) {
+        NodeEntity existing = NodeEntity.findById(id);
+        if (existing == null) {
+            throw new NotFoundException("Node not found: " + id);
+        }
+        boolean operationChanged = request.operation != null && !Objects.equals(existing.operation, request.operation);
+
+        // Apply updates to the existing entity
+        if (request.name != null) {
+            existing.name = request.name;
+        }
+        if (request.operation != null) {
+            existing.operation = request.operation;
+        }
+        nodeServiceImpl.update(existing);
+
+        // Trigger recalculation if the operation changed. recalculateNode()
+        // opens a requiringNew transaction that only reads the node's group
+        // and folder structure — not the operation. The actual operation is
+        // read later by async Work executors, after this @Transactional
+        // method returns and the update is committed.
+        RecalculationStatus status = null;
+        if (operationChanged && existing.group != null) {
+            status = folderService.recalculateNode(id).toStatus();
+        }
+
+        return new NodeUpdateResponse(id, status);
+    }
+
+    @POST
+    @Path("{id}/recalculate")
+    @Authenticated
+    @Operation(description = "Recalculate a specific node and its dependents. Returns immediately with a status for progress polling.")
+    public RecalculationStatus recalculateNode(@PathParam("id") Long nodeId) {
+        return folderService.recalculateNode(nodeId).toStatus();
     }
 
     @DELETE
@@ -93,8 +150,10 @@ public class NodeResource {
         node.ephemeral = ephemeralMode;
         if (ephemeralMode == EphemeralMode.DISCARD) {
             // Only nullify existing data if no uploads are in progress for this folder
-            String folderName = node.group.name;
-            long inFlight = UploadProcessingEntity.count("folderName = ?1 and completed = false", folderName);
+            FolderEntity folder = FolderEntity.find("group.id", node.group.id).firstResult();
+            long inFlight = folder != null
+                    ? ProcessingTrackerEntity.count("type = ?1 and folderId = ?2 and completed = false", ProcessingType.UPLOAD, folder.id)
+                    : 0;
             if (inFlight == 0) {
                 valueService.nullifyNodeData(nodeId);
             }

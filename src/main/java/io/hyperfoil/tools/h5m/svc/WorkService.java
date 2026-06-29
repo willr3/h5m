@@ -216,6 +216,13 @@ public class WorkService implements WorkServiceInterface {
         return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
     }
 
+    /**
+     * Returns the tracker for the given root value ID, if one exists.
+     */
+    public Optional<UploadTracker> getTracker(long rootValueId) {
+        return Optional.ofNullable(trackers.get(rootValueId));
+    }
+
     @Override
     public boolean isIdle() {
         return workExecutor.getWorkQueue().isIdle();
@@ -330,13 +337,16 @@ public class WorkService implements WorkServiceInterface {
                                 .map(v -> v.folder.id)
                                 .findFirst()
                                 .orElse(-1L);
-                        changeDetectedEvent.fire(new ChangeDetectedEvent(folderId, node.getId(), node.name, valueIds, true));
+                        changeDetectedEvent.fire(new ChangeDetectedEvent(folderId, node.getId(), node.name, valueIds, w.dispatch));
                     }
-                    //we need to trigger more calculations? perhaps for a recalculation we do?
-                    // Cascade work inherits sourceValues, so tracker association
-                    // is derived automatically via findTrackers()
+                    // Cascade work inherits sourceValues and dispatch flag, so tracker
+                    // association is derived automatically via findTrackers()
                     List<Work> cascadeWork = nodeService.getDependentNodes(node).stream()
-                            .map(n -> new Work(n, n.sources, sourceValues))
+                            .map(n -> {
+                                Work cascaded = new Work(n, n.sources, sourceValues);
+                                cascaded.dispatch = w.dispatch;
+                                return cascaded;
+                            })
                             .toList();
                     create(cascadeWork);
                 }

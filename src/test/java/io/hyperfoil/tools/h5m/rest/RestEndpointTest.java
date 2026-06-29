@@ -200,11 +200,35 @@ public class RestEndpointTest extends FreshDb {
     public void folder_recalculate() {
         createFolder("recalc-test");
 
-        given()
+        // Start recalculation — should return status with ID and progress fields
+        String id = given()
                 .contentType(MediaType.APPLICATION_JSON)
                 .when().post("/api/folder/recalc-test/recalculate")
                 .then()
-                .statusCode(204);
+                .statusCode(200)
+                .body("id", org.hamcrest.Matchers.notNullValue())
+                .body("folderName", org.hamcrest.Matchers.equalTo("recalc-test"))
+                .body("state", org.hamcrest.Matchers.notNullValue())
+                .body("totalRoots", org.hamcrest.Matchers.notNullValue())
+                .body("completedRoots", org.hamcrest.Matchers.notNullValue())
+                .body("durationMs", org.hamcrest.Matchers.notNullValue())
+                .extract().path("id");
+
+        // Poll recalculation status
+        given()
+                .contentType(MediaType.APPLICATION_JSON)
+                .when().get("/api/folder/recalculation/" + id)
+                .then()
+                .statusCode(200)
+                .body("id", org.hamcrest.Matchers.equalTo(id))
+                .body("state", org.hamcrest.Matchers.notNullValue());
+
+        // Non-existent recalculation should return 404
+        given()
+                .contentType(MediaType.APPLICATION_JSON)
+                .when().get("/api/folder/recalculation/does-not-exist")
+                .then()
+                .statusCode(404);
     }
 
     // -- Node endpoints --
@@ -245,6 +269,22 @@ public class RestEndpointTest extends FreshDb {
                 .then()
                 .statusCode(200)
                 .body("size()", equalTo(0));
+    }
+
+    @Test
+    public void node_update() {
+        createFolder("node-update-test");
+        Long groupId = getGroupId("node-update-test");
+        Long nodeId = createNode(groupId, "updatable", ".foo");
+
+        // Update operation — should return nodeId and null recalculation (no data uploaded)
+        given()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("{\"operation\": \".bar\", \"name\": \"updatable\"}")
+                .when().put("/api/node/" + nodeId)
+                .then()
+                .statusCode(200)
+                .body("nodeId", equalTo(nodeId.intValue()));
     }
 
     // -- NodeGroup endpoints --
