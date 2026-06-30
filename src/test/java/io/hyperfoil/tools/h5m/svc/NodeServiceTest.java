@@ -12,6 +12,7 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.*;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
@@ -381,6 +382,7 @@ public class NodeServiceTest extends FreshDb {
     }
 
     @Test
+    @Tag("postgresql-only")
     public void calculateSqlAllJsonpathValues_null() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
         tm.begin();
         RootNode rootNode = new RootNode();
@@ -409,6 +411,7 @@ public class NodeServiceTest extends FreshDb {
     }
 
     @Test
+    @Tag("postgresql-only")
     public void calculateSqlAllJsonpathValues_match() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
         tm.begin();
         RootNode rootNode = new RootNode();
