@@ -3,13 +3,13 @@ package io.hyperfoil.tools.h5m.api.svc;
 import io.hyperfoil.tools.jjq.value.JqValue;
 import io.hyperfoil.tools.h5m.api.Folder;
 import io.hyperfoil.tools.h5m.api.FolderSummary;
+import io.hyperfoil.tools.h5m.api.Upload;
 import io.hyperfoil.tools.h5m.svc.RecalculationTracker;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Service interface for managing Folders.
@@ -56,15 +56,16 @@ public interface FolderServiceInterface {
 
     /**
      * Uploads data to a specific path within a folder.
-     * Returns a CompletableFuture that completes when all processing
-     * (including cascaded work) finishes for this upload.
+     * Returns immediately with an {@link Upload} containing the upload ID and a future
+     * that completes when all processing finishes.
      *
      * @param name The name of the folder.
      * @param path The path within the folder.
      * @param data The JSON data to upload.
-     * @return A future that completes when all work for this upload is done.
+     * @return an Upload with the upload ID (safe to return to callers) and
+     *         a future (for callers that need to await completion).
      */
-    CompletableFuture<Void> upload(String name, String path, JqValue data);
+    Upload upload(String name, String path, JqValue data);
 
     /**
      * Recalculates all values in the folder by reprocessing each root value

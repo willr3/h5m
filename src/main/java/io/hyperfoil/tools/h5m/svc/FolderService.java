@@ -1,5 +1,6 @@
 package io.hyperfoil.tools.h5m.svc;
 
+import io.hyperfoil.tools.h5m.api.Upload;
 import io.hyperfoil.tools.jjq.value.JqArray;
 import io.hyperfoil.tools.jjq.value.JqNull;
 import io.hyperfoil.tools.jjq.value.JqNumber;
@@ -240,14 +241,15 @@ public class FolderService implements FolderServiceInterface {
     }
 
     /**
-     * Uploads data and returns a future that completes when all processing finishes.
+     * Uploads data and returns an UploadHandle containing the upload ID and a future
+     * that completes when all processing finishes.
      * Uses QuarkusTransaction to control the transaction boundary explicitly —
      * the transaction commits when the lambda returns, before we return the future.
      * This avoids the deadlock that occurs with @Transactional + CompletableFuture
      * return types (Quarkus defers commit waiting for the future to complete).
      */
     @Override
-    public CompletableFuture<Void> upload(String name, String path, JqValue data){
+    public Upload upload(String name, String path, JqValue data) {
         return QuarkusTransaction.requiringNew().call(() -> {
             FolderEntity folder = em.createQuery(
                     "SELECT f FROM folder f JOIN FETCH f.group g LEFT JOIN FETCH g.sources LEFT JOIN FETCH g.root WHERE f.name = :name",
@@ -268,7 +270,7 @@ public class FolderService implements FolderServiceInterface {
 
             if (works.isEmpty()) {
                 tracking.completed = true;
-                return CompletableFuture.<Void>completedFuture(null);
+                return new Upload(newValue.id, CompletableFuture.completedFuture(null));
             }
 
             CompletableFuture<Void> future = workService.createTracked(works, Set.of(newValue.id));
@@ -278,7 +280,11 @@ public class FolderService implements FolderServiceInterface {
                     ProcessingTrackerEntity entity = ProcessingTrackerEntity.find(
                             "type = ?1 and referenceId = ?2", ProcessingType.UPLOAD, newValue.id).firstResult();
                     if (entity != null) {
-                        entity.completed = true;
+                        if (t != null) {
+                            Log.errorf(t, "Upload %d failed during processing", newValue.id);
+                        } else {
+                            entity.completed = true;
+                        }
                     }
                     // Null out data for ephemeral nodes to reclaim storage
                     int nullified = valueService.nullifyEphemeralData(newValue.id);
@@ -289,7 +295,7 @@ public class FolderService implements FolderServiceInterface {
                     }
                 });
             });
-            return future;
+            return new Upload(newValue.id, future);
         });
     }
 

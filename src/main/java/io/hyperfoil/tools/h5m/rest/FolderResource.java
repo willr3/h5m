@@ -18,11 +18,8 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
-import io.smallrye.common.annotation.Blocking;
-
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletionStage;
 
 @Path("/api/folder")
 @Produces(MediaType.APPLICATION_JSON)
@@ -89,13 +86,15 @@ public class FolderResource {
     @POST
     @Path("{name}/upload")
     @Authenticated
-    @Blocking
-    @Operation(description = "Upload JSON data to a folder. Returns when all processing completes.")
-    public CompletionStage<Void> upload(
+    @Operation(description = "Upload JSON data to a folder. Returns immediately with an uploadId.")
+    public long upload(
             @PathParam("name") String name,
             @QueryParam("path") @Parameter(description = "Path within the folder") String path,
             JqValue data) {
-        return folderService.upload(name, path, data);
+        if (data == null) {
+            throw new BadRequestException("Missing request body");
+        }
+        return folderService.upload(name, path, data).uploadId;
     }
 
     @POST

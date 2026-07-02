@@ -236,7 +236,7 @@ public class FolderServiceTest extends FreshDb {
 
         folderService.upload("ephemeral-discard-test", "$",
                 JqValues.parse("{\"key\": \"k1\"}"))
-                .orTimeout(30, java.util.concurrent.TimeUnit.SECONDS).join();
+                .future.orTimeout(30, java.util.concurrent.TimeUnit.SECONDS).join();
 
         tm.begin();
         List<ValueEntity> values = ValueEntity.find("node.id", nodeId).list();
@@ -261,7 +261,7 @@ public class FolderServiceTest extends FreshDb {
 
         folderService.upload("ephemeral-keep-test", "$",
                 JqValues.parse("{\"key\": \"k1\"}"))
-                .orTimeout(30, java.util.concurrent.TimeUnit.SECONDS).join();
+                .future.orTimeout(30, java.util.concurrent.TimeUnit.SECONDS).join();
 
         tm.begin();
         List<ValueEntity> values = ValueEntity.find("node.id", nodeId).list();
@@ -301,7 +301,7 @@ public class FolderServiceTest extends FreshDb {
 
         folderService.upload("ephemeral-auto-test", "$",
                 JqValues.parse("{\"key\": \"k1\"}"))
-                .orTimeout(30, java.util.concurrent.TimeUnit.SECONDS).join();
+                .future.orTimeout(30, java.util.concurrent.TimeUnit.SECONDS).join();
 
         tm.begin();
         // Parent (intermediate, auto) should have data nulled
@@ -333,7 +333,7 @@ public class FolderServiceTest extends FreshDb {
 
         folderService.upload("ephemeral-leaf-test", "$",
                 JqValues.parse("{\"key\": \"k1\"}"))
-                .orTimeout(30, java.util.concurrent.TimeUnit.SECONDS).join();
+                .future.orTimeout(30, java.util.concurrent.TimeUnit.SECONDS).join();
 
         tm.begin();
         List<ValueEntity> values = ValueEntity.find("node.id", leafId).list();
@@ -396,5 +396,52 @@ public class FolderServiceTest extends FreshDb {
         ProcessingTrackerEntity updatedTracking = ProcessingTrackerEntity.find("referenceId", rootValueId).firstResult();
         assertTrue(updatedTracking.completed, "Tracking record should be marked completed after recovery");
         tm.commit();
+    }
+    
+    @Test
+    public void upload_id_matches_root_value() throws Exception {
+        tm.begin();
+        folderService.create("upload-root-match-test");
+        tm.commit();
+
+        long uploadId = folderService.upload("upload-root-match-test", null,
+                JqValues.parse("{\"cpu\": 95}")).uploadId;
+
+        tm.begin();
+        ValueEntity rootValue = ValueEntity.findById(uploadId);
+        assertNotNull(rootValue, "Upload ID should correspond to a root ValueEntity");
+        assertEquals(uploadId, rootValue.id, "upload should return the root value id");
+        tm.commit();
+    }
+
+    @Test
+    public void upload_creates_processing_tracker() throws Exception {
+        tm.begin();
+        folderService.create("upload-tracker-svc-test");
+        tm.commit();
+
+        long uploadId = folderService.upload("upload-tracker-svc-test", null,
+                JqValues.parse("{\"cpu\": 95}")).uploadId;
+
+        tm.begin();
+        ProcessingTrackerEntity entity = ProcessingTrackerEntity.find(
+                "type = ?1 and referenceId = ?2", ProcessingType.UPLOAD, uploadId).firstResult();
+        assertNotNull(entity, "ProcessingTrackerEntity should be created on upload");
+        assertEquals(uploadId, entity.referenceId);
+        tm.commit();
+    }
+
+    @Test
+    public void upload_returns_unique_ids_per_upload() throws Exception {
+        tm.begin();
+        folderService.create("upload-unique-svc-test");
+        tm.commit();
+
+        long id1 = folderService.upload("upload-unique-svc-test", null,
+                JqValues.parse("{\"cpu\": 95}")).uploadId;
+        long id2 = folderService.upload("upload-unique-svc-test", null,
+                JqValues.parse("{\"cpu\": 99}")).uploadId;
+
+        assertNotEquals(id1, id2, "Each upload should return a unique ID");
     }
 }

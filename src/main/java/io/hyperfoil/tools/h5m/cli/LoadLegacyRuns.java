@@ -128,7 +128,7 @@ public class LoadLegacyRuns implements Callable<Integer> {
                                 sb.append(buf, 0, charsRead);
                             }
                             JqValue data = JqValues.parse(sb.toString());
-                            batchFutures.add(folderService.upload(folder.name(),null,data));
+                            batchFutures.add(folderService.upload(folder.name(),null,data).future);
                             count++;
                             batchCount++;
                             if(batch > 0 && batchCount >= batch){

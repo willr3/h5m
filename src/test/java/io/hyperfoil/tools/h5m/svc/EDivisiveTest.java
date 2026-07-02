@@ -112,7 +112,7 @@ public class EDivisiveTest extends FreshDb {
         for (int i = 0; i < series.length; i++) {
             String json = String.format("{\"v\": %f, \"fp\": \"default\", \"d\": %d}", series[i], i);
             folderService.upload(folderName, "$", JqValues.parse(json))
-                    .orTimeout(30, TimeUnit.SECONDS).join();
+                    .future.orTimeout(30, TimeUnit.SECONDS).join();
         }
 
         return edId;
@@ -245,7 +245,7 @@ public class EDivisiveTest extends FreshDb {
         for (int i = 0; i < 10; i++) {
             double v = i < 5 ? 100.0 : 200.0;
             folderService.upload(folderName, "$", JqValues.parse(String.format("{\"v\": %f, \"fp\": \"default\", \"d\": %d}", v, i)))
-                    .orTimeout(30, TimeUnit.SECONDS).join();
+                    .future.orTimeout(30, TimeUnit.SECONDS).join();
         }
 
         tm.begin();
@@ -256,7 +256,7 @@ public class EDivisiveTest extends FreshDb {
         // Upload more data — all at 200 (extending the second segment)
         for (int i = 0; i < 5; i++) {
             folderService.upload(folderName, "$", JqValues.parse(String.format("{\"v\": 200.0, \"fp\": \"default\", \"d\": %d}", 10 + i)))
-                    .orTimeout(30, TimeUnit.SECONDS).join();
+                    .future.orTimeout(30, TimeUnit.SECONDS).join();
         }
 
         tm.begin();
@@ -371,19 +371,19 @@ public class EDivisiveTest extends FreshDb {
         for (int i = 0; i < 10; i++) {
             folderService.upload(folderName, "$", JqValues.parse(
                     String.format("{\"v\": 100.0, \"fp\": \"alpha\", \"d\": %d}", i)))
-                    .orTimeout(30, TimeUnit.SECONDS).join();
+                    .future.orTimeout(30, TimeUnit.SECONDS).join();
         }
         for (int i = 10; i < 20; i++) {
             folderService.upload(folderName, "$", JqValues.parse(
                     String.format("{\"v\": 200.0, \"fp\": \"alpha\", \"d\": %d}", i)))
-                    .orTimeout(30, TimeUnit.SECONDS).join();
+                    .future.orTimeout(30, TimeUnit.SECONDS).join();
         }
 
         // Beta: completely stable at 500 (no change points expected)
         for (int i = 0; i < 20; i++) {
             folderService.upload(folderName, "$", JqValues.parse(
                     String.format("{\"v\": 500.0, \"fp\": \"beta\", \"d\": %d}", i + 100)))
-                    .orTimeout(30, TimeUnit.SECONDS).join();
+                    .future.orTimeout(30, TimeUnit.SECONDS).join();
         }
 
         tm.begin();
@@ -450,7 +450,7 @@ public class EDivisiveTest extends FreshDb {
         for (int i = 0; i < 20; i++) {
             folderService.upload(folderName, "$", JqValues.parse(
                     String.format("{\"v\": 100.0, \"fp\": \"default\", \"d\": %d}", i)))
-                    .orTimeout(30, TimeUnit.SECONDS).join();
+                    .future.orTimeout(30, TimeUnit.SECONDS).join();
         }
 
         tm.begin();
@@ -466,7 +466,7 @@ public class EDivisiveTest extends FreshDb {
         // The key point: the upload should not crash and should re-analyze correctly.
         folderService.upload(folderName, "$", JqValues.parse(
                 "{\"v\": 100.0, \"fp\": \"default\", \"d\": 15}"))
-                .orTimeout(30, TimeUnit.SECONDS).join();
+                .future.orTimeout(30, TimeUnit.SECONDS).join();
 
         tm.begin();
         List<ValueEntity> afterOoo = ValueEntity.find("node.id", edId).list();
@@ -827,7 +827,7 @@ public class EDivisiveTest extends FreshDb {
         for (int i = 0; i < 5; i++) {
             String json = String.format("{\"v\": %f, \"fp\": \"default\", \"d\": %d}", 200.0 + (i % 3), 20 + i);
             folderService.upload("recalc-pipeline-test", "$", JqValues.parse(json))
-                    .orTimeout(30, TimeUnit.SECONDS).join();
+                    .future.orTimeout(30, TimeUnit.SECONDS).join();
         }
 
         // Count change points after additional uploads

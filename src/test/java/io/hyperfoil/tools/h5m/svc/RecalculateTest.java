@@ -116,7 +116,7 @@ public class RecalculateTest extends FreshDb {
 
         // Upload data
         folderService.upload("recalc-test", "$", JqValues.parse("{\"key\": \"hello\"}"))
-                .orTimeout(30, TimeUnit.SECONDS).join();
+                .future.orTimeout(30, TimeUnit.SECONDS).join();
 
         // Verify values exist
         tm.begin();
@@ -172,7 +172,7 @@ public class RecalculateTest extends FreshDb {
         // Upload a value that exceeds the threshold
         eventObserver.clear();
         folderService.upload("recalc-notify-test", "$", JqValues.parse("{\"y\": 100, \"fp\": \"default\"}"))
-                .orTimeout(30, TimeUnit.SECONDS).join();
+                .future.orTimeout(30, TimeUnit.SECONDS).join();
 
         // Upload should dispatch notifications
         List<ChangeDetectedEvent> uploadEvents = new ArrayList<>(eventObserver.getEvents());
@@ -225,7 +225,7 @@ public class RecalculateTest extends FreshDb {
         // Upload
         folderService.upload("selective-test", "$",
                 JqValues.parse("{\"key\": \"hello\", \"other\": \"world\"}"))
-                .orTimeout(30, TimeUnit.SECONDS).join();
+                .future.orTimeout(30, TimeUnit.SECONDS).join();
 
         // Verify initial values — nodeA is intermediate (AUTO), so its data
         // is nullified by ephemeral cleanup. nodeB and nodeC are leaves, data preserved.
@@ -300,7 +300,7 @@ public class RecalculateTest extends FreshDb {
         for (int i = 0; i < 3; i++) {
             folderService.upload("multi-recalc-test", "$",
                     JqValues.parse(String.format("{\"y\": %d, \"fp\": \"default\"}", 100 + i * 10)))
-                    .orTimeout(30, TimeUnit.SECONDS).join();
+                    .future.orTimeout(30, TimeUnit.SECONDS).join();
         }
 
         // Count change detection values after uploads
@@ -345,7 +345,7 @@ public class RecalculateTest extends FreshDb {
         // Upload data
         folderService.upload("update-recalc-test", "$",
                 JqValues.parse("{\"key\": \"hello\", \"other\": \"world\"}"))
-                .orTimeout(30, TimeUnit.SECONDS).join();
+                .future.orTimeout(30, TimeUnit.SECONDS).join();
 
         // Verify initial value
         tm.begin();
@@ -395,7 +395,7 @@ public class RecalculateTest extends FreshDb {
         for (int i = 0; i < 3; i++) {
             folderService.upload("progress-test", "$",
                     JqValues.parse(String.format("{\"key\": \"value_%d\"}", i)))
-                    .orTimeout(30, TimeUnit.SECONDS).join();
+                    .future.orTimeout(30, TimeUnit.SECONDS).join();
         }
 
         // Start recalculation — returns tracker immediately
@@ -458,7 +458,7 @@ public class RecalculateTest extends FreshDb {
         // Upload data with 2 items (datasets) per upload
         folderService.upload("split-recalc-test", "$", JqValues.parse(
                 "{\"items\": [{\"v\": 10}, {\"v\": 20}]}"))
-                .orTimeout(30, TimeUnit.SECONDS).join();
+                .future.orTimeout(30, TimeUnit.SECONDS).join();
 
         // Verify the JQ .items[] produced 2 values
         tm.begin();
@@ -473,7 +473,7 @@ public class RecalculateTest extends FreshDb {
         // Upload a second data point
         folderService.upload("split-recalc-test", "$", JqValues.parse(
                 "{\"items\": [{\"v\": 30}, {\"v\": 40}]}"))
-                .orTimeout(30, TimeUnit.SECONDS).join();
+                .future.orTimeout(30, TimeUnit.SECONDS).join();
 
         // Verify we now have 4 values (2 per upload × 2 uploads)
         tm.begin();
@@ -540,7 +540,7 @@ public class RecalculateTest extends FreshDb {
 
         // Upload data
         folderService.upload("ephemeral-recalc-test", "$", JqValues.parse("{\"key\": \"hello\"}"))
-                .orTimeout(30, TimeUnit.SECONDS).join();
+                .future.orTimeout(30, TimeUnit.SECONDS).join();
 
         // Verify: extract data should be NULL (ephemeral), transform data should be present
         tm.begin();
@@ -613,7 +613,7 @@ public class RecalculateTest extends FreshDb {
 
         // Upload data
         folderService.upload("chain-recalc-test", "$", JqValues.parse("{\"key\": \"hello\"}"))
-                .orTimeout(30, TimeUnit.SECONDS).join();
+                .future.orTimeout(30, TimeUnit.SECONDS).join();
 
         // Verify after upload: A and B are nullified, C has data
         tm.begin();
@@ -696,7 +696,7 @@ public class RecalculateTest extends FreshDb {
         // Upload data
         folderService.upload("mixed-recalc-test", "$",
                 JqValues.parse("{\"key\": \"hello\", \"other\": \"world\"}"))
-                .orTimeout(30, TimeUnit.SECONDS).join();
+                .future.orTimeout(30, TimeUnit.SECONDS).join();
 
         // Verify after upload: A has data (KEEP), B is NULL (DISCARD)
         tm.begin();
@@ -749,7 +749,7 @@ public class RecalculateTest extends FreshDb {
         tm.commit();
 
         folderService.upload("toplevel-recalc-test", "$", JqValues.parse("{\"key\": \"hello\"}"))
-                .orTimeout(30, TimeUnit.SECONDS).join();
+                .future.orTimeout(30, TimeUnit.SECONDS).join();
 
         tm.begin();
         assertEquals("hello", ValueEntity.find("node.id", nodeAId).<ValueEntity>list().get(0).data.asText());
@@ -871,7 +871,7 @@ public class RecalculateTest extends FreshDb {
         tm.commit();
 
         folderService.upload("tracking-test", "$", JqValues.parse("{\"key\": \"hello\"}"))
-                .orTimeout(30, TimeUnit.SECONDS).join();
+                .future.orTimeout(30, TimeUnit.SECONDS).join();
 
         // Recalculate and wait
         folderService.recalculate("tracking-test").getFuture()
@@ -905,7 +905,7 @@ public class RecalculateTest extends FreshDb {
 
         // Upload data
         folderService.upload("recovery-recalc-test", "$", JqValues.parse("{\"key\": \"hello\"}"))
-                .orTimeout(30, TimeUnit.SECONDS).join();
+                .future.orTimeout(30, TimeUnit.SECONDS).join();
 
         // Simulate crash: create incomplete recalculation tracker
         tm.begin();
@@ -969,7 +969,7 @@ public class RecalculateTest extends FreshDb {
 
         // Upload data
         folderService.upload("recovery-ephemeral-test", "$", JqValues.parse("{\"key\": \"hello\"}"))
-                .orTimeout(30, TimeUnit.SECONDS).join();
+                .future.orTimeout(30, TimeUnit.SECONDS).join();
 
         // Verify: A and B nullified, C has data
         tm.begin();
@@ -1052,7 +1052,7 @@ public class RecalculateTest extends FreshDb {
         // Upload initial data
         folderService.upload("mid-process-test", "$",
                 JqValues.parse("{\"key\": \"hello\", \"other\": \"world\"}"))
-                .orTimeout(30, TimeUnit.SECONDS).join();
+                .future.orTimeout(30, TimeUnit.SECONDS).join();
 
         // Verify initial values
         tm.begin();
@@ -1152,7 +1152,7 @@ public class RecalculateTest extends FreshDb {
         // Upload initial data
         folderService.upload("mid-ephemeral-test", "$",
                 JqValues.parse("{\"key\": \"hello\", \"other\": \"world\"}"))
-                .orTimeout(30, TimeUnit.SECONDS).join();
+                .future.orTimeout(30, TimeUnit.SECONDS).join();
 
         // Verify: A and B nullified, C has data
         tm.begin();

@@ -75,7 +75,7 @@ public class ClosureBenchmarkTest extends FreshDb {
             long uploadStart = System.currentTimeMillis();
 
             folderService.upload("rhivos-perf-comprehensive", "$", runData[fileIndex])
-                    .orTimeout(120, TimeUnit.SECONDS).join();
+                    .future.orTimeout(120, TimeUnit.SECONDS).join();
 
             long uploadEnd = System.currentTimeMillis();
             System.out.printf("[BENCHMARK] Upload %d/%d (%s): %d ms%n",
