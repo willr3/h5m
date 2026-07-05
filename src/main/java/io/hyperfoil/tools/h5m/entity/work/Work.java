@@ -165,7 +165,17 @@ public class Work implements Runnable, Comparable<Work>{
     }
 
     @Override public void run() {
-        CDI.current().select(WorkService.class).get().execute(this);
+        try {
+            CDI.current().select(WorkService.class).get().execute(this);
+        } finally {
+            // Release heavy JqValue data after processing — cascade Work items
+            // only need entity IDs and will reload via em.find() in their own
+            // transactions.  Without this, queued Work objects retain the full
+            // parsed JSON tree (e.g. 3 MB per rhivos run) until GC collects them.
+            sourceValueIds = null;
+            sourceNodes = null;
+            activeNodes = null;
+        }
     }
 
     @Override

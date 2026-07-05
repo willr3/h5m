@@ -348,6 +348,14 @@ public class WorkService implements WorkServiceInterface {
                 }
             }
 
+            // Release entities from the persistence context to prevent memory
+            // accumulation during bulk imports.  All new/updated values have
+            // already been flushed to the DB, cascade Work items carry entity
+            // IDs and will reload via em.find() in their own transactions, and
+            // the change-detected events have already been fired.
+            em.flush();
+            em.clear();
+
             // Defer decrement until after this transaction commits so that
             // isIdle() cannot return true while the DB commit is still in flight.
             if(w.activeNodes != null && !w.activeNodes.isEmpty()){
