@@ -75,8 +75,7 @@ flowchart TD
 | **JQ** | `jq` | jq filter expression | `.results.cpu` |
 | **JavaScript** | `ecma` | GraalVM JS function | `(cpu, mem) => cpu / mem` |
 | **JSONata** | `nata` | JSONata expression | `results.cpu` |
-| **SQL JSONPath** | `sql` | PostgreSQL jsonpath (single result) | `$.results.cpu` |
-| **SQL JSONPath All** | `sqlall` | PostgreSQL jsonpath (array result) | `$.results[*].cpu` |
+
 | **Split** | `split` | Split JSON array into individual values | Breaks `[1,2,3]` into 3 values |
 | **Fingerprint** | `fp` | Deterministic hash of source values | Groups change detection |
 | **Fixed Threshold** | `ft` | Static min/max boundary check | Alert if CPU > 95 |

@@ -399,8 +399,9 @@ public class FolderService implements FolderServiceInterface {
             NodeEntity node = switch (type) {
                 case "jq" -> new JqNode(name, operation, sources);
                 case "ecma" -> new JsNode(name, operation, sources);
-                case "sql" -> new SqlJsonpathNode(name, operation, sources);
-                case "sqlall" -> new SqlJsonpathAllNode(name, operation, sources);
+                // Convert legacy sql/sqlall jsonpath to jq equivalents
+                case "sql" -> new JqNode(name, NodeService.jsonpathToJq(operation), sources);
+                case "sqlall" -> new JqNode(name, NodeService.jsonpathToJqArray(operation), sources);
                 case "split" -> new SplitNode(name, operation, sources);
                 case "fp" -> {
                     FingerprintNode fp = new FingerprintNode(name, operation);

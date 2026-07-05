@@ -267,7 +267,7 @@ public class NodeServiceTest extends FreshDb {
         tm.begin();
         RootNode rootNode = new RootNode();
         rootNode.persist();
-        SqlJsonpathNode node = new SqlJsonpathNode("sql","$.buz",List.of(rootNode));//should be a different type of node?
+        JqNode node = new JqNode("sql",".buz",List.of(rootNode));
         node.persist();
         ValueEntity v1 = new ValueEntity();
         v1.data = JqValues.parse("""
@@ -286,7 +286,7 @@ public class NodeServiceTest extends FreshDb {
         Map<String, ValueEntity> sourceValueMap = new HashMap<>();
         sourceValueMap.put(rootNode.name,v1);
 
-        List<ValueEntity> calculated = nodeService.calculateSqlJsonpathValues(node,sourceValueMap,0);
+        List<ValueEntity> calculated = nodeService.calculateJqValues(node,sourceValueMap,0);
         assertNotNull(calculated);
         assertEquals(1,calculated.size());
 
@@ -296,7 +296,7 @@ public class NodeServiceTest extends FreshDb {
         tm.begin();
         RootNode rootNode = new RootNode();
         rootNode.persist();
-        SqlJsonpathNode node = new SqlJsonpathNode("sql","$.miss",List.of(rootNode));//should be a different type of node?
+        JqNode node = new JqNode("sql",".miss",List.of(rootNode));
         node.persist();
         ValueEntity v1 = new ValueEntity();
         v1.data = JqValues.parse("""
@@ -315,7 +315,7 @@ public class NodeServiceTest extends FreshDb {
         Map<String, ValueEntity> sourceValueMap = new HashMap<>();
         sourceValueMap.put(rootNode.name,v1);
 
-        List<ValueEntity> calculated = nodeService.calculateSqlJsonpathValues(node,sourceValueMap,0);
+        List<ValueEntity> calculated = nodeService.calculateJqValues(node,sourceValueMap,0);
         assertNotNull(calculated);
         assertEquals(0,calculated.size());
 
@@ -385,7 +385,7 @@ public class NodeServiceTest extends FreshDb {
         tm.begin();
         RootNode rootNode = new RootNode();
         rootNode.persist();
-        SqlJsonpathAllNode node = new SqlJsonpathAllNode("sqlall","$.miss",List.of(rootNode));
+        JqNode node = new JqNode("sqlall","[.miss]",List.of(rootNode));
         node.persist();
         ValueEntity v1 = new ValueEntity();
         v1.data = JqValues.parse("""
@@ -403,7 +403,7 @@ public class NodeServiceTest extends FreshDb {
         Map<String, ValueEntity> sourceValueMap = new HashMap<>();
         sourceValueMap.put(rootNode.name,v1);
 
-        List<ValueEntity> calculated = nodeService.calculateSqlAllJsonpathValues(node,sourceValueMap,0);
+        List<ValueEntity> calculated = nodeService.calculateJqValues(node,sourceValueMap,0);
         assertNotNull(calculated);
         assertEquals(1,calculated.size());
     }
@@ -413,7 +413,7 @@ public class NodeServiceTest extends FreshDb {
         tm.begin();
         RootNode rootNode = new RootNode();
         rootNode.persist();
-        SqlJsonpathAllNode node = new SqlJsonpathAllNode("sqlall","$.foo",List.of(rootNode));
+        JqNode node = new JqNode("sqlall","[.foo[]?]",List.of(rootNode));
         node.persist();
         ValueEntity v1 = new ValueEntity();
         v1.data = JqValues.parse("""
@@ -429,7 +429,7 @@ public class NodeServiceTest extends FreshDb {
         Map<String, ValueEntity> sourceValueMap = new HashMap<>();
         sourceValueMap.put(rootNode.name,v1);
 
-        List<ValueEntity> calculated = nodeService.calculateSqlAllJsonpathValues(node,sourceValueMap,0);
+        List<ValueEntity> calculated = nodeService.calculateJqValues(node,sourceValueMap,0);
         assertNotNull(calculated);
         assertEquals(1,calculated.size());
         ValueEntity first = calculated.getFirst();
@@ -443,9 +443,9 @@ public class NodeServiceTest extends FreshDb {
         tm.begin();
         RootNode rootNode = new RootNode();
         rootNode.persist();
-        SqlJsonpathNode hitNode = new SqlJsonpathNode("hit","$.biz",List.of(rootNode));
+        JqNode hitNode = new JqNode("hit",".biz",List.of(rootNode));
         hitNode.persist();
-        SqlJsonpathNode missNode = new SqlJsonpathNode("miss","$.nope",List.of(rootNode));
+        JqNode missNode = new JqNode("miss",".nope",List.of(rootNode));
         missNode.persist();
 
         ValueEntity v1 = new ValueEntity();
@@ -459,8 +459,8 @@ public class NodeServiceTest extends FreshDb {
         Map<String, ValueEntity> sourceValueMap = new HashMap<>();
         sourceValueMap.put(rootNode.name,v1);
 
-        List<ValueEntity> hit = nodeService.calculateSqlJsonpathValues(hitNode,sourceValueMap,0);
-        List<ValueEntity> miss = nodeService.calculateSqlJsonpathValues(missNode,sourceValueMap,0);
+        List<ValueEntity> hit = nodeService.calculateJqValues(hitNode,sourceValueMap,0);
+        List<ValueEntity> miss = nodeService.calculateJqValues(missNode,sourceValueMap,0);
 
         assertEquals(1, hit.size(), "matching path should produce a value");
         assertEquals("cat", hit.getFirst().data.asText());
@@ -1803,6 +1803,49 @@ public class NodeServiceTest extends FreshDb {
         assertEquals(".foo.bar", NodeService.jsonpathToJq("$.foo.bar"));
         assertEquals(".foo[]?.bar", NodeService.jsonpathToJq("$.foo[*].bar"));
         assertEquals(".foo[]?.bar", NodeService.jsonpathToJq("$.foo.*.bar"));
+    }
+
+    @Test
+    public void jsonpathToJq_logical_and() {
+        String result = NodeService.jsonpathToJq("$.stats[*] ? (@.metric == \"x\" && @.phase == \"y\")");
+        assertTrue(result.contains("select("), "should contain select: " + result);
+        assertTrue(result.contains("and"), "should convert && to and: " + result);
+        assertFalse(result.contains("&&"), "should not contain &&: " + result);
+    }
+
+    @Test
+    public void jsonpathToJq_bare_at() {
+        String result = NodeService.jsonpathToJq("$.rpms ? (@ like_regex \"ostree\")");
+        assertTrue(result.contains("test(\"ostree\")"), "should convert like_regex: " + result);
+        assertFalse(result.contains("@"), "should not contain bare @: " + result);
+    }
+
+    @Test
+    public void jsonpathToJq_like_regex_with_flag() {
+        String result = NodeService.jsonpathToJq("$.rpms ? (@ like_regex \"ostree\" flag \"i\")");
+        assertTrue(result.contains("test(\"ostree\"; \"i\")"), "should include flag: " + result);
+        assertFalse(result.contains("flag"), "should not contain literal 'flag': " + result);
+    }
+
+    @Test
+    public void jsonpathToJq_recursive_descent() {
+        String result = NodeService.jsonpathToJq("$.results.\"99th\".**{1}[0]");
+        assertTrue(result.contains("recurse"), "should convert **{N} to recurse: " + result);
+        assertFalse(result.contains("**"), "should not contain **: " + result);
+    }
+
+    @Test
+    public void jsonpathToJq_size_method() {
+        String result = NodeService.jsonpathToJq("$.config.size()");
+        assertTrue(result.contains("length"), "should convert .size() to length: " + result);
+        assertFalse(result.contains("size()"), "should not contain size(): " + result);
+    }
+
+    @Test
+    public void jsonpathToJq_wildcard_not_in_quotes() {
+        // .* inside quoted keys should NOT be replaced
+        String result = NodeService.jsonpathToJq("$.state.*.value");
+        assertEquals(".state[]?.value", result);
     }
 
     @Test

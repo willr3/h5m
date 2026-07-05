@@ -13,8 +13,6 @@ import java.util.concurrent.Callable;
         AddJq.class,
         AddJs.class,
         AddJsonata.class,
-        AddSqlJsonpath.class,
-        AddSqlJsonpathAll.class,
         AddSplit.class,
         AddRelativeDifference.class,
         AddFixedThreshold.class,

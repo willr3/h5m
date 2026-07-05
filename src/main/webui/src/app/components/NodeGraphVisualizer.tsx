@@ -30,8 +30,7 @@ const TYPE_ICONS: Record<string, ComponentType<{ size?: number }>> = {
   JQ: Script,
   JSONATA: Script,
   JS: Code,
-  SQL_JSONPATH_NODE: Script,
-  SQL_JSONPATH_ALL_NODE: Script,
+
   USER_INPUT: Login,
 };
 

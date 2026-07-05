@@ -96,8 +96,7 @@ public class NodeService implements NodeServiceInterface {
             case JQ -> JqNode.parse(name, operation, n -> internalFindNodeByFqdn(n, groupId));
             case JS -> JsNode.parse(name, operation, n -> internalFindNodeByFqdn(n, groupId));
             case JSONATA -> JsonataNode.parse(name, operation, n -> internalFindNodeByFqdn(n, groupId));
-            case SQL_JSONPATH_NODE -> SqlJsonpathNode.parse(name, operation, n -> internalFindNodeByFqdn(n, groupId));
-            case SQL_JSONPATH_ALL_NODE -> SqlJsonpathAllNode.parse(name, operation, n -> internalFindNodeByFqdn(n, groupId));
+
             default -> throw new IllegalArgumentException("Invalid node type " + type.display());
         };
         node.group = NodeGroupEntity.findById(groupId);
@@ -404,8 +403,6 @@ public class NodeService implements NodeServiceInterface {
             case JS:
             case JQ:
             case JSONATA:
-            case SQL_JSONPATH_ALL_NODE:
-            case SQL_JSONPATH_NODE:
             case SPLIT:
             case FINGERPRINT:
                 for(int vIdx=0; vIdx<roots.size(); vIdx++){
@@ -464,8 +461,7 @@ public class NodeService implements NodeServiceInterface {
             case JQ -> calculateJqValues((JqNode)node,sourceValues,startingOrdinal+1);
             case JS -> calculateJsValues((JsNode)node,sourceValues,startingOrdinal+1);
             case JSONATA -> calculateJsonataValues((JsonataNode)node,sourceValues,startingOrdinal+1);
-            case SQL_JSONPATH_NODE -> calculateSqlJsonpathValues((SqlJsonpathNode)node,sourceValues,startingOrdinal+1);
-            case SQL_JSONPATH_ALL_NODE -> calculateSqlAllJsonpathValues((SqlJsonpathAllNode)node, sourceValues, startingOrdinal+1);
+
             case SPLIT -> calculateSplitValues((SplitNode)node,sourceValues,startingOrdinal+1);
             case FINGERPRINT -> calculateFpValues((FingerprintNode)node,sourceValues,startingOrdinal+1);
             default -> {
@@ -1004,52 +1000,7 @@ public class NodeService implements NodeServiceInterface {
 
 
 
-    @Transactional
-    public List<ValueEntity> calculateSqlJsonpathValues(SqlJsonpathNode node, Map<String, ValueEntity> sourceValues, int startingOrdinal) throws IOException {
-        return calculateSqlJsonpathValuesFirstOrAll(node,sourceValues,startingOrdinal,"jsonb_path_query_first");
-    }
-    @Transactional
-    public List<ValueEntity> calculateSqlAllJsonpathValues(SqlJsonpathAllNode node, Map<String, ValueEntity> sourceValues, int startingOrdinal) throws IOException {
-        return calculateSqlJsonpathValuesFirstOrAll(node,sourceValues,startingOrdinal,"jsonb_path_query_array");
-    }
-    private List<ValueEntity> calculateSqlJsonpathValuesFirstOrAll(NodeEntity node, Map<String, ValueEntity> sourceValues, int startingOrdinal,String psqlFunction) throws IOException {
-        List<ValueEntity> rtrn = new ArrayList<>();
-        if(sourceValues.isEmpty()){
-            return rtrn;
-        }
 
-        if(sourceValues.size()>1 || node.sources.size()>1){
-            System.err.println("sql jsonpath only supports one input at a time");
-            return Collections.emptyList();
-        }
-        ValueEntity input = sourceValues.get(node.sources.getFirst().name);
-
-        String foundJson = (String) em.createNativeQuery(
-                switch(dbKind) {
-                    case "sqlite" -> "SELECT (SELECT data FROM value WHERE id = ?) -> ?";
-                    case "postgresql" -> ("SELECT PSQL_FUNCTION((SELECT data FROM value WHERE id = ?), ?::jsonpath)::text")
-                            .replaceAll("PSQL_FUNCTION", psqlFunction);
-                    default -> "";
-                }, String.class)
-                .setParameter(1, input.id)
-                .setParameter(2, node.operation)
-                .getSingleResultOrNull();
-
-        if (foundJson == null || foundJson.isBlank() || foundJson.equals("null")) {
-            return rtrn;
-        }
-        JqValue found = JqValues.parse(foundJson);
-        if (found.isNull()) {
-            return rtrn;
-        }
-
-        ValueEntity newValue = new ValueEntity(null, node, null);
-        newValue.data = found;
-        newValue.sources = List.of(input);
-        newValue.idx = startingOrdinal;
-        rtrn.add(newValue);
-        return rtrn;
-    }
     @Transactional
     public List<ValueEntity> calculateSplitValues(SplitNode node, Map<String, ValueEntity> sourceValues, int startingOrdinal) throws IOException {
         List<ValueEntity> rtrn = new ArrayList<>();
@@ -1128,7 +1079,28 @@ public class NodeService implements NodeServiceInterface {
         }
         return idx;
     }
-        public static String jsonpathToJq(String jsonpath) {
+    /**
+     * Converts a jsonpath expression to a jq expression that collects all
+     * matches into an array — equivalent to PostgreSQL's jsonb_path_query_array().
+     * For expressions with wildcards ([*] or .*), the jq iterator naturally
+     * produces multiple outputs which [...] collects.  For simple scalar paths,
+     * uses {@code // empty} to filter null values, producing an empty array
+     * when the path doesn't exist — matching jsonb_path_query_array's behavior
+     * of returning {@code []} for missing paths.
+     */
+    public static String jsonpathToJqArray(String jsonpath) {
+        String jq = jsonpathToJq(jsonpath);
+        if (jq.contains("[]?")) {
+            // Has iterators — [...] naturally produces [] when no matches
+            return "[" + jq + "]";
+        } else {
+            // Scalar path — filter null to produce [] for missing paths,
+            // matching jsonb_path_query_array behavior
+            return "[" + jq + " // empty]";
+        }
+    }
+
+    public static String jsonpathToJq(String jsonpath) {
         if (jsonpath == null || jsonpath.isEmpty()) return ".";
         String jq = jsonpath;
         if(jq.equals("$")){
@@ -1137,18 +1109,42 @@ public class NodeService implements NodeServiceInterface {
         jq = jq.replace("$.",".");
         jq = jq.replace("[*].*", "[]?");
         jq = jq.replace("[*]", "[]?");
-        jq = jq.replace(".*", "[]?");
-        jq = jq.replace(".size()"," | length");
-            jq = jq.replace(".keyvalue()"," | to_entries[] | ");
-
+        // Replace **{N} recursive descent BEFORE .* — otherwise .* corrupts the **{N} pattern.
+        // jq has no direct equivalent of PostgreSQL jsonpath **{N}; use recurse to approximate.
+        jq = jq.replaceAll("\\.\\*\\*\\{\\d+\\}", " | recurse");
+        // Replace .* (wildcard object values) with []? but only OUTSIDE quoted strings
+        // to avoid corrupting quoted keys like ."mw********.lab"
+        jq = replaceOutsideQuotes(jq, ".*", "[]?");
+        // Replace PostgreSQL jsonpath methods with jq equivalents
+        jq = jq.replace(".size()", " | length");
+        jq = jq.replace(".keyvalue()", " | to_entries[] | ");
         // Convert PostgreSQL jsonpath filter expressions to JQ select()
-        // ? (@.field == "value") → [] | select(.field == "value")
-        // ? (@.field != "value") → [] | select(.field != "value")
-        // ? (@.field like_regex "pattern") → [] | select(.field | test("pattern"))
         if (jq.contains("?")) {
             jq = convertJsonpathFilters(jq);
         }
         return jq;
+    }
+
+    /**
+     * Replaces occurrences of {@code target} with {@code replacement} only when
+     * outside double-quoted strings. This prevents corrupting quoted keys that
+     * happen to contain the target pattern (e.g., {@code ."mw********.lab"}).
+     */
+    private static String replaceOutsideQuotes(String input, String target, String replacement) {
+        StringBuilder result = new StringBuilder();
+        boolean inQuotes = false;
+        for (int i = 0; i < input.length(); i++) {
+            if (input.charAt(i) == '"' && (i == 0 || input.charAt(i - 1) != '\\')) {
+                inQuotes = !inQuotes;
+                result.append(input.charAt(i));
+            } else if (!inQuotes && input.startsWith(target, i)) {
+                result.append(replacement);
+                i += target.length() - 1;
+            } else {
+                result.append(input.charAt(i));
+            }
+        }
+        return result.toString();
     }
 
     static String convertJsonpathFilters(String jq) {
@@ -1191,13 +1187,28 @@ public class NodeService implements NodeServiceInterface {
                 parenEnd++;
             }
             String filterBody = jq.substring(parenStart + 1, parenEnd - 1).trim();
-            // Convert @.field references to .field and handle quoted field names
-            // @."special" → .["special"], @.normal → .normal
+            // Convert @."special" → .["special"] (quoted field access on current item)
             filterBody = filterBody.replaceAll("@\\.\"([^\"]+)\"", ".[\"$1\"]");
+            // Convert @.field → .field (field access on current item)
             filterBody = filterBody.replace("@.", ".");
-            // Handle like_regex → test()
+            // Convert bare @ → . (current item reference without field access)
+            // Only replace @ when followed by a space, ), or operator — not inside
+            // quoted key names like ["@name"]
+            filterBody = filterBody.replaceAll("@(?=[\\s)&|,]|$)", ".");
+            // Convert && → and (jsonpath logical AND → jq logical AND)
+            filterBody = filterBody.replace("&&", "and");
+            // Convert || → or (jsonpath logical OR → jq logical OR)
+            filterBody = filterBody.replace("||", "or");
+            // Handle like_regex with optional flags → test()
+            // like_regex "pattern" flag "i" → test("pattern"; "i")
+            // like_regex "pattern" → test("pattern")
             if (filterBody.contains("like_regex")) {
-                filterBody = filterBody.replaceAll("(\\S+)\\s+like_regex\\s+\"([^\"]+)\"", "($1 | test(\"$2\"))");
+                filterBody = filterBody.replaceAll(
+                        "(\\S+)\\s+like_regex\\s+\"([^\"]+)\"\\s+flag\\s+\"([^\"]+)\"",
+                        "($1 | test(\"$2\"; \"$3\"))");
+                filterBody = filterBody.replaceAll(
+                        "(\\S+)\\s+like_regex\\s+\"([^\"]+)\"",
+                        "($1 | test(\"$2\"))");
             }
             result.append(" | select(").append(filterBody).append(")");
             i = parenEnd;

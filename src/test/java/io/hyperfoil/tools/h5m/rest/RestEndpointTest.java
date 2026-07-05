@@ -445,21 +445,11 @@ public class RestEndpointTest extends FreshDb {
     }
 
     @Test
-    public void node_create_sql_jsonpath() {
-        createFolder("sql-test");
-        Long groupId = getGroupId("sql-test");
+    public void node_create_jq_from_jsonpath() {
+        createFolder("jq-jsonpath-test");
+        Long groupId = getGroupId("jq-jsonpath-test");
 
-        Long nodeId = createNodeWithType(groupId, "sql-node", NodeType.SQL_JSONPATH_NODE.name(), "$.foo.bar");
-
-        assertTrue(nodeId > 0, "should return a valid node ID");
-    }
-
-    @Test
-    public void node_create_sql_jsonpath_all() {
-        createFolder("sql-all-test");
-        Long groupId = getGroupId("sql-all-test");
-
-        Long nodeId = createNodeWithType(groupId, "sql-all-node", NodeType.SQL_JSONPATH_ALL_NODE.name(), "$.foo[*]");
+        Long nodeId = createNodeWithType(groupId, "jq-node", NodeType.JQ.name(), ".foo.bar");
 
         assertTrue(nodeId > 0, "should return a valid node ID");
     }

@@ -240,9 +240,11 @@ public class LoadLegacyTests implements Callable<Integer> {
                 extractorName = extractor.name;
             }
 
-            NodeEntity node = extractor.isArray ?
-                    SqlJsonpathAllNode.parse(extractorName, extractor.jsonpath(), nodeTracking::getNodes) :
-                    SqlJsonpathNode.parse(extractorName, extractor.jsonpath(), nodeTracking::getNodes);
+            // Convert jsonpath to jq — sqlall (isArray) wraps in [...] to collect all matches
+            String jqOperation = extractor.isArray
+                    ? NodeService.jsonpathToJqArray(extractor.jsonpath())
+                    : NodeService.jsonpathToJq(extractor.jsonpath());
+            NodeEntity node = JqNode.parse(extractorName, jqOperation, nodeTracking::getNodes);
             if (node == null) {
                 System.err.println("failed to create node for extractor " + extractor);
                 return null;

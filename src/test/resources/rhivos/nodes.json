@@ -1,814 +1,1327 @@
 {
-  "folder" : "rhivos-perf-comprehensive",
-  "nodes" : [ {
-    "id" : 1,
-    "name" : "",
-    "type" : "root",
-    "operation" : null,
-    "sources" : [ ]
-  }, {
-    "id" : 2,
-    "name" : "user",
-    "type" : "sql",
-    "operation" : "$.user",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 3,
-    "name" : "uuid",
-    "type" : "sql",
-    "operation" : "$.uuid",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 4,
-    "name" : "run_id",
-    "type" : "sql",
-    "operation" : "$.run_id",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 5,
-    "name" : "start_time",
-    "type" : "sql",
-    "operation" : "$.start_time",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 6,
-    "name" : "end_time",
-    "type" : "sql",
-    "operation" : "$.end_time",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 7,
-    "name" : "description",
-    "type" : "sql",
-    "operation" : "$.description",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 8,
-    "name" : "ansible_facts",
-    "type" : "sql",
-    "operation" : "$.ansible_facts",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 9,
-    "name" : "workers",
-    "type" : "sqlall",
-    "operation" : "$.stressng_workload[*].test_results.test_config.stressors[0].workers",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 10,
-    "name" : "stressor",
-    "type" : "sqlall",
-    "operation" : "$.stressng_workload[*].test_results.test_config.stressors[0].stressor",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 11,
-    "name" : "stressng_pcp_ts",
-    "type" : "sqlall",
-    "operation" : "$.stressng_workload.pcp_time_series",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 12,
-    "name" : "stressng_sample_uuid",
-    "type" : "sqlall",
-    "operation" : "$.stressng_workload[*].sample_uuid",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 13,
-    "name" : "coremark_pro_pcp_ts",
-    "type" : "sqlall",
-    "operation" : "$.coremark_pro_workload.pcp_time_series",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 14,
-    "name" : "coremark_pro_sample_uuid",
-    "type" : "sqlall",
-    "operation" : "$.coremark_pro_workload[*].sample_uuid",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 15,
-    "name" : "autobench_pcp_ts",
-    "type" : "sqlall",
-    "operation" : "$.autobench_workload.pcp_time_series",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 16,
-    "name" : "autobench_sample_uuid",
-    "type" : "sqlall",
-    "operation" : "$.autobench_workload[*].sample_uuid",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 17,
-    "name" : "stressng_results",
-    "type" : "sqlall",
-    "operation" : "$.stressng_workload[*].test_results",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 18,
-    "name" : "coremark_pro_results",
-    "type" : "sqlall",
-    "operation" : "$.coremark_pro_workload[*].results",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 19,
-    "name" : "autobench_results",
-    "type" : "sqlall",
-    "operation" : "$.autobench_workload[*].results",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 20,
-    "name" : "fio_results",
-    "type" : "sqlall",
-    "operation" : "$.fio_workload[*].test_results",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 21,
-    "name" : "fio_pcp_ts",
-    "type" : "sqlall",
-    "operation" : "$.fio_workload.pcp_time_series",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 22,
-    "name" : "fio_sample_uuid",
-    "type" : "sqlall",
-    "operation" : "$.fio_workload[*].sample_uuid",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 23,
-    "name" : "rhivos_config",
-    "type" : "sql",
-    "operation" : "$.rhivos_config",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 24,
-    "name" : "stressng_timerlat_data",
-    "type" : "sqlall",
-    "operation" : "$.stressng_workload[*].timerlat_data",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 25,
-    "name" : "transformer_Comprehensive_Results_Extraction_11",
-    "type" : "ecma",
-    "operation" : "({\n    stressng_sample_uuid, fio_sample_uuid, coremark_pro_sample_uuid, autobench_sample_uuid, \n    stressng_results, fio_results, coremark_pro_results, autobench_results, stressng_timerlat_data,\n    stressng_pcp_ts, fio_pcp_ts, coremark_pro_pcp_ts, autobench_pcp_ts,\n    user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config, workers, stressor\n}) => {\n\n    var sngmap = stressng_sample_uuid.map((value, i) => ({\n        sample_uuid: value,\n        workload: \"stressng\",\n        metadata: {user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config},\n        workers: workers[i],\n        stressor: stressor[i],\n        results: stressng_results[i],\n        timerlat_data: stressng_timerlat_data[i],\n        pcp_ts: stressng_pcp_ts[i]\n    }));\n\n    var fiomap = fio_sample_uuid.map((value, i) => ({\n        sample_uuid: value,\n        workload: \"fio\",\n        metadata: {user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config},\n        results: fio_results[i],\n        pcp_ts: fio_pcp_ts[i]\n    }));\n    \n    var cmpmap = coremark_pro_sample_uuid.map((value, i) => ({\n        sample_uuid: value,\n        workload: \"coremark_pro\",\n        metadata: {user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config},\n        workers: coremark_pro_results[i][\"coremark_pro_params\"][\"workers\"],\n        contexts: coremark_pro_results[i][\"coremark_pro_params\"][\"contexts\"],\n        results: coremark_pro_results[i][\"coremark_pro_results\"],\n        pcp_ts: coremark_pro_pcp_ts[i]\n    }));\n    \n    var abmap = autobench_sample_uuid.map((value, i) => ({\n        sample_uuid: value,\n        workload: \"autobench\",\n        metadata: {user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config},\n        workers: autobench_results[i][\"autobench_params\"][\"workers\"],\n        contexts: autobench_results[i][\"autobench_params\"][\"contexts\"],\n        results: autobench_results[i][\"autobench_results\"],\n        pcp_ts: autobench_pcp_ts[i]\n    }));\n\n    const mymap = sngmap.concat(fiomap, cmpmap, abmap);\n    return mymap;\n}\n",
-    "sources" : [ 12, 22, 14, 16, 17, 20, 18, 19, 24, 11, 21, 13, 15, 2, 3, 4, 5, 6, 7, 8, 23, 9, 10 ]
-  }, {
-    "id" : 26,
-    "name" : "workers",
-    "type" : "sqlall",
-    "operation" : "$.stressng_workload.data[*].test_results.test_config.stressors[0].workers",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 27,
-    "name" : "stressor",
-    "type" : "sqlall",
-    "operation" : "$.stressng_workload.data[*].test_results.test_config.stressors[0].stressor",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 28,
-    "name" : "stressng_pcp_ts",
-    "type" : "sqlall",
-    "operation" : "$.stressng_workload.data.pcp_time_series",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 29,
-    "name" : "stressng_sample_uuid",
-    "type" : "sqlall",
-    "operation" : "$.stressng_workload.data[*].sample_uuid",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 30,
-    "name" : "coremark_pro_pcp_ts",
-    "type" : "sqlall",
-    "operation" : "$.coremark_pro_workload.data.pcp_time_series",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 31,
-    "name" : "coremark_pro_sample_uuid",
-    "type" : "sqlall",
-    "operation" : "$.coremark_pro_workload.data[*].sample_uuid",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 32,
-    "name" : "autobench_pcp_ts",
-    "type" : "sqlall",
-    "operation" : "$.autobench_workload.data.pcp_time_series",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 33,
-    "name" : "autobench_sample_uuid",
-    "type" : "sqlall",
-    "operation" : "$.autobench_workload.data[*].sample_uuid",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 34,
-    "name" : "stressng_results",
-    "type" : "sqlall",
-    "operation" : "$.stressng_workload.data[*].test_results",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 35,
-    "name" : "coremark_pro_results",
-    "type" : "sqlall",
-    "operation" : "$.coremark_pro_workload.data[*].results",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 36,
-    "name" : "autobench_results",
-    "type" : "sqlall",
-    "operation" : "$.autobench_workload.data[*].results",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 37,
-    "name" : "fio_results",
-    "type" : "sqlall",
-    "operation" : "$.fio_workload.data[*].test_results",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 38,
-    "name" : "fio_pcp_ts",
-    "type" : "sqlall",
-    "operation" : "$.fio_workload.data.pcp_time_series",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 39,
-    "name" : "fio_sample_uuid",
-    "type" : "sqlall",
-    "operation" : "$.fio_workload.data[*].sample_uuid",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 40,
-    "name" : "stressng_timerlat_data",
-    "type" : "sqlall",
-    "operation" : "$.stressng_workload.data[*].timerlat_data",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 41,
-    "name" : "autoware_pcp_ts",
-    "type" : "sqlall",
-    "operation" : "$.autoware_workload.data.pcp_time_series",
-    "sources" : [ 1 ]
-  }, {
-    "id" : 42,
-    "name" : "transformer_Comprehensive_Results_Extraction_4639723",
-    "type" : "ecma",
-    "operation" : "({\n    stressng_sample_uuid, fio_sample_uuid, coremark_pro_sample_uuid, autobench_sample_uuid, \n    stressng_results, fio_results, coremark_pro_results, autobench_results, stressng_timerlat_data,\n    stressng_pcp_ts, fio_pcp_ts, coremark_pro_pcp_ts, autobench_pcp_ts, autoware_pcp_ts,\n    user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config, workers, stressor\n}) => {\n\n    var sngmap = stressng_sample_uuid.map((value, i) => ({\n        sample_uuid: value,\n        workload: \"stressng\",\n        metadata: {user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config},\n        workers: workers[i],\n        stressor: stressor[i],\n        results: stressng_results[i],\n        timerlat_data: stressng_timerlat_data[i],\n        pcp_ts: stressng_pcp_ts[i]\n    }));\n\n    var fiomap = fio_sample_uuid.map((value, i) => ({\n        sample_uuid: value,\n        workload: \"fio\",\n        metadata: {user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config},\n        results: fio_results[i],\n        pcp_ts: fio_pcp_ts[i]\n    }));\n    \n    var cmpmap = coremark_pro_sample_uuid.map((value, i) => ({\n        sample_uuid: value,\n        workload: \"coremark_pro\",\n        metadata: {user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config},\n        workers: coremark_pro_results[i][\"coremark_pro_params\"][\"workers\"],\n        contexts: coremark_pro_results[i][\"coremark_pro_params\"][\"contexts\"],\n        results: coremark_pro_results[i][\"coremark_pro_results\"],\n        pcp_ts: coremark_pro_pcp_ts[i]\n    }));\n    \n    var abmap = autobench_sample_uuid.map((value, i) => ({\n        sample_uuid: value,\n        workload: \"autobench\",\n        metadata: {user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config},\n        workers: autobench_results[i][\"autobench_params\"][\"workers\"],\n        contexts: autobench_results[i][\"autobench_params\"][\"contexts\"],\n        results: autobench_results[i][\"autobench_results\"],\n        pcp_ts: autobench_pcp_ts[i]\n    }));\n\n    var awmap = ({\n        workload: \"autoware\",\n        metadata: {user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config},\n        pcp_ts: autoware_pcp_ts[0]\n    });\n\n    const mymap = sngmap.concat(fiomap, cmpmap, abmap, awmap);\n    return mymap;\n}\n",
-    "sources" : [ 29, 39, 31, 33, 34, 37, 35, 36, 40, 28, 38, 30, 32, 41, 2, 3, 4, 5, 6, 7, 8, 23, 26, 27 ]
-  }, {
-    "id" : 43,
-    "name" : "dataset",
-    "type" : "jq",
-    "operation" : "[.[] | if type == \"array\" then .[] else . end][]",
-    "sources" : [ 25, 42 ]
-  }, {
-    "id" : 44,
-    "name" : "Description",
-    "type" : "sql",
-    "operation" : "$.metadata.description",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 45,
-    "name" : "Hostname",
-    "type" : "sql",
-    "operation" : "$.metadata.ansible_facts.env.HOSTNAME",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 46,
-    "name" : "Run ID",
-    "type" : "sql",
-    "operation" : "$.metadata.run_id",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 47,
-    "name" : "Metadata",
-    "type" : "sql",
-    "operation" : "$.metadata",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 48,
-    "name" : "Start Time",
-    "type" : "sql",
-    "operation" : "$.metadata.start_time",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 49,
-    "name" : "User",
-    "type" : "sql",
-    "operation" : "$.metadata.user",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 50,
-    "name" : "UUID",
-    "type" : "sql",
-    "operation" : "$.metadata.uuid",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 51,
-    "name" : "Stressor",
-    "type" : "sql",
-    "operation" : "$.stressor",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 52,
-    "name" : "Workers",
-    "type" : "sql",
-    "operation" : "$.workers",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 53,
-    "name" : "Sample UUID",
-    "type" : "sql",
-    "operation" : "$.sample_uuid",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 54,
-    "name" : "Workload",
-    "type" : "sql",
-    "operation" : "$.workload",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 55,
-    "name" : "Contexts",
-    "type" : "sql",
-    "operation" : "$.contexts",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 56,
-    "name" : "CoreMark-PRO Single Core",
-    "type" : "sql",
-    "operation" : "$.results.\"CoreMark-PRO\".SingleCore",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 57,
-    "name" : "CoreMark-PRO Scaling",
-    "type" : "sql",
-    "operation" : "$.timerlat_data.total_irq_latency.max",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 58,
-    "name" : "CoreMark-PRO Multi Core",
-    "type" : "sql",
-    "operation" : "$.results.\"CoreMark-PRO\".MultiCore",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 59,
-    "name" : "results",
-    "type" : "sqlall",
-    "operation" : "$.results.*.SingleCore",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 60,
-    "name" : "workload",
-    "type" : "sql",
-    "operation" : "$.workload",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 61,
-    "name" : "Autobench Single Core_extract",
-    "type" : "jq",
-    "operation" : "{\"results\": (try [.results[]?.SingleCore] catch null), \"workload\": (.workload // null)}",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 62,
-    "name" : "Autobench Single Core",
-    "type" : "ecma",
-    "operation" : "value => {\n    if (value[\"workload\"] != \"autobench\") {\n        return null\n    }\n    if(!value[\"results\"]) {\n        return 0\n    } else { \n        return parseFloat(((value[\"results\"].reduce((a,b) => a+b, 0))/value[\"results\"].length).toFixed(3))\n    }\n};",
-    "sources" : [ 61 ]
-  }, {
-    "id" : 63,
-    "name" : "Kernel",
-    "type" : "sql",
-    "operation" : "$.metadata.ansible_facts.kernel",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 64,
-    "name" : "results",
-    "type" : "sqlall",
-    "operation" : "$.results.*.MultiCore",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 65,
-    "name" : "Autobench Multi Core_extract",
-    "type" : "jq",
-    "operation" : "{\"results\": (try [.results[]?.MultiCore] catch null), \"workload\": (.workload // null)}",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 66,
-    "name" : "Autobench Multi Core",
-    "type" : "ecma",
-    "operation" : "value => {\n    if (value[\"workload\"] != \"autobench\") {\n        return null\n    }\n    if(!value[\"results\"]) {\n        return 0\n    } else { \n        return parseFloat(((value[\"results\"].reduce((a,b) => a+b, 0))/value[\"results\"].length).toFixed(3))\n    }\n};",
-    "sources" : [ 65 ]
-  }, {
-    "id" : 67,
-    "name" : "results",
-    "type" : "sqlall",
-    "operation" : "$.results.*.Scaling",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 68,
-    "name" : "Autobench Scaling_extract",
-    "type" : "jq",
-    "operation" : "{\"results\": (try [.results[]?.Scaling] catch null), \"workload\": (.workload // null)}",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 69,
-    "name" : "Autobench Scaling",
-    "type" : "ecma",
-    "operation" : "value => {\n    if (value[\"workload\"] != \"autobench\") {\n        return null\n    }\n    if(!value[\"results\"]) {\n        return 0\n    } else { \n        return parseFloat(((value[\"results\"].reduce((a,b) => a+b, 0))/value[\"results\"].length).toFixed(3))\n    }\n};",
-    "sources" : [ 68 ]
-  }, {
-    "id" : 70,
-    "name" : "fio_mean_read_iops",
-    "type" : "sqlall",
-    "operation" : "$.results.jobs[*].read.iops",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 71,
-    "name" : "FIO Mean Read IOPS",
-    "type" : "ecma",
-    "operation" : "value => { if(!value) { return 0 } else { return parseFloat(((value.reduce((a,b) => a+b, 0))/value.length).toFixed(3)) || null }; }",
-    "sources" : [ 70 ]
-  }, {
-    "id" : 72,
-    "name" : "fio_mean_write_bandwidth",
-    "type" : "sqlall",
-    "operation" : "$.results.jobs[*].write.bw_mean",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 73,
-    "name" : "FIO Mean Write Bandwidth",
-    "type" : "ecma",
-    "operation" : "value => { if(!value) { return 0 } else { return parseFloat(((value.reduce((a,b) => a+b, 0))/value.length).toFixed(3)) || null }; }",
-    "sources" : [ 72 ]
-  }, {
-    "id" : 74,
-    "name" : "fio_mean_read_bandwidth",
-    "type" : "sqlall",
-    "operation" : "$.results.jobs[*].read.bw_mean",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 75,
-    "name" : "FIO Mean Read Bandwidth",
-    "type" : "ecma",
-    "operation" : "value => { if(!value) { return 0 } else { return parseFloat(((value.reduce((a,b) => a+b, 0))/value.length).toFixed(3)) || null }; }",
-    "sources" : [ 74 ]
-  }, {
-    "id" : 76,
-    "name" : "fio_mean_write_99_percentile_latency",
-    "type" : "sqlall",
-    "operation" : "$.results.jobs[*].write.clat_ns.percentile.\"99.000000\"",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 77,
-    "name" : "FIO Mean Write 99 Percentile Latency",
-    "type" : "ecma",
-    "operation" : "value => { if(!value) { return 0 } else { return parseFloat(((value.reduce((a,b) => a+b, 0))/value.length).toFixed(3)) || null }; }",
-    "sources" : [ 76 ]
-  }, {
-    "id" : 78,
-    "name" : "fio_mean_read_99_percentile_latency",
-    "type" : "sqlall",
-    "operation" : "$.results.jobs[*].read.clat_ns.percentile.\"99.000000\"",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 79,
-    "name" : "FIO Mean Read 99 Percentile Latency",
-    "type" : "ecma",
-    "operation" : "value => { if(!value) { return 0 } else { return parseFloat(((value.reduce((a,b) => a+b, 0))/value.length).toFixed(3)) || null }; }",
-    "sources" : [ 78 ]
-  }, {
-    "id" : 80,
-    "name" : "fio_mean_write_iops",
-    "type" : "sqlall",
-    "operation" : "$.results.jobs[*].write.iops",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 81,
-    "name" : "FIO Mean Write IOPS",
-    "type" : "ecma",
-    "operation" : "value => { if(!value) { return 0 } else { return parseFloat(((value.reduce((a,b) => a+b, 0))/value.length).toFixed(3)) || null }; }",
-    "sources" : [ 80 ]
-  }, {
-    "id" : 82,
-    "name" : "RHIVOS Target",
-    "type" : "sql",
-    "operation" : "$.metadata.rhivos_config.image_target",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 83,
-    "name" : "RHIVOS OS ID",
-    "type" : "sql",
-    "operation" : "$.metadata.rhivos_config.os_id",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 84,
-    "name" : "RHIVOS Mode",
-    "type" : "sql",
-    "operation" : "$.metadata.rhivos_config.image_mode",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 85,
-    "name" : "Results",
-    "type" : "sql",
-    "operation" : "$.results",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 86,
-    "name" : "pcp_time_series",
-    "type" : "sql",
-    "operation" : "$.pcp_ts",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 87,
-    "name" : "uuid",
-    "type" : "sql",
-    "operation" : "$.metadata.uuid",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 88,
-    "name" : "PCP Time Series_extract",
-    "type" : "jq",
-    "operation" : "{\"pcp_time_series\": (.pcp_ts // null), \"uuid\": (.metadata.uuid // null)}",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 89,
-    "name" : "PCP Time Series",
-    "type" : "ecma",
-    "operation" : "value => {\n    const derived_frequency = Date.parse(value[\"pcp_time_series\"][1].Time) - Date.parse(value[\"pcp_time_series\"][0].Time);\n    for (var i = 0; i < value[\"pcp_time_series\"].length; i++) {\n        value[\"pcp_time_series\"][i].elapsed_time = i * derived_frequency;\n        value[\"pcp_time_series\"][i].uuid = value[\"uuid\"];\n    }\n    return value[\"pcp_time_series\"];\n};",
-    "sources" : [ 88 ]
-  }, {
-    "id" : 90,
-    "name" : "RHIVOS Build",
-    "type" : "sql",
-    "operation" : "$.metadata.rhivos_config.build",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 91,
-    "name" : "start_time",
-    "type" : "sql",
-    "operation" : "$.metadata.start_time",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 92,
-    "name" : "rhivos_mode",
-    "type" : "sql",
-    "operation" : "$.metadata.rhivos_config.image_mode",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 93,
-    "name" : "rhivos_os_id",
-    "type" : "sql",
-    "operation" : "$.metadata.rhivos_config.os_id",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 94,
-    "name" : "rhivos_target",
-    "type" : "sql",
-    "operation" : "$.metadata.rhivos_config.image_target",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 95,
-    "name" : "rhivos_build",
-    "type" : "sql",
-    "operation" : "$.metadata.rhivos_config.build",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 96,
-    "name" : "SUT_extract",
-    "type" : "jq",
-    "operation" : "{\"start_time\": (.metadata.start_time // null), \"rhivos_mode\": (.metadata.rhivos_config.image_mode // null), \"rhivos_os_id\": (.metadata.rhivos_config.os_id // null), \"rhivos_target\": (.metadata.rhivos_config.image_target // null), \"rhivos_build\": (.metadata.rhivos_config.build // null)}",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 97,
-    "name" : "SUT",
-    "type" : "ecma",
-    "operation" : "value => {\n    var sut = []\n    var test_date = new Date(value[\"start_time\"]);\n    sut.push(value[\"rhivos_target\"]);\n    sut.push(value[\"rhivos_os_id\"]);\n    sut.push(value[\"rhivos_mode\"]);\n    sut.push(value[\"rhivos_build\"]);\n    sut.push(`${String(test_date.getFullYear()).padStart(4, '0')}-${String(test_date.getMonth() + 1).padStart(2, '0')}-${String(test_date.getDate()).padStart(2, '0')} ${String(test_date.getHours()).padStart(2, '0')}:${String(test_date.getMinutes()).padStart(2, '0')}:${String(test_date.getSeconds()).padStart(2, '0')}`);\n    return sut.join(' ')\n}",
-    "sources" : [ 96 ]
-  }, {
-    "id" : 98,
-    "name" : "results",
-    "type" : "sql",
-    "operation" : "$.results",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 99,
-    "name" : "metadata",
-    "type" : "sql",
-    "operation" : "$.metadata",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 100,
-    "name" : "Autobench Results_extract",
-    "type" : "jq",
-    "operation" : "{\"results\": (.results // null), \"metadata\": (.metadata // null), \"workload\": (.workload // null)}",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 101,
-    "name" : "Autobench Results",
-    "type" : "ecma",
-    "operation" : "value => {\n    if (value[\"workload\"] != \"autobench\") {\n        return null\n    };\n    const workloads = [];\n    for (const section of Object.keys(value[\"results\"])) {\n        console.log(section);\n        value[\"results\"][section].test_name = section;\n        value[\"results\"][section].uuid = value[\"metadata\"][\"uuid\"];\n        workloads.push(value[\"results\"][section]);\n    };\n    return workloads;\n};\n\n// value => {\n//     const workloads = [];\n//     for (const section of Object.keys(value[\"results\"])) {\n//         console.log(section);\n//         value[\"results\"][section].test_name = section;\n//         workloads.push(value[\"results\"][section]);\n//     };\n    \n//     return {\n//         uuid: value[\"metadata\"][\"uuid\"],\n//         results: workloads   \n//     };\n// };\n\n// Previous function for Benchmark Columnar Results\n// value => {\n//     const metaObj = Object(value[\"metadata\"])\n//     function Workload(tName, tMetric, tValue, tMeta) {\n//         this.test_name = tName;\n//         this.test_metric = tMetric;\n//         this.test_value = tValue;\n//         this.metadata = tMeta;\n//     };\n//     const workloads = [];\n//     for (const section of Object.keys(value[\"results\"][0])) {\n//         console.log(section);\n//         for (const element of Object.keys(value[\"results\"][0][section])) {\n//             console.log(element + \",\" + value[\"results\"][0][section][element]);\n//             // const myNew = new Workload(section, element, value[0][section][element]);\n//             workloads.push(new Workload(section, element, value[\"results\"][0][section][element], metaObj));\n\n//         };\n//         console.log();\n//     };\n//     return workloads;\n// };",
-    "sources" : [ 100 ]
-  }, {
-    "id" : 102,
-    "name" : "Stress-ng Max IRQ Latency",
-    "type" : "sql",
-    "operation" : "$.timerlat_data.total_irq_latency.max",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 103,
-    "name" : "Stress-ng Max User Latency",
-    "type" : "sql",
-    "operation" : "$.timerlat_data.total_usr_latency.max",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 104,
-    "name" : "Stress-ng Max Thread Latency",
-    "type" : "sql",
-    "operation" : "$.timerlat_data.total_thr_latency.max",
-    "sources" : [ 43 ]
-  }, {
-    "id" : 105,
-    "name" : "rhivos-perf-comprehensive_fingerprint",
-    "type" : "fp",
-    "operation" : null,
-    "sources" : [ 82, 83, 84, 46 ]
-  }, {
-    "id" : 129,
-    "name" : "rd.CoreMark-PRO Single Core.5309024",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 56 ]
-  }, {
-    "id" : 130,
-    "name" : "rd.Autobench Single Core.5309025",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 62 ]
-  }, {
-    "id" : 131,
-    "name" : "rd.Autobench Single Core.5309026",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 62 ]
-  }, {
-    "id" : 132,
-    "name" : "rd.CoreMark-PRO Multi Core.5309027",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 58 ]
-  }, {
-    "id" : 106,
-    "name" : "rd.Stress-ng Max IRQ Latency.5309087",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 102 ]
-  }, {
-    "id" : 107,
-    "name" : "rd.Stress-ng Max IRQ Latency.5309088",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 102 ]
-  }, {
-    "id" : 108,
-    "name" : "rd.Stress-ng Max Thread Latency.5309089",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 104 ]
-  }, {
-    "id" : 109,
-    "name" : "rd.Stress-ng Max Thread Latency.5309090",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 104 ]
-  }, {
-    "id" : 110,
-    "name" : "rd.Stress-ng Max User Latency.5309091",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 103 ]
-  }, {
-    "id" : 111,
-    "name" : "rd.Stress-ng Max User Latency.5309092",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 103 ]
-  }, {
-    "id" : 112,
-    "name" : "rd.CoreMark-PRO Scaling.5308999",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 57 ]
-  }, {
-    "id" : 113,
-    "name" : "rd.CoreMark-PRO Scaling.5309000",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 57 ]
-  }, {
-    "id" : 114,
-    "name" : "rd.Autobench Scaling.5309001",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 69 ]
-  }, {
-    "id" : 115,
-    "name" : "rd.Autobench Scaling.5309002",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 69 ]
-  }, {
-    "id" : 116,
-    "name" : "rd.FIO Mean Read 99 Percentile Latency.5309011",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 79 ]
-  }, {
-    "id" : 117,
-    "name" : "rd.FIO Mean Read 99 Percentile Latency.5309012",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 79 ]
-  }, {
-    "id" : 118,
-    "name" : "rd.FIO Mean Read Bandwidth.5309013",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 75 ]
-  }, {
-    "id" : 119,
-    "name" : "rd.FIO Mean Read Bandwidth.5309014",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 75 ]
-  }, {
-    "id" : 120,
-    "name" : "rd.FIO Mean Write 99 Percentile Latency.5309015",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 77 ]
-  }, {
-    "id" : 121,
-    "name" : "rd.FIO Mean Write 99 Percentile Latency.5309016",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 77 ]
-  }, {
-    "id" : 122,
-    "name" : "rd.FIO Mean Write Bandwidth.5309017",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 73 ]
-  }, {
-    "id" : 123,
-    "name" : "rd.FIO Mean Write Bandwidth.5309018",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 73 ]
-  }, {
-    "id" : 124,
-    "name" : "rd.FIO Mean Write IOPS.5309019",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 81 ]
-  }, {
-    "id" : 125,
-    "name" : "rd.FIO Mean Write IOPS.5309020",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 81 ]
-  }, {
-    "id" : 126,
-    "name" : "rd.FIO Mean Read IOPS.5309021",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 71 ]
-  }, {
-    "id" : 127,
-    "name" : "rd.FIO Mean Read IOPS.5309022",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 71 ]
-  }, {
-    "id" : 128,
-    "name" : "rd.CoreMark-PRO Single Core.5309023",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 56 ]
-  }, {
-    "id" : 133,
-    "name" : "rd.CoreMark-PRO Multi Core.5309028",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 58 ]
-  }, {
-    "id" : 134,
-    "name" : "rd.Autobench Multi Core.5309029",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 66 ]
-  }, {
-    "id" : 135,
-    "name" : "rd.Autobench Multi Core.5309030",
-    "type" : "rd",
-    "operation" : "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
-    "sources" : [ 105, 43, 66 ]
-  } ]
+  "folder": "rhivos-perf-comprehensive",
+  "nodes": [
+    {
+      "id": 1,
+      "name": "",
+      "type": "root",
+      "operation": null,
+      "sources": []
+    },
+    {
+      "id": 2,
+      "name": "user",
+      "type": "jq",
+      "operation": ".user",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 3,
+      "name": "uuid",
+      "type": "jq",
+      "operation": ".uuid",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 4,
+      "name": "run_id",
+      "type": "jq",
+      "operation": ".run_id",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 5,
+      "name": "start_time",
+      "type": "jq",
+      "operation": ".start_time",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 6,
+      "name": "end_time",
+      "type": "jq",
+      "operation": ".end_time",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 7,
+      "name": "description",
+      "type": "jq",
+      "operation": ".description",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 8,
+      "name": "ansible_facts",
+      "type": "jq",
+      "operation": ".ansible_facts",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 9,
+      "name": "workers",
+      "type": "jq",
+      "operation": "[.stressng_workload[]?.test_results.test_config.stressors[0].workers]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 10,
+      "name": "stressor",
+      "type": "jq",
+      "operation": "[.stressng_workload[]?.test_results.test_config.stressors[0].stressor]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 11,
+      "name": "stressng_pcp_ts",
+      "type": "jq",
+      "operation": "[.stressng_workload.pcp_time_series // empty]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 12,
+      "name": "stressng_sample_uuid",
+      "type": "jq",
+      "operation": "[.stressng_workload[]?.sample_uuid]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 13,
+      "name": "coremark_pro_pcp_ts",
+      "type": "jq",
+      "operation": "[.coremark_pro_workload.pcp_time_series // empty]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 14,
+      "name": "coremark_pro_sample_uuid",
+      "type": "jq",
+      "operation": "[.coremark_pro_workload[]?.sample_uuid]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 15,
+      "name": "autobench_pcp_ts",
+      "type": "jq",
+      "operation": "[.autobench_workload.pcp_time_series // empty]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 16,
+      "name": "autobench_sample_uuid",
+      "type": "jq",
+      "operation": "[.autobench_workload[]?.sample_uuid]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 17,
+      "name": "stressng_results",
+      "type": "jq",
+      "operation": "[.stressng_workload[]?.test_results]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 18,
+      "name": "coremark_pro_results",
+      "type": "jq",
+      "operation": "[.coremark_pro_workload[]?.results]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 19,
+      "name": "autobench_results",
+      "type": "jq",
+      "operation": "[.autobench_workload[]?.results]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 20,
+      "name": "fio_results",
+      "type": "jq",
+      "operation": "[.fio_workload[]?.test_results]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 21,
+      "name": "fio_pcp_ts",
+      "type": "jq",
+      "operation": "[.fio_workload.pcp_time_series // empty]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 22,
+      "name": "fio_sample_uuid",
+      "type": "jq",
+      "operation": "[.fio_workload[]?.sample_uuid]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 23,
+      "name": "rhivos_config",
+      "type": "jq",
+      "operation": ".rhivos_config",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 24,
+      "name": "stressng_timerlat_data",
+      "type": "jq",
+      "operation": "[.stressng_workload[]?.timerlat_data]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 25,
+      "name": "transformer_Comprehensive_Results_Extraction_11",
+      "type": "ecma",
+      "operation": "({\n    stressng_sample_uuid, fio_sample_uuid, coremark_pro_sample_uuid, autobench_sample_uuid, \n    stressng_results, fio_results, coremark_pro_results, autobench_results, stressng_timerlat_data,\n    stressng_pcp_ts, fio_pcp_ts, coremark_pro_pcp_ts, autobench_pcp_ts,\n    user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config, workers, stressor\n}) => {\n\n    var sngmap = stressng_sample_uuid.map((value, i) => ({\n        sample_uuid: value,\n        workload: \"stressng\",\n        metadata: {user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config},\n        workers: workers[i],\n        stressor: stressor[i],\n        results: stressng_results[i],\n        timerlat_data: stressng_timerlat_data[i],\n        pcp_ts: stressng_pcp_ts[i]\n    }));\n\n    var fiomap = fio_sample_uuid.map((value, i) => ({\n        sample_uuid: value,\n        workload: \"fio\",\n        metadata: {user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config},\n        results: fio_results[i],\n        pcp_ts: fio_pcp_ts[i]\n    }));\n    \n    var cmpmap = coremark_pro_sample_uuid.map((value, i) => ({\n        sample_uuid: value,\n        workload: \"coremark_pro\",\n        metadata: {user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config},\n        workers: coremark_pro_results[i][\"coremark_pro_params\"][\"workers\"],\n        contexts: coremark_pro_results[i][\"coremark_pro_params\"][\"contexts\"],\n        results: coremark_pro_results[i][\"coremark_pro_results\"],\n        pcp_ts: coremark_pro_pcp_ts[i]\n    }));\n    \n    var abmap = autobench_sample_uuid.map((value, i) => ({\n        sample_uuid: value,\n        workload: \"autobench\",\n        metadata: {user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config},\n        workers: autobench_results[i][\"autobench_params\"][\"workers\"],\n        contexts: autobench_results[i][\"autobench_params\"][\"contexts\"],\n        results: autobench_results[i][\"autobench_results\"],\n        pcp_ts: autobench_pcp_ts[i]\n    }));\n\n    const mymap = sngmap.concat(fiomap, cmpmap, abmap);\n    return mymap;\n}\n",
+      "sources": [
+        12,
+        22,
+        14,
+        16,
+        17,
+        20,
+        18,
+        19,
+        24,
+        11,
+        21,
+        13,
+        15,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        23,
+        9,
+        10
+      ]
+    },
+    {
+      "id": 26,
+      "name": "workers",
+      "type": "jq",
+      "operation": "[.stressng_workload.data[]?.test_results.test_config.stressors[0].workers]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 27,
+      "name": "stressor",
+      "type": "jq",
+      "operation": "[.stressng_workload.data[]?.test_results.test_config.stressors[0].stressor]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 28,
+      "name": "stressng_pcp_ts",
+      "type": "jq",
+      "operation": "[.stressng_workload.data.pcp_time_series // empty]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 29,
+      "name": "stressng_sample_uuid",
+      "type": "jq",
+      "operation": "[.stressng_workload.data[]?.sample_uuid]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 30,
+      "name": "coremark_pro_pcp_ts",
+      "type": "jq",
+      "operation": "[.coremark_pro_workload.data.pcp_time_series // empty]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 31,
+      "name": "coremark_pro_sample_uuid",
+      "type": "jq",
+      "operation": "[.coremark_pro_workload.data[]?.sample_uuid]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 32,
+      "name": "autobench_pcp_ts",
+      "type": "jq",
+      "operation": "[.autobench_workload.data.pcp_time_series // empty]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 33,
+      "name": "autobench_sample_uuid",
+      "type": "jq",
+      "operation": "[.autobench_workload.data[]?.sample_uuid]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 34,
+      "name": "stressng_results",
+      "type": "jq",
+      "operation": "[.stressng_workload.data[]?.test_results]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 35,
+      "name": "coremark_pro_results",
+      "type": "jq",
+      "operation": "[.coremark_pro_workload.data[]?.results]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 36,
+      "name": "autobench_results",
+      "type": "jq",
+      "operation": "[.autobench_workload.data[]?.results]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 37,
+      "name": "fio_results",
+      "type": "jq",
+      "operation": "[.fio_workload.data[]?.test_results]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 38,
+      "name": "fio_pcp_ts",
+      "type": "jq",
+      "operation": "[.fio_workload.data.pcp_time_series // empty]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 39,
+      "name": "fio_sample_uuid",
+      "type": "jq",
+      "operation": "[.fio_workload.data[]?.sample_uuid]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 40,
+      "name": "stressng_timerlat_data",
+      "type": "jq",
+      "operation": "[.stressng_workload.data[]?.timerlat_data]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 41,
+      "name": "autoware_pcp_ts",
+      "type": "jq",
+      "operation": "[.autoware_workload.data.pcp_time_series // empty]",
+      "sources": [
+        1
+      ]
+    },
+    {
+      "id": 42,
+      "name": "transformer_Comprehensive_Results_Extraction_4639723",
+      "type": "ecma",
+      "operation": "({\n    stressng_sample_uuid, fio_sample_uuid, coremark_pro_sample_uuid, autobench_sample_uuid, \n    stressng_results, fio_results, coremark_pro_results, autobench_results, stressng_timerlat_data,\n    stressng_pcp_ts, fio_pcp_ts, coremark_pro_pcp_ts, autobench_pcp_ts, autoware_pcp_ts,\n    user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config, workers, stressor\n}) => {\n\n    var sngmap = stressng_sample_uuid.map((value, i) => ({\n        sample_uuid: value,\n        workload: \"stressng\",\n        metadata: {user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config},\n        workers: workers[i],\n        stressor: stressor[i],\n        results: stressng_results[i],\n        timerlat_data: stressng_timerlat_data[i],\n        pcp_ts: stressng_pcp_ts[i]\n    }));\n\n    var fiomap = fio_sample_uuid.map((value, i) => ({\n        sample_uuid: value,\n        workload: \"fio\",\n        metadata: {user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config},\n        results: fio_results[i],\n        pcp_ts: fio_pcp_ts[i]\n    }));\n    \n    var cmpmap = coremark_pro_sample_uuid.map((value, i) => ({\n        sample_uuid: value,\n        workload: \"coremark_pro\",\n        metadata: {user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config},\n        workers: coremark_pro_results[i][\"coremark_pro_params\"][\"workers\"],\n        contexts: coremark_pro_results[i][\"coremark_pro_params\"][\"contexts\"],\n        results: coremark_pro_results[i][\"coremark_pro_results\"],\n        pcp_ts: coremark_pro_pcp_ts[i]\n    }));\n    \n    var abmap = autobench_sample_uuid.map((value, i) => ({\n        sample_uuid: value,\n        workload: \"autobench\",\n        metadata: {user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config},\n        workers: autobench_results[i][\"autobench_params\"][\"workers\"],\n        contexts: autobench_results[i][\"autobench_params\"][\"contexts\"],\n        results: autobench_results[i][\"autobench_results\"],\n        pcp_ts: autobench_pcp_ts[i]\n    }));\n\n    var awmap = ({\n        workload: \"autoware\",\n        metadata: {user, uuid, run_id, start_time, end_time, description, ansible_facts, rhivos_config},\n        pcp_ts: autoware_pcp_ts[0]\n    });\n\n    const mymap = sngmap.concat(fiomap, cmpmap, abmap, awmap);\n    return mymap;\n}\n",
+      "sources": [
+        29,
+        39,
+        31,
+        33,
+        34,
+        37,
+        35,
+        36,
+        40,
+        28,
+        38,
+        30,
+        32,
+        41,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        23,
+        26,
+        27
+      ]
+    },
+    {
+      "id": 43,
+      "name": "dataset",
+      "type": "jq",
+      "operation": "[.[] | if type == \"array\" then .[] else . end][]",
+      "sources": [
+        25,
+        42
+      ]
+    },
+    {
+      "id": 44,
+      "name": "Description",
+      "type": "jq",
+      "operation": ".metadata.description",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 45,
+      "name": "Hostname",
+      "type": "jq",
+      "operation": ".metadata.ansible_facts.env.HOSTNAME",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 46,
+      "name": "Run ID",
+      "type": "jq",
+      "operation": ".metadata.run_id",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 47,
+      "name": "Metadata",
+      "type": "jq",
+      "operation": ".metadata",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 48,
+      "name": "Start Time",
+      "type": "jq",
+      "operation": ".metadata.start_time",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 49,
+      "name": "User",
+      "type": "jq",
+      "operation": ".metadata.user",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 50,
+      "name": "UUID",
+      "type": "jq",
+      "operation": ".metadata.uuid",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 51,
+      "name": "Stressor",
+      "type": "jq",
+      "operation": ".stressor",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 52,
+      "name": "Workers",
+      "type": "jq",
+      "operation": ".workers",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 53,
+      "name": "Sample UUID",
+      "type": "jq",
+      "operation": ".sample_uuid",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 54,
+      "name": "Workload",
+      "type": "jq",
+      "operation": ".workload",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 55,
+      "name": "Contexts",
+      "type": "jq",
+      "operation": ".contexts",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 56,
+      "name": "CoreMark-PRO Single Core",
+      "type": "jq",
+      "operation": ".results.\"CoreMark-PRO\".SingleCore",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 57,
+      "name": "CoreMark-PRO Scaling",
+      "type": "jq",
+      "operation": ".timerlat_data.total_irq_latency.max",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 58,
+      "name": "CoreMark-PRO Multi Core",
+      "type": "jq",
+      "operation": ".results.\"CoreMark-PRO\".MultiCore",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 59,
+      "name": "results",
+      "type": "jq",
+      "operation": "[.results[]?.SingleCore]",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 60,
+      "name": "workload",
+      "type": "jq",
+      "operation": ".workload",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 61,
+      "name": "Autobench Single Core_extract",
+      "type": "jq",
+      "operation": "{\"results\": (try [.results[]?.SingleCore] catch null), \"workload\": (.workload // null)}",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 62,
+      "name": "Autobench Single Core",
+      "type": "ecma",
+      "operation": "value => {\n    if (value[\"workload\"] != \"autobench\") {\n        return null\n    }\n    if(!value[\"results\"]) {\n        return 0\n    } else { \n        return parseFloat(((value[\"results\"].reduce((a,b) => a+b, 0))/value[\"results\"].length).toFixed(3))\n    }\n};",
+      "sources": [
+        61
+      ]
+    },
+    {
+      "id": 63,
+      "name": "Kernel",
+      "type": "jq",
+      "operation": ".metadata.ansible_facts.kernel",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 64,
+      "name": "results",
+      "type": "jq",
+      "operation": "[.results[]?.MultiCore]",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 65,
+      "name": "Autobench Multi Core_extract",
+      "type": "jq",
+      "operation": "{\"results\": (try [.results[]?.MultiCore] catch null), \"workload\": (.workload // null)}",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 66,
+      "name": "Autobench Multi Core",
+      "type": "ecma",
+      "operation": "value => {\n    if (value[\"workload\"] != \"autobench\") {\n        return null\n    }\n    if(!value[\"results\"]) {\n        return 0\n    } else { \n        return parseFloat(((value[\"results\"].reduce((a,b) => a+b, 0))/value[\"results\"].length).toFixed(3))\n    }\n};",
+      "sources": [
+        65
+      ]
+    },
+    {
+      "id": 67,
+      "name": "results",
+      "type": "jq",
+      "operation": "[.results[]?.Scaling]",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 68,
+      "name": "Autobench Scaling_extract",
+      "type": "jq",
+      "operation": "{\"results\": (try [.results[]?.Scaling] catch null), \"workload\": (.workload // null)}",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 69,
+      "name": "Autobench Scaling",
+      "type": "ecma",
+      "operation": "value => {\n    if (value[\"workload\"] != \"autobench\") {\n        return null\n    }\n    if(!value[\"results\"]) {\n        return 0\n    } else { \n        return parseFloat(((value[\"results\"].reduce((a,b) => a+b, 0))/value[\"results\"].length).toFixed(3))\n    }\n};",
+      "sources": [
+        68
+      ]
+    },
+    {
+      "id": 70,
+      "name": "fio_mean_read_iops",
+      "type": "jq",
+      "operation": "[.results.jobs[]?.read.iops]",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 71,
+      "name": "FIO Mean Read IOPS",
+      "type": "ecma",
+      "operation": "value => { if(!value) { return 0 } else { return parseFloat(((value.reduce((a,b) => a+b, 0))/value.length).toFixed(3)) || null }; }",
+      "sources": [
+        70
+      ]
+    },
+    {
+      "id": 72,
+      "name": "fio_mean_write_bandwidth",
+      "type": "jq",
+      "operation": "[.results.jobs[]?.write.bw_mean]",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 73,
+      "name": "FIO Mean Write Bandwidth",
+      "type": "ecma",
+      "operation": "value => { if(!value) { return 0 } else { return parseFloat(((value.reduce((a,b) => a+b, 0))/value.length).toFixed(3)) || null }; }",
+      "sources": [
+        72
+      ]
+    },
+    {
+      "id": 74,
+      "name": "fio_mean_read_bandwidth",
+      "type": "jq",
+      "operation": "[.results.jobs[]?.read.bw_mean]",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 75,
+      "name": "FIO Mean Read Bandwidth",
+      "type": "ecma",
+      "operation": "value => { if(!value) { return 0 } else { return parseFloat(((value.reduce((a,b) => a+b, 0))/value.length).toFixed(3)) || null }; }",
+      "sources": [
+        74
+      ]
+    },
+    {
+      "id": 76,
+      "name": "fio_mean_write_99_percentile_latency",
+      "type": "jq",
+      "operation": "[.results.jobs[]?.write.clat_ns.percentile.\"99.000000\"]",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 77,
+      "name": "FIO Mean Write 99 Percentile Latency",
+      "type": "ecma",
+      "operation": "value => { if(!value) { return 0 } else { return parseFloat(((value.reduce((a,b) => a+b, 0))/value.length).toFixed(3)) || null }; }",
+      "sources": [
+        76
+      ]
+    },
+    {
+      "id": 78,
+      "name": "fio_mean_read_99_percentile_latency",
+      "type": "jq",
+      "operation": "[.results.jobs[]?.read.clat_ns.percentile.\"99.000000\"]",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 79,
+      "name": "FIO Mean Read 99 Percentile Latency",
+      "type": "ecma",
+      "operation": "value => { if(!value) { return 0 } else { return parseFloat(((value.reduce((a,b) => a+b, 0))/value.length).toFixed(3)) || null }; }",
+      "sources": [
+        78
+      ]
+    },
+    {
+      "id": 80,
+      "name": "fio_mean_write_iops",
+      "type": "jq",
+      "operation": "[.results.jobs[]?.write.iops]",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 81,
+      "name": "FIO Mean Write IOPS",
+      "type": "ecma",
+      "operation": "value => { if(!value) { return 0 } else { return parseFloat(((value.reduce((a,b) => a+b, 0))/value.length).toFixed(3)) || null }; }",
+      "sources": [
+        80
+      ]
+    },
+    {
+      "id": 82,
+      "name": "RHIVOS Target",
+      "type": "jq",
+      "operation": ".metadata.rhivos_config.image_target",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 83,
+      "name": "RHIVOS OS ID",
+      "type": "jq",
+      "operation": ".metadata.rhivos_config.os_id",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 84,
+      "name": "RHIVOS Mode",
+      "type": "jq",
+      "operation": ".metadata.rhivos_config.image_mode",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 85,
+      "name": "Results",
+      "type": "jq",
+      "operation": ".results",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 86,
+      "name": "pcp_time_series",
+      "type": "jq",
+      "operation": ".pcp_ts",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 87,
+      "name": "uuid",
+      "type": "jq",
+      "operation": ".metadata.uuid",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 88,
+      "name": "PCP Time Series_extract",
+      "type": "jq",
+      "operation": "{\"pcp_time_series\": (.pcp_ts // null), \"uuid\": (.metadata.uuid // null)}",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 89,
+      "name": "PCP Time Series",
+      "type": "ecma",
+      "operation": "value => {\n    const derived_frequency = Date.parse(value[\"pcp_time_series\"][1].Time) - Date.parse(value[\"pcp_time_series\"][0].Time);\n    for (var i = 0; i < value[\"pcp_time_series\"].length; i++) {\n        value[\"pcp_time_series\"][i].elapsed_time = i * derived_frequency;\n        value[\"pcp_time_series\"][i].uuid = value[\"uuid\"];\n    }\n    return value[\"pcp_time_series\"];\n};",
+      "sources": [
+        88
+      ]
+    },
+    {
+      "id": 90,
+      "name": "RHIVOS Build",
+      "type": "jq",
+      "operation": ".metadata.rhivos_config.build",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 91,
+      "name": "start_time",
+      "type": "jq",
+      "operation": ".metadata.start_time",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 92,
+      "name": "rhivos_mode",
+      "type": "jq",
+      "operation": ".metadata.rhivos_config.image_mode",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 93,
+      "name": "rhivos_os_id",
+      "type": "jq",
+      "operation": ".metadata.rhivos_config.os_id",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 94,
+      "name": "rhivos_target",
+      "type": "jq",
+      "operation": ".metadata.rhivos_config.image_target",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 95,
+      "name": "rhivos_build",
+      "type": "jq",
+      "operation": ".metadata.rhivos_config.build",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 96,
+      "name": "SUT_extract",
+      "type": "jq",
+      "operation": "{\"start_time\": (.metadata.start_time // null), \"rhivos_mode\": (.metadata.rhivos_config.image_mode // null), \"rhivos_os_id\": (.metadata.rhivos_config.os_id // null), \"rhivos_target\": (.metadata.rhivos_config.image_target // null), \"rhivos_build\": (.metadata.rhivos_config.build // null)}",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 97,
+      "name": "SUT",
+      "type": "ecma",
+      "operation": "value => {\n    var sut = []\n    var test_date = new Date(value[\"start_time\"]);\n    sut.push(value[\"rhivos_target\"]);\n    sut.push(value[\"rhivos_os_id\"]);\n    sut.push(value[\"rhivos_mode\"]);\n    sut.push(value[\"rhivos_build\"]);\n    sut.push(`${String(test_date.getFullYear()).padStart(4, '0')}-${String(test_date.getMonth() + 1).padStart(2, '0')}-${String(test_date.getDate()).padStart(2, '0')} ${String(test_date.getHours()).padStart(2, '0')}:${String(test_date.getMinutes()).padStart(2, '0')}:${String(test_date.getSeconds()).padStart(2, '0')}`);\n    return sut.join(' ')\n}",
+      "sources": [
+        96
+      ]
+    },
+    {
+      "id": 98,
+      "name": "results",
+      "type": "jq",
+      "operation": ".results",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 99,
+      "name": "metadata",
+      "type": "jq",
+      "operation": ".metadata",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 100,
+      "name": "Autobench Results_extract",
+      "type": "jq",
+      "operation": "{\"results\": (.results // null), \"metadata\": (.metadata // null), \"workload\": (.workload // null)}",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 101,
+      "name": "Autobench Results",
+      "type": "ecma",
+      "operation": "value => {\n    if (value[\"workload\"] != \"autobench\") {\n        return null\n    };\n    const workloads = [];\n    for (const section of Object.keys(value[\"results\"])) {\n        console.log(section);\n        value[\"results\"][section].test_name = section;\n        value[\"results\"][section].uuid = value[\"metadata\"][\"uuid\"];\n        workloads.push(value[\"results\"][section]);\n    };\n    return workloads;\n};\n\n// value => {\n//     const workloads = [];\n//     for (const section of Object.keys(value[\"results\"])) {\n//         console.log(section);\n//         value[\"results\"][section].test_name = section;\n//         workloads.push(value[\"results\"][section]);\n//     };\n    \n//     return {\n//         uuid: value[\"metadata\"][\"uuid\"],\n//         results: workloads   \n//     };\n// };\n\n// Previous function for Benchmark Columnar Results\n// value => {\n//     const metaObj = Object(value[\"metadata\"])\n//     function Workload(tName, tMetric, tValue, tMeta) {\n//         this.test_name = tName;\n//         this.test_metric = tMetric;\n//         this.test_value = tValue;\n//         this.metadata = tMeta;\n//     };\n//     const workloads = [];\n//     for (const section of Object.keys(value[\"results\"][0])) {\n//         console.log(section);\n//         for (const element of Object.keys(value[\"results\"][0][section])) {\n//             console.log(element + \",\" + value[\"results\"][0][section][element]);\n//             // const myNew = new Workload(section, element, value[0][section][element]);\n//             workloads.push(new Workload(section, element, value[\"results\"][0][section][element], metaObj));\n\n//         };\n//         console.log();\n//     };\n//     return workloads;\n// };",
+      "sources": [
+        100
+      ]
+    },
+    {
+      "id": 102,
+      "name": "Stress-ng Max IRQ Latency",
+      "type": "jq",
+      "operation": ".timerlat_data.total_irq_latency.max",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 103,
+      "name": "Stress-ng Max User Latency",
+      "type": "jq",
+      "operation": ".timerlat_data.total_usr_latency.max",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 104,
+      "name": "Stress-ng Max Thread Latency",
+      "type": "jq",
+      "operation": ".timerlat_data.total_thr_latency.max",
+      "sources": [
+        43
+      ]
+    },
+    {
+      "id": 105,
+      "name": "rhivos-perf-comprehensive_fingerprint",
+      "type": "fp",
+      "operation": null,
+      "sources": [
+        82,
+        83,
+        84,
+        46
+      ]
+    },
+    {
+      "id": 129,
+      "name": "rd.CoreMark-PRO Single Core.5309024",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        56
+      ]
+    },
+    {
+      "id": 130,
+      "name": "rd.Autobench Single Core.5309025",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        62
+      ]
+    },
+    {
+      "id": 131,
+      "name": "rd.Autobench Single Core.5309026",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        62
+      ]
+    },
+    {
+      "id": 132,
+      "name": "rd.CoreMark-PRO Multi Core.5309027",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        58
+      ]
+    },
+    {
+      "id": 106,
+      "name": "rd.Stress-ng Max IRQ Latency.5309087",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        102
+      ]
+    },
+    {
+      "id": 107,
+      "name": "rd.Stress-ng Max IRQ Latency.5309088",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        102
+      ]
+    },
+    {
+      "id": 108,
+      "name": "rd.Stress-ng Max Thread Latency.5309089",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        104
+      ]
+    },
+    {
+      "id": 109,
+      "name": "rd.Stress-ng Max Thread Latency.5309090",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        104
+      ]
+    },
+    {
+      "id": 110,
+      "name": "rd.Stress-ng Max User Latency.5309091",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        103
+      ]
+    },
+    {
+      "id": 111,
+      "name": "rd.Stress-ng Max User Latency.5309092",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        103
+      ]
+    },
+    {
+      "id": 112,
+      "name": "rd.CoreMark-PRO Scaling.5308999",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        57
+      ]
+    },
+    {
+      "id": 113,
+      "name": "rd.CoreMark-PRO Scaling.5309000",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        57
+      ]
+    },
+    {
+      "id": 114,
+      "name": "rd.Autobench Scaling.5309001",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        69
+      ]
+    },
+    {
+      "id": 115,
+      "name": "rd.Autobench Scaling.5309002",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        69
+      ]
+    },
+    {
+      "id": 116,
+      "name": "rd.FIO Mean Read 99 Percentile Latency.5309011",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        79
+      ]
+    },
+    {
+      "id": 117,
+      "name": "rd.FIO Mean Read 99 Percentile Latency.5309012",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        79
+      ]
+    },
+    {
+      "id": 118,
+      "name": "rd.FIO Mean Read Bandwidth.5309013",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        75
+      ]
+    },
+    {
+      "id": 119,
+      "name": "rd.FIO Mean Read Bandwidth.5309014",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        75
+      ]
+    },
+    {
+      "id": 120,
+      "name": "rd.FIO Mean Write 99 Percentile Latency.5309015",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        77
+      ]
+    },
+    {
+      "id": 121,
+      "name": "rd.FIO Mean Write 99 Percentile Latency.5309016",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        77
+      ]
+    },
+    {
+      "id": 122,
+      "name": "rd.FIO Mean Write Bandwidth.5309017",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        73
+      ]
+    },
+    {
+      "id": 123,
+      "name": "rd.FIO Mean Write Bandwidth.5309018",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        73
+      ]
+    },
+    {
+      "id": 124,
+      "name": "rd.FIO Mean Write IOPS.5309019",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        81
+      ]
+    },
+    {
+      "id": 125,
+      "name": "rd.FIO Mean Write IOPS.5309020",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        81
+      ]
+    },
+    {
+      "id": 126,
+      "name": "rd.FIO Mean Read IOPS.5309021",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        71
+      ]
+    },
+    {
+      "id": 127,
+      "name": "rd.FIO Mean Read IOPS.5309022",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        71
+      ]
+    },
+    {
+      "id": 128,
+      "name": "rd.CoreMark-PRO Single Core.5309023",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        56
+      ]
+    },
+    {
+      "id": 133,
+      "name": "rd.CoreMark-PRO Multi Core.5309028",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        58
+      ]
+    },
+    {
+      "id": 134,
+      "name": "rd.Autobench Multi Core.5309029",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":1,\"threshold\":0.2,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        66
+      ]
+    },
+    {
+      "id": 135,
+      "name": "rd.Autobench Multi Core.5309030",
+      "type": "rd",
+      "operation": "{\"filter\":\"mean\",\"window\":5,\"threshold\":0.1,\"minPrevious\":5,\"fingerprintFilter\":\"value => (value[\\\"Run ID\\\"].match(/^gitlab-ci-nightly/))\"}",
+      "sources": [
+        105,
+        43,
+        66
+      ]
+    }
+  ]
 }

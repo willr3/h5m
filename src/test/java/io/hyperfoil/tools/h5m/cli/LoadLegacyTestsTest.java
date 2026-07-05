@@ -78,10 +78,9 @@ public class LoadLegacyTestsTest {
 
         System.out.println(folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
 
-        assertEquals(4,folder.group.sources.size(),"Expect 2 sql nodes, 1 jq node, and 1 js node\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
-        assertEquals(1,folder.group.sources.stream().filter(v -> (v instanceof JsNode)).count(),"Expect 1 Jq \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
+        assertEquals(4,folder.group.sources.size(),"Expect 3 jq nodes and 1 js node\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
         assertEquals(1,folder.group.sources.stream().filter(v -> (v instanceof JsNode)).count(),"Expect 1 Js \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
-        assertEquals(2,folder.group.sources.stream().filter(v -> (v instanceof SqlJsonpathNode)).count(),"Expect 2 SqlNodes\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
+        assertEquals(3,folder.group.sources.stream().filter(v -> (v instanceof JqNode)).count(),"Expect 3 JqNodes (2 converted from sql + 1 combiner)\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
         assertEquals(1,folder.group.sources.stream().filter(v->v.name.equals("label")).count(),"Expect 1 named label \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
         assertEquals(1,folder.group.sources.stream().filter(v->v.name.equals("dataset")).count(),"Expect 1 named dataset \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
 
@@ -111,7 +110,7 @@ public class LoadLegacyTestsTest {
 
         assertEquals(3,folder.group.sources.size(),"Expect 2 SqlNodes and 1 JsNode\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
         assertEquals(1,folder.group.sources.stream().filter(v -> (v instanceof JsNode)).count(),"Expect 1 Js \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
-        assertEquals(2,folder.group.sources.stream().filter(v -> (v instanceof SqlJsonpathNode)).count(),"Expect 2 SqlNodes\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
+        assertEquals(2,folder.group.sources.stream().filter(v -> (v instanceof JqNode)).count(),"Expect 2 SqlNodes\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
         assertEquals(1,folder.group.sources.stream().filter(v->v.name.equals("label")).count(),"Expect 1 named label \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
 
     }
@@ -137,10 +136,9 @@ public class LoadLegacyTestsTest {
         assertNotNull(folder);
         assertNotNull(folder.group);
 
-        assertEquals(4,folder.group.sources.size(),"Expect 2 SqlNodes and 1 JsNode\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
-        assertEquals(1,folder.group.sources.stream().filter(v -> (v instanceof JqNode)).count(),"Expect 1 Jq \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
+        assertEquals(4,folder.group.sources.size(),"Expect 3 JqNodes and 1 JsNode\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
+        assertEquals(3,folder.group.sources.stream().filter(v -> (v instanceof JqNode)).count(),"Expect 3 JqNodes (1 original + 2 converted from sql)\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
         assertEquals(1,folder.group.sources.stream().filter(v -> (v instanceof JsNode)).count(),"Expect 1 Js \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
-        assertEquals(2,folder.group.sources.stream().filter(v -> (v instanceof SqlJsonpathNode)).count(),"Expect 2 SqlNodes\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
         assertEquals(1,folder.group.sources.stream().filter(v->v.name.equals("label")).count(),"Expect 1 named label \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
     }
 
@@ -165,8 +163,8 @@ public class LoadLegacyTestsTest {
 
         assertNotNull(first);
         assertEquals("label",first.name);
-        assertEquals("$.tag",first.operation);
-        assertInstanceOf(SqlJsonpathNode.class,first);
+        assertEquals(".tag",first.operation);
+        assertInstanceOf(JqNode.class,first);
     }
     @Test
     public void createFolder_variable_replaced_by_single_source(){
@@ -213,7 +211,7 @@ public class LoadLegacyTestsTest {
         assertEquals(3,folder.group.sources.size(),"Expect 2 SQL nodes and a js node");
 
         assertEquals(1,folder.group.sources.stream().filter(v -> (v instanceof JsNode)).count(),"Expect 1 Js \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
-        assertEquals(2,folder.group.sources.stream().filter(v -> (v instanceof SqlJsonpathNode)).count(),"Expect 2 SqlNodes\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
+        assertEquals(2,folder.group.sources.stream().filter(v -> (v instanceof JqNode)).count(),"Expect 2 SqlNodes\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
 
         assertEquals(1,folder.group.sources.stream().filter(v->v.name.equals("variable")).count(),"Expect 1 named label \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
 
@@ -235,7 +233,7 @@ public class LoadLegacyTestsTest {
 
         assertNotNull(folder.group);
         assertEquals(2,folder.group.sources.size(),"Expect 1 SQL node and a fingerprint node");
-        assertEquals(1,folder.group.sources.stream().filter(v -> (v instanceof SqlJsonpathNode)).count(),"Expect 1 sql node \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
+        assertEquals(1,folder.group.sources.stream().filter(v -> (v instanceof JqNode)).count(),"Expect 1 sql node \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
         assertEquals(1,folder.group.sources.stream().filter(v -> (v instanceof FingerprintNode)).count(),"Expect 1 fingerprint\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
 
 
@@ -267,7 +265,7 @@ public class LoadLegacyTestsTest {
 
         assertEquals(3,folder.group.sources.size(),"Expect 3 Nodes\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
 
-        assertEquals(1,folder.group.sources.stream().filter(v -> (v instanceof SqlJsonpathNode)).count(),"Expect 1 sql node \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
+        assertEquals(1,folder.group.sources.stream().filter(v -> (v instanceof JqNode)).count(),"Expect 1 sql node \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
         assertEquals(1,folder.group.sources.stream().filter(v -> (v instanceof FingerprintNode)).count(),"Expect 1 fingerprint\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
         assertEquals(1,folder.group.sources.stream().filter(v -> (v instanceof FixedThreshold)).count(),"Expect 1 threshold node\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
 
@@ -286,7 +284,7 @@ public class LoadLegacyTestsTest {
         NodeEntity entity = loadLegacyTests.createNodesFromLabel(label1,group.root,group,tracker,new HashSet<>());
 
         assertNotNull(entity);
-        assertInstanceOf(SqlJsonpathNode.class,entity,"Js should be dropped when function is null");
+        assertInstanceOf(JqNode.class,entity,"Js should be dropped when function is null");
 
 
     }
@@ -301,7 +299,7 @@ public class LoadLegacyTestsTest {
         NodeEntity entity = loadLegacyTests.createNodesFromLabel(label1,group.root,group,tracker,new HashSet<>());
 
         assertNotNull(entity);
-        assertInstanceOf(SqlJsonpathNode.class,entity,"Js should be dropped when function returns input");
+        assertInstanceOf(JqNode.class,entity,"Js should be dropped when function returns input");
 
     }
     @Test

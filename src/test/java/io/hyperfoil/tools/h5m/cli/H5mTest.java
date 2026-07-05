@@ -465,9 +465,9 @@ public class H5mTest {
         //filePath.toFile().deleteOnExit();
         List<LaunchResult> results = run(launcher,
                 new String[]{"add","folder",testName},
-                new String[]{"add","sqlpath","to",testName,"foo","$.foo"},
-                new String[]{"add","sqlpath","to",testName,"bar","{foo}:$.bar"},
-                new String[]{"add","sqlpath","to",testName,"biz","{bar}:$.biz"},
+                new String[]{"add","jq","to",testName,"foo",".foo"},
+                new String[]{"add","jq","to",testName,"bar","{foo}:.bar"},
+                new String[]{"add","jq","to",testName,"biz","{bar}:.biz"},
                 new String[]{"list",testName,"nodes",},
                 new String[]{"upload",folder.toString(),"to",testName},
                 new String[]{"list","value","from",testName}

@@ -24,7 +24,7 @@ The top-level container. Analogous to a "Test" in Horreum. Each folder owns one 
 
 ### NodeGroup and the Node Graph
 
-Each folder has exactly one **NodeGroup**. A NodeGroup contains the actual DAG of computation nodes. Nodes are a single polymorphic entity (`NodeEntity`) with a `type` discriminator column. The main discriminator values are `jq`, `ecma` (JavaScript), `nata` (JSONata), `fp` (fingerprint), `ft` (fixed threshold), `rd` (relative difference), with additional types `split`, `sql`, `sqlall`, `root`, `user`, and `ed` (E-Divisive).
+Each folder has exactly one **NodeGroup**. A NodeGroup contains the actual DAG of computation nodes. Nodes are a single polymorphic entity (`NodeEntity`) with a `type` discriminator column. The main discriminator values are `jq`, `ecma` (JavaScript), `nata` (JSONata), `fp` (fingerprint), `ft` (fixed threshold), `rd` (relative difference), with additional types `split`, `root`, `user`, and `ed` (E-Divisive).
 
 When data is uploaded, it enters through a **RootNode** and flows through the graph in topological order.
 

@@ -14,8 +14,6 @@ public enum NodeType {
     ROOT("root"),
     STDDEV_ANOMALY("sd"),
     SPLIT("split"),
-    SQL_JSONPATH_ALL_NODE("sql-all"),
-    SQL_JSONPATH_NODE("sql"),
     USER_INPUT("user");
 
     private final String display;
