@@ -68,8 +68,14 @@ public class ValueService implements ValueServiceInterface {
     }
 
     @Transactional
+    @SuppressWarnings("unchecked")
     public List<ValueEntity> getDependentValues(ValueEntity v){
-        return ValueEntity.list("SELECT DISTINCT v FROM value v JOIN v.sources s WHERE s.id = ?1",v.id);
+        // Query IDs only, then load via findMultiple() to hit 2LC
+        List<Number> ids = em.createNativeQuery(
+                "SELECT DISTINCT child_id FROM value_edge WHERE parent_id = :parentId")
+                .setParameter("parentId", v.id).getResultList();
+        List<Long> longIds = ids.stream().map(Number::longValue).toList();
+        return em.unwrap(Session.class).findMultiple(ValueEntity.class, longIds);
     }
 
     @Transactional
@@ -123,10 +129,10 @@ public class ValueService implements ValueServiceInterface {
      * @param root
      * @return
      */
+    @SuppressWarnings("unchecked")
     public List<ValueEntity> getDescendantValues(ValueEntity root){
-        List<ValueEntity> rtrn = new ArrayList<>();
-        //noinspection unchecked
-        rtrn.addAll(em.createNativeQuery(
+        // Query IDs only, then load via findMultiple() to hit 2LC
+        List<Number> ids = em.createNativeQuery(
                 """
                 WITH RECURSIVE sourceRecursive (v_id) AS (
                     SELECT ve.child_id from value_edge ve where ve.parent_id = :rootId
@@ -134,10 +140,11 @@ public class ValueService implements ValueServiceInterface {
                     SELECT ve.child_id from value_edge ve JOIN sourceRecursive sr
                     ON ve.parent_id = sr.v_id
                 )
-                SELECT * FROM value v JOIN sourceRecursive sr ON v.id = sr.v_id
-                """, ValueEntity.class
-        ).setParameter("rootId", root.id).getResultList());
-        return rtrn;
+                SELECT distinct v.id FROM value v JOIN sourceRecursive sr ON v.id = sr.v_id
+                """
+        ).setParameter("rootId", root.id).getResultList();
+        List<Long> longIds = ids.stream().map(Number::longValue).toList();
+        return em.unwrap(Session.class).findMultiple(ValueEntity.class, longIds);
     }
 
 
@@ -310,7 +317,7 @@ public class ValueService implements ValueServiceInterface {
                            select v.id as vid, d.sortable as sortable
                                  from value v join value_edge ve on v.id = ve.child_id join descendant d on d.vid = ve.parent_id
                         )
-                        select * from value v join descendant d on v.id=d.vid 
+                        select v.id from value v join descendant d on v.id=d.vid 
                             where v.node_id=:sourceId order by sortable ORDER_DIRECTION
                         """;
                 case "postgresql" -> """
@@ -329,7 +336,7 @@ public class ValueService implements ValueServiceInterface {
                            select v.id as vid, d.sortable as sortable
                                  from value v join value_edge ve on v.id = ve.child_id join descendant d on d.vid = ve.parent_id
                         )
-                        select * from value v join descendant d on v.id=d.vid
+                        select v.id from value v join descendant d on v.id=d.vid
                             where v.node_id=:sourceId order by sortable ORDER_DIRECTION
                         """;
                 default -> "";
@@ -337,9 +344,8 @@ public class ValueService implements ValueServiceInterface {
             sql = sql.replace("DOMAIN_VALUE_COMP",domainValue != null ? domainValueComp : "");
         }else{
             //sorting by created_at
-            sql+=switch(dbKind){
-                case "sqlite"->
-                        """
+            // No domain sorting — order by created_at. Both dialects share the same SQL.
+            sql+= """
                         descendant(vid) as (
                            select v.id as vid
                              from value v join ancestor a on v.id = a.vid
@@ -348,24 +354,9 @@ public class ValueService implements ValueServiceInterface {
                            select v.id as vid
                                  from value v join value_edge ve on v.id = ve.child_id join descendant d on d.vid = ve.parent_id
                         )
-                        select * from value v join descendant d on v.id=d.vid
+                        select v.id from value v join descendant d on v.id=d.vid
                             where v.node_id=:sourceId order by created_at ORDER_DIRECTION
                         """;
-                case "postgresql"->
-                        """
-                        descendant(vid) as (
-                           select v.id as vid
-                             from value v join ancestor a on v.id = a.vid
-                             where v.node_id = :groupById --limit descendants to values from the grouping node
-                           union
-                           select v.id as vid
-                                 from value v join value_edge ve on v.id = ve.child_id join descendant d on d.vid = ve.parent_id
-                        )                        
-                        select * from value v join descendant d on v.id=d.vid
-                            where v.node_id=:sourceId order by created_at ORDER_DIRECTION
-                        """;
-                default -> "";
-            };
         }
         sql = sql
                 .replace("GTLT", preceedingValues ? "<=" : ">=") //TODO I think these should be <= and >= to include current sample
@@ -376,8 +367,11 @@ public class ValueService implements ValueServiceInterface {
         if(limit > 0){
             sql+=" limit :limit";
         }
-        //noinspection unchecked
-        NativeQuery<ValueEntity> query = (NativeQuery<ValueEntity>) em.createNativeQuery(sql, ValueEntity.class);
+        // Query IDs only (skip data column transfer), then load entities via
+        // findMultiple() which hits the 2LC. This avoids re-fetching the full
+        // JSONB/BYTEA data for values already cached from prior processing.
+        @SuppressWarnings("unchecked")
+        var query = (NativeQuery<Number>) em.createNativeQuery(sql);
         query
                 .setParameter("nodeId", fingerprint.node.id)
                 .setParameter("fingerprint", fingerprint.data.toString())
@@ -399,18 +393,33 @@ public class ValueService implements ValueServiceInterface {
         if(limit > 0){
             query.setParameter("limit",limit);
         }
-        List<ValueEntity> rtrn = query
-                .getResultList();
-        //reversed
+        List<Long> orderedIds = query.getResultList().stream()
+                .map(Number::longValue).toList();
+        if (orderedIds.isEmpty()) {
+            return List.of();
+        }
+        // Load entities from 2LC (cache hit) or DB (cache miss, batched)
+        Session session = em.unwrap(Session.class);
+        Map<Long, ValueEntity> byId = new HashMap<>();
+        for (ValueEntity ve : session.findMultiple(ValueEntity.class, orderedIds)) {
+            byId.put(ve.getId(), ve);
+        }
+        // Preserve the SQL ordering (findMultiple does not guarantee order)
+        List<ValueEntity> rtrn = new ArrayList<>(orderedIds.size());
+        for (Long id : orderedIds) {
+            ValueEntity ve = byId.get(id);
+            if (ve != null) rtrn.add(ve);
+        }
         if(preceedingValues){
             rtrn = rtrn.reversed();
         }
         return rtrn;
     }
 
+    @SuppressWarnings("unchecked")
     public List<ValueEntity> getAncestor(ValueEntity value, NodeEntity node){
-        List<ValueEntity> rtrn = new ArrayList<>();
-        rtrn.addAll(em.createNativeQuery("""
+        // Query IDs only, then load via findMultiple() to hit 2LC
+        List<Number> ids = em.createNativeQuery("""
             with recursive ancestor(vid) as (
                 select v.id as vid 
                     from value v where v.id = :valueId
@@ -418,9 +427,10 @@ public class ValueService implements ValueServiceInterface {
                 select v.id as vid 
                     from value v join value_edge ve on v.id = ve.parent_id join ancestor a on a.vid = ve.child_id
             )
-            select v.* from Value v join ancestor a on v.id = a.vid where v.node_id = :nodeId
-        """, ValueEntity.class).setParameter("nodeId", node.id).setParameter("valueId",value.id).getResultList());
-        return rtrn;
+            select v.id from value v join ancestor a on v.id = a.vid where v.node_id = :nodeId
+        """).setParameter("nodeId", node.id).setParameter("valueId",value.id).getResultList();
+        List<Long> longIds = ids.stream().map(Number::longValue).toList();
+        return em.unwrap(Session.class).findMultiple(ValueEntity.class, longIds);
     }
 
 
@@ -623,8 +633,13 @@ public class ValueService implements ValueServiceInterface {
     }
 
     @Transactional
+    @SuppressWarnings("unchecked")
     public List<ValueEntity> getValues(NodeEntity node){
-        return ValueEntity.find("node.id",node.id).list();
+        // Query IDs only, then load via findMultiple() to hit 2LC
+        List<Number> ids = em.createNativeQuery("SELECT id FROM value WHERE node_id = :nodeId")
+                .setParameter("nodeId", node.id).getResultList();
+        List<Long> longIds = ids.stream().map(Number::longValue).toList();
+        return em.unwrap(Session.class).findMultiple(ValueEntity.class, longIds);
     }
 
     @Override
