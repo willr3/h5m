@@ -9,6 +9,7 @@ import io.hyperfoil.tools.h5m.queue.WorkQueue;
 import io.hyperfoil.tools.h5m.queue.WorkQueueExecutor;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.runtime.StartupEvent;
 import io.hyperfoil.tools.h5m.event.ChangeDetectedEvent;
 import jakarta.annotation.PreDestroy;
@@ -18,6 +19,7 @@ import jakarta.enterprise.event.Event;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.PessimisticLockException;
 import jakarta.transaction.Status;
 import jakarta.transaction.Synchronization;
 import jakarta.transaction.Transactional;
@@ -28,6 +30,7 @@ import org.hibernate.Hibernate;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -37,6 +40,39 @@ import java.util.stream.Collectors;
 public class WorkService implements WorkServiceInterface {
 
     private static final int RETRY_LIMIT = 3;
+
+    private static boolean isPessimisticLock(Throwable t) {
+        for (; t != null; t = t.getCause()) {
+            if (t instanceof PessimisticLockException) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Runs an action in a new transaction, independent of the caller's
+     * transactional context. On SQLite, transparently retries on
+     * {@link jakarta.persistence.PessimisticLockException} (SQLITE_BUSY)
+     * up to {@link #RETRY_LIMIT} times to handle single-writer contention.
+     */
+    <T> T callInNewTransaction(Callable<T> action) {
+        if (!"sqlite".equals(dbKind)) {
+            return QuarkusTransaction.requiringNew().call(action);
+        }
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return QuarkusTransaction.requiringNew().call(action);
+            } catch (Throwable t) {
+                if (attempt >= RETRY_LIMIT || !isPessimisticLock(t)) {
+                    throw t;
+                }
+                Log.debugf("Database busy (attempt %d/%d), retrying", attempt, RETRY_LIMIT);
+            }
+        }
+    }
+
+    void runInNewTransaction(Runnable action) {
+        callInNewTransaction(() -> { action.run(); return null; });
+    }
 
     @Inject
     EntityManager em;

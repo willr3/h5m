@@ -124,7 +124,7 @@ public class ProcessingService {
         if (!works.isEmpty()) {
             // Defer work creation until after the recovery transaction commits — createTracked opens its own transaction via afterCompletion
             deferred.add(() ->
-                workService.createTracked(works, Set.of(rootValue.id)).whenComplete((_, _) -> QuarkusTransaction.requiringNew().run(() -> {
+                workService.createTracked(works, Set.of(rootValue.id)).whenComplete((_, _) -> workService.runInNewTransaction(() -> {
                     ProcessingTrackerEntity entity = ProcessingTrackerEntity.find(
                             "type = ?1 and referenceId = ?2", ProcessingType.UPLOAD, rootValue.id).firstResult();
                     if (entity != null) {
@@ -207,7 +207,7 @@ public class ProcessingService {
             long recoveryTrackerId = recoveryTracker.id;
             // Defer work creation until after the recovery transaction commits — createTracked opens its own transaction via afterCompletion
             deferred.add(() -> {
-                workService.createTracked(works, rootValueIds).whenComplete((_, _) -> QuarkusTransaction.requiringNew().run(() -> {
+                workService.createTracked(works, rootValueIds).whenComplete((_, _) -> workService.runInNewTransaction(() -> {
                     ProcessingTrackerEntity entity = ProcessingTrackerEntity.findById(recoveryTrackerId);
                     if (entity != null) {
                         entity.completed = true;
@@ -255,11 +255,11 @@ public class ProcessingService {
      * @throws IllegalStateException if uploads are in progress for this folder
      */
     public RecalculationTracker recalculate(String name) {
-        return QuarkusTransaction.requiringNew().call(() -> {
+        RecalculateResult result = workService.callInNewTransaction(() -> {
             FolderEntity folder = findFolderByName(name);
-            List<NodeEntity> topLevelNodes = folder.group.getTopLevelNodes();
-            return doRecalculate(folder, -1, ProcessingType.RECALCULATE, topLevelNodes);
+            return doRecalculate(folder, -1, ProcessingType.RECALCULATE, folder.group.getTopLevelNodes());
         });
+        return wirePostProcessing(result);
     }
 
     /**
@@ -277,7 +277,7 @@ public class ProcessingService {
      * @throws IllegalArgumentException if the node is not found or has no group
      */
     public RecalculationTracker recalculateNode(long nodeId) {
-        return QuarkusTransaction.requiringNew().call(() -> {
+        RecalculateResult result = workService.callInNewTransaction(() -> {
             NodeEntity targetNode = NodeEntity.findById(nodeId);
             if (targetNode == null) {
                 throw new IllegalArgumentException("Node not found: " + nodeId);
@@ -290,23 +290,23 @@ public class ProcessingService {
             Set<NodeEntity> startNodes = findRecomputationStartNodes(targetNode, folder.group.root, allGroupNodes);
             return doRecalculate(folder, nodeId, ProcessingType.RECALCULATE_NODE, startNodes);
         });
+        return wirePostProcessing(result);
     }
 
+    // Carries data from the transactional phase to the post-processing phase
+    private record RecalculateResult(String folderName, long nodeId, long trackingId,
+                                      List<ValueEntity> rootValues, Set<Long> rootValueIds,
+                                      CompletableFuture<Void> future) {}
+
     /**
-     * Shared recalculation logic for both full-folder and selective-node recalculation.
-     * Rejects if uploads are in progress, builds Work items for each root value × node,
-     * creates a crash-recovery tracker, wires progress callbacks, and schedules
-     * ephemeral data nullification on completion.
-     *
-     * @param folder the folder to recalculate (must be fetched with group, sources, root)
-     * @param nodeId the target node ID, or -1 for full folder recalculation
-     * @param trackingType RECALCULATE or RECALCULATE_NODE
-     * @param nodesToQueue the nodes to create Work items for
-     * @return recalculation status with progress tracking
+     * Transactional part of recalculation: rejects if uploads are in progress,
+     * builds Work items for each root value × node, creates a crash-recovery
+     * tracker, and queues work. Returns {@code null} for early-return cases
+     * (empty folder or no nodes to queue).
      */
-    private RecalculationTracker doRecalculate(FolderEntity folder, long nodeId,
-                                               ProcessingType trackingType,
-                                               Collection<NodeEntity> nodesToQueue) {
+    private RecalculateResult doRecalculate(FolderEntity folder, long nodeId,
+                                            ProcessingType trackingType,
+                                            Collection<NodeEntity> nodesToQueue) {
         // Reject if uploads are in progress to avoid conflicting Work items
         // with different dispatch flags (upload=true vs recalculate=false)
         long inFlight = ProcessingTrackerEntity.count(
@@ -320,7 +320,7 @@ public class ProcessingService {
         rootValues.forEach(ValueEntity::getPath); // initialize lazy proxies
 
         if (rootValues.isEmpty()) {
-            return recalculationService.create(folder.name, nodeId, 0, COMPLETED);
+            return new RecalculateResult(folder.name, nodeId, -1, List.of(), Set.of(), null);
         }
 
         List<Work> works = new ArrayList<>();
@@ -335,7 +335,7 @@ public class ProcessingService {
         }
 
         if (works.isEmpty()) {
-            return recalculationService.create(folder.name, nodeId, 0, COMPLETED);
+            return new RecalculateResult(folder.name, nodeId, -1, List.of(), Set.of(), null);
         }
 
         // Track for crash recovery
@@ -343,24 +343,34 @@ public class ProcessingService {
         tracking.persist();
 
         CompletableFuture<Void> future = workService.createTracked(works, rootValueIds);
+        return new RecalculateResult(folder.name, nodeId, tracking.id, rootValues, rootValueIds, future);
+    }
 
-        // Mark completed and null out ephemeral data after recalculation finishes.
+    /**
+     * Post-transaction wiring: attaches the completion callback and progress
+     * tracking to the future returned by {@link #doRecalculate}.
+     */
+    private RecalculationTracker wirePostProcessing(RecalculateResult result) {
+        if (result.future == null) {
+            return recalculationService.create(result.folderName, result.nodeId, 0, COMPLETED);
+        }
+
         // Use handle() (not whenComplete) so the returned future only completes
         // after the tracker DB update commits — callers awaiting getFuture().join()
         // can rely on the tracker being marked completed by then.
-        CompletableFuture<Void> finalFuture = future.handle((v, t) -> {
+        CompletableFuture<Void> finalFuture = result.future.handle((v, t) -> {
             if (t != null) {
-                Log.errorf(t, "Recalculation failed for folder '%s' (nodeId=%d)", folder.name, nodeId);
+                Log.errorf(t, "Recalculation failed for folder '%s' (nodeId=%d)", result.folderName, result.nodeId);
             }
             // Mark tracker completed even on failure to prevent infinite retry on restart.
             // On success, also nullify ephemeral data and evict the 2LC.
-            QuarkusTransaction.requiringNew().run(() -> {
-                ProcessingTrackerEntity entity = ProcessingTrackerEntity.findById(tracking.id);
+            workService.runInNewTransaction(() -> {
+                ProcessingTrackerEntity entity = ProcessingTrackerEntity.findById(result.trackingId);
                 if (entity != null) {
                     entity.completed = true;
                 }
                 if (t == null) {
-                    for (ValueEntity rootValue : rootValues) {
+                    for (ValueEntity rootValue : result.rootValues) {
                         int nullified = valueService.nullifyEphemeralData(rootValue.id);
                         if (nullified > 0) {
                             Log.debugf("Nullified data for %d ephemeral values (root %d)", nullified, rootValue.id);
@@ -376,8 +386,9 @@ public class ProcessingService {
         // Create status tracker with per-root progress callbacks.
         // This wiring is safe from races: createTracked() defers work queue insertion
         // to afterCompletion (transaction commit), so no work has started yet.
-        RecalculationTracker status = recalculationService.create(folder.name, nodeId, rootValues.size(), finalFuture);
-        for (Long rootId : rootValueIds) {
+        RecalculationTracker status = recalculationService.create(result.folderName, result.nodeId,
+                result.rootValues.size(), finalFuture);
+        for (Long rootId : result.rootValueIds) {
             workService.getTracker(rootId).ifPresent(tracker ->
                 tracker.getFuture().whenComplete((_, _) -> status.incrementCompleted())
             );

@@ -22,15 +22,12 @@ import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.entity.ViewEntity;
 import io.hyperfoil.tools.h5m.entity.mapper.ApiMapper;
 import io.hyperfoil.tools.h5m.entity.node.*;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.hyperfoil.tools.h5m.entity.work.Work;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.PessimisticLockException;
 import jakarta.transaction.Transactional;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.hibernate.query.NativeQuery;
 
 import java.io.IOException;
@@ -52,9 +49,6 @@ public class FolderService implements FolderServiceInterface {
             java.time.Instant.ofEpochMilli(n.longValue()), java.time.ZoneId.systemDefault());
         return null;
     }
-
-    @ConfigProperty(name="quarkus.datasource.db-kind")
-    String dbKind;
 
     @Inject
     EntityManager em;
@@ -245,46 +239,15 @@ public class FolderService implements FolderServiceInterface {
         return processingService.recalculateNode(nodeId);
     }
 
-    private static final int UPLOAD_RETRY_LIMIT = 3;
-
-    private static boolean isPessimisticLock(Throwable t) {
-        for (; t != null; t = t.getCause()) {
-            if (t instanceof PessimisticLockException) return true;
-        }
-        return false;
-    }
-
     /**
-     * Uploads data and returns an UploadHandle containing the upload ID and a future
-     * that completes when all processing finishes.
-     * Uses QuarkusTransaction to control the transaction boundary explicitly —
-     * the transaction commits when the lambda returns, before we return the future.
-     * This avoids the deadlock that occurs with @Transactional + CompletableFuture
-     * return types (Quarkus defers commit waiting for the future to complete).
+     * Uploads data and returns an Upload containing the upload ID and a future
+     * that completes when all processing finishes. The DB work runs in a new
+     * transaction via {@link WorkService#callInNewTransaction}; the post-processing
+     * callback is wired outside the transaction since it only needs the future.
      */
     @Override
     public Upload upload(String name, String path, JqValue data) {
-        // SQLite allows only one writer at a time. Under concurrent uploads the
-        // transaction can fail with SQLITE_BUSY (surfaced as PessimisticLockException)
-        // when another connection commits between our read and write, invalidating
-        // the WAL snapshot. Retry with a fresh transaction to get a current snapshot.
-        if (!"sqlite".equals(dbKind)) {
-            return doUpload(name, path, data);
-        }
-        for (int attempt = 1; ; attempt++) {
-            try {
-                return doUpload(name, path, data);
-            } catch (Throwable t) {
-                if (attempt >= UPLOAD_RETRY_LIMIT || !isPessimisticLock(t)) {
-                    throw t;
-                }
-                Log.debugf("Database busy during upload (attempt %d/%d), retrying", attempt, UPLOAD_RETRY_LIMIT);
-            }
-        }
-    }
-
-    private Upload doUpload(String name, String path, JqValue data) {
-        return QuarkusTransaction.requiringNew().call(() -> {
+        Upload upload = workService.callInNewTransaction(() -> {
             FolderEntity folder = em.createQuery(
                     "SELECT f FROM folder f JOIN FETCH f.group g LEFT JOIN FETCH g.sources LEFT JOIN FETCH g.root WHERE f.name = :name",
                     FolderEntity.class
@@ -307,33 +270,37 @@ public class FolderService implements FolderServiceInterface {
                 return new Upload(newValue.id, CompletableFuture.completedFuture(null));
             }
 
-            CompletableFuture<Void> future = workService.createTracked(works, Set.of(newValue.id));
-            // Use handle() (not whenComplete) so the returned future only completes
-            // after the tracker DB update commits — callers awaiting the future can
-            // rely on the upload tracker being marked completed by then.
-            CompletableFuture<Void> finalFuture = future.handle((v, t) -> {
-                QuarkusTransaction.requiringNew().run(() -> {
-                    ProcessingTrackerEntity entity = ProcessingTrackerEntity.find(
-                            "type = ?1 and referenceId = ?2", ProcessingType.UPLOAD, newValue.id).firstResult();
-                    if (entity != null) {
-                        if (t != null) {
-                            Log.errorf(t, "Upload %d failed during processing", newValue.id);
-                        } else {
-                            entity.completed = true;
-                        }
-                    }
-                    // Null out data for ephemeral nodes to reclaim storage
-                    int nullified = valueService.nullifyEphemeralData(newValue.id);
-                    if (nullified > 0) {
-                        Log.debugf("Nullified data for %d ephemeral values (upload %d)", nullified, newValue.id);
-                        // Evict cached ValueEntity instances since data was nullified via native SQL
-                        em.getEntityManagerFactory().getCache().evict(ValueEntity.class);
-                    }
-                });
-                return null;
-            });
-            return new Upload(newValue.id, finalFuture);
+            return new Upload(newValue.id, workService.createTracked(works, Set.of(newValue.id)));
         });
+
+        if (upload.future.isDone()) {
+            return upload;
+        }
+
+        // Use handle() (not whenComplete) so the returned future only completes
+        // after the tracker DB update commits — callers awaiting the future can
+        // rely on the upload tracker being marked completed by then.
+        return new Upload(upload.uploadId, upload.future.handle((v, t) -> {
+            workService.runInNewTransaction(() -> {
+                ProcessingTrackerEntity entity = ProcessingTrackerEntity.find(
+                        "type = ?1 and referenceId = ?2", ProcessingType.UPLOAD, upload.uploadId).firstResult();
+                if (entity != null) {
+                    if (t != null) {
+                        Log.errorf(t, "Upload %d failed during processing", upload.uploadId);
+                    } else {
+                        entity.completed = true;
+                    }
+                }
+                // Null out data for ephemeral nodes to reclaim storage
+                int nullified = valueService.nullifyEphemeralData(upload.uploadId);
+                if (nullified > 0) {
+                    Log.debugf("Nullified data for %d ephemeral values (upload %d)", nullified, upload.uploadId);
+                    // Evict cached ValueEntity instances since data was nullified via native SQL
+                    em.getEntityManagerFactory().getCache().evict(ValueEntity.class);
+                }
+            });
+            return null;
+        }));
     }
 
     /**
