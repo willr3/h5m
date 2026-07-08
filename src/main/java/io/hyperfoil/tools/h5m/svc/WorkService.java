@@ -369,17 +369,12 @@ public class WorkService implements WorkServiceInterface {
             }
         }catch( Exception e){
             Log.debugf(e, "WorkRunner caught: %s\n work=%s", e.getMessage(), w);
-            w.retryCount++;
-            if(w.retryCount > RETRY_LIMIT){
-                Log.error("Work exceeded retry limit");
-                // Fail trackers so CompletableFutures complete exceptionally
-                failTrackers(w, e);
-            } else {
+            if("sqlite".equals(dbKind) && w.retryCount++ < RETRY_LIMIT){
                 Log.infof("Retry work %s due to: %s", w, e.getMessage());
                 workQueue.add(w);
-                // Skip decrement in finally — work is re-queued and will be
-                // decremented when the retry completes
                 decrementDeferred = true;
+            } else {
+                failTrackers(w, e);
             }
         } finally {
             if(!decrementDeferred && w.activeNodes != null && !w.activeNodes.isEmpty()){

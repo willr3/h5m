@@ -30,6 +30,7 @@ import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PessimisticLockException;
 import jakarta.transaction.Transactional;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.hibernate.query.NativeQuery;
 
 import java.io.IOException;
@@ -51,6 +52,9 @@ public class FolderService implements FolderServiceInterface {
             java.time.Instant.ofEpochMilli(n.longValue()), java.time.ZoneId.systemDefault());
         return null;
     }
+
+    @ConfigProperty(name="quarkus.datasource.db-kind")
+    String dbKind;
 
     @Inject
     EntityManager em;
@@ -264,6 +268,9 @@ public class FolderService implements FolderServiceInterface {
         // transaction can fail with SQLITE_BUSY (surfaced as PessimisticLockException)
         // when another connection commits between our read and write, invalidating
         // the WAL snapshot. Retry with a fresh transaction to get a current snapshot.
+        if (!"sqlite".equals(dbKind)) {
+            return doUpload(name, path, data);
+        }
         for (int attempt = 1; ; attempt++) {
             try {
                 return doUpload(name, path, data);
