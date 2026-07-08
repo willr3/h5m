@@ -308,8 +308,10 @@ public class FolderService implements FolderServiceInterface {
             }
 
             CompletableFuture<Void> future = workService.createTracked(works, Set.of(newValue.id));
-            // Mark completed and null out ephemeral data when all work finishes
-            future.whenComplete((v, t) -> {
+            // Use handle() (not whenComplete) so the returned future only completes
+            // after the tracker DB update commits — callers awaiting the future can
+            // rely on the upload tracker being marked completed by then.
+            CompletableFuture<Void> finalFuture = future.handle((v, t) -> {
                 QuarkusTransaction.requiringNew().run(() -> {
                     ProcessingTrackerEntity entity = ProcessingTrackerEntity.find(
                             "type = ?1 and referenceId = ?2", ProcessingType.UPLOAD, newValue.id).firstResult();
@@ -328,8 +330,9 @@ public class FolderService implements FolderServiceInterface {
                         em.getEntityManagerFactory().getCache().evict(ValueEntity.class);
                     }
                 });
+                return null;
             });
-            return new Upload(newValue.id, future);
+            return new Upload(newValue.id, finalFuture);
         });
     }
 

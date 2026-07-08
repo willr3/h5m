@@ -344,26 +344,18 @@ public class ProcessingService {
 
         CompletableFuture<Void> future = workService.createTracked(works, rootValueIds);
 
-        // Create status tracker with per-root progress callbacks.
-        // This wiring is safe from races: createTracked() defers work queue insertion
-        // to afterCompletion (transaction commit), so no work has started yet.
-        RecalculationTracker status = recalculationService.create(folder.name, nodeId, rootValues.size(), future);
-        for (Long rootId : rootValueIds) {
-            workService.getTracker(rootId).ifPresent(tracker ->
-                tracker.getFuture().whenComplete((v, t) -> status.incrementCompleted())
-            );
-        }
-
-        // Mark completed and null out ephemeral data after recalculation finishes
-        long trackingId = tracking.id;
-        future.whenComplete((v, t) -> {
+        // Mark completed and null out ephemeral data after recalculation finishes.
+        // Use handle() (not whenComplete) so the returned future only completes
+        // after the tracker DB update commits — callers awaiting getFuture().join()
+        // can rely on the tracker being marked completed by then.
+        CompletableFuture<Void> finalFuture = future.handle((v, t) -> {
             if (t != null) {
                 Log.errorf(t, "Recalculation failed for folder '%s' (nodeId=%d)", folder.name, nodeId);
             }
             // Mark tracker completed even on failure to prevent infinite retry on restart.
             // On success, also nullify ephemeral data and evict the 2LC.
             QuarkusTransaction.requiringNew().run(() -> {
-                ProcessingTrackerEntity entity = ProcessingTrackerEntity.findById(trackingId);
+                ProcessingTrackerEntity entity = ProcessingTrackerEntity.findById(tracking.id);
                 if (entity != null) {
                     entity.completed = true;
                 }
@@ -378,7 +370,18 @@ public class ProcessingService {
                     em.getEntityManagerFactory().getCache().evict(ValueEntity.class);
                 }
             });
+            return null;
         });
+
+        // Create status tracker with per-root progress callbacks.
+        // This wiring is safe from races: createTracked() defers work queue insertion
+        // to afterCompletion (transaction commit), so no work has started yet.
+        RecalculationTracker status = recalculationService.create(folder.name, nodeId, rootValues.size(), finalFuture);
+        for (Long rootId : rootValueIds) {
+            workService.getTracker(rootId).ifPresent(tracker ->
+                tracker.getFuture().whenComplete((_, _) -> status.incrementCompleted())
+            );
+        }
         return status;
     }
 
