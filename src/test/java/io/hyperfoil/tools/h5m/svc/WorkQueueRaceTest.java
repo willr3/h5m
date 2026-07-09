@@ -11,6 +11,7 @@ import io.hyperfoil.tools.h5m.entity.node.JqNode;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.transaction.TransactionManager;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.io.InputStream;
@@ -58,6 +59,7 @@ public class WorkQueueRaceTest extends FreshDb {
      * - All expected values were computed (race condition symptom: missing values)
      */
     @Test
+    @Tag("postgresql-only")
     void rapidUploadsShouldProduceAllValues() throws Exception {
         createThreeNodeTopology("rapid_test");
 
