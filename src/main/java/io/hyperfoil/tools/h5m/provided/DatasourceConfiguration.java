@@ -1,7 +1,10 @@
 package io.hyperfoil.tools.h5m.provided;
 
 import io.agroal.api.AgroalDataSource;
+import io.agroal.api.configuration.AgroalDataSourceConfiguration;
+import io.agroal.api.configuration.supplier.AgroalDataSourceConfigurationSupplier;
 import io.agroal.api.configuration.supplier.AgroalPropertiesReader;
+import io.agroal.narayana.NarayanaTransactionIntegration;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Alternative;
@@ -9,6 +12,8 @@ import jakarta.enterprise.inject.Default;
 import jakarta.enterprise.inject.Disposes;
 import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Named;
+import jakarta.transaction.TransactionManager;
+import jakarta.transaction.TransactionSynchronizationRegistry;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.io.File;
@@ -28,7 +33,7 @@ public class DatasourceConfiguration {
     @ConfigProperty(name = "h5m.foo",defaultValue = "1")
     int foo;
 
-    @ConfigProperty(name = "quarkus.datasource.db-kind",defaultValue = "sqlite")
+    @ConfigProperty(name = "h5m.db-kind",defaultValue = "sqlite")
     String dbKind;
     @ConfigProperty(name = "quarkus.datasource.jdbc.initial-size", defaultValue = "1")
     String initialSize;
@@ -44,7 +49,7 @@ public class DatasourceConfiguration {
     String password;
 
     //defaultValue empty string does not work for sqlite
-    @ConfigProperty(name="quarkus.datasource.jdbc.url",defaultValue = " ")
+    @ConfigProperty(name="h5m.jdbc.url",defaultValue = " ")
     String url;
 
 
@@ -119,7 +124,30 @@ public class DatasourceConfiguration {
         }else{
 
         }
+// 1. Obtain references to your existing Transaction Manager (e.g., Narayana)
+        TransactionManager tm = com.arjuna.ats.jta.TransactionManager.transactionManager();
+        TransactionSynchronizationRegistry tsr = new com.arjuna.ats.internal.jta.transaction.arjunacore.TransactionSynchronizationRegistryImple();
 
+// 2. Instantiate the Agroal-Transaction Integration Bridge
+        NarayanaTransactionIntegration txIntegration = new NarayanaTransactionIntegration(tm, tsr);
+
+        AgroalDataSourceConfigurationSupplier configurationSupplier = new AgroalDataSourceConfigurationSupplier()
+                .dataSourceImplementation(AgroalDataSourceConfiguration.DataSourceImplementation.AGROAL)
+                .metricsEnabled(true)
+                .connectionPoolConfiguration(pool -> pool
+                        .initialSize(Integer.parseInt(initialSize))
+                        .maxSize(Integer.parseInt(maxSize))
+                        .minSize(Integer.parseInt(minSize))
+                        .transactionIntegration(txIntegration) // <-- Binds transactions to the pool
+                        .connectionFactoryConfiguration(factory -> factory
+                                .connectionProviderClass(dbKind.equals("sqlite") ?org.sqlite.JDBC.class : org.postgresql.Driver.class) // Specify your JDBC driver
+                                .jdbcUrl(url)
+                                .principal(() -> username)
+                                .credential(password)
+                        )
+                );
+
+        AgroalDataSource dataSource = AgroalDataSource.from(configurationSupplier);
 
         AgroalDataSource ds  = AgroalDataSource.from(new AgroalPropertiesReader()
                 .readProperties(props)
