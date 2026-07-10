@@ -99,7 +99,7 @@ public class NodeService implements NodeServiceInterface {
 
             default -> throw new IllegalArgumentException("Invalid node type " + type.display());
         };
-        node.group = NodeGroupEntity.findById(groupId);
+            node.group = NodeGroupEntity.findById(groupId);
         if(node.sources.isEmpty()){
             node.sources.add(node.group.root);
         }
