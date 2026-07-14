@@ -4,6 +4,7 @@ import io.hyperfoil.tools.jjq.value.JqValue;
 import io.hyperfoil.tools.h5m.api.Value;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Service interface for managing Values.
@@ -58,7 +59,7 @@ public interface ValueServiceInterface {
        */
       List<JqValue> getLabelValues(Long folderId,Long groupByNodeId, List<Long> nodeIds, Long sortByNodeId);
 
-      List<JqValue> getGroupedValues(Long nodeId, List<Long> filterNodeIds, Long sortByNodeId);
+      List<JqValue> getGroupedValues(Long nodeId, List<Long> filterNodeIds, Map<Long,JqValue> fingerprints, Long sortByNodeId);
 
 
 }

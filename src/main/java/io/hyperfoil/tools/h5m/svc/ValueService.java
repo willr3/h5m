@@ -447,7 +447,7 @@ public class ValueService implements ValueServiceInterface {
     @Override
     @Transactional
     public List<JqValue> getGroupedValues(Long nodeId, List<Long> filterNodeIds){
-        return getGroupedValues(nodeId,filterNodeIds,null);
+        return getGroupedValues(nodeId,filterNodeIds,null,null);
     }
 
     @Override
@@ -459,16 +459,49 @@ public class ValueService implements ValueServiceInterface {
 
     @Override
     @Transactional
-    public List<JqValue> getGroupedValues(Long nodeId, List<Long> filterNodeIds, Long sortByNodeId) {
-        String nodeFilter = filterNodeIds != null && !filterNodeIds.isEmpty() ? "where node_id in (:nodeIds)" : "";
+    public List<JqValue> getGroupedValues(Long nodeId, List<Long> filterNodeIds, Map<Long,JqValue> fingerprints, Long sortByNodeId) {
+        String nodeFilter = filterNodeIds != null && !filterNodeIds.isEmpty() ? "node_id in (:nodeIds)" : "";
         String sortCte = sortByNodeId != null ? switch (dbKind) {
-            case "sqlite"     -> "root_sort as (select root_id, min(case when typeof(json_extract(data,'$')) in ('integer','real') then cast(data as real) end) as sort_num,min(data) as sort_txt from tree where node_id = :sortNodeId group by root_id),";
-            case "postgresql" -> "root_sort as (select root_id, min(case when jsonb_typeof(data) = 'number' then (data::text)::numeric end) as sort_num, min(data::text) as sort_txt from tree where node_id = :sortNodeId group by root_id),";
+            case "sqlite"     ->
+                    """
+                    root_sort as (
+                    select root_id, 
+                    min(case when typeof(json_extract(data,'$')) in ('integer','real') then cast(data as real) end) as sort_num,
+                    min(data) as sort_txt
+                    from tree where node_id = :sortNodeId group by root_id),
+                    """;
+            case "postgresql" ->
+                    """
+                    root_sort as (
+                    select
+                        root_id, 
+                        min(case when jsonb_typeof(data) = 'number' then (data::text)::numeric end) as sort_num,
+                        min(data::text) as sort_txt from tree where node_id = :sortNodeId group by root_id),
+                    """;
             default -> "";
         } : "";
         String sortJoin    = sortByNodeId != null ? "left join root_sort rs on b.root_id = rs.root_id" : "";
         String sortGroupBy = sortByNodeId != null ? ", rs.sort_num, rs.sort_txt" : "";
         String sortOrder   = sortByNodeId != null ? "order by rs.sort_num asc nulls last, rs.sort_txt asc" : "";
+        String fingerPrintWhere = "";
+        List<Long> fingerprintIds = fingerprints!=null ? new ArrayList<>(fingerprints.keySet()) : Collections.emptyList();
+        if(!fingerprintIds.isEmpty()){
+            for(int idx=0;idx<fingerprintIds.size();idx++){
+                Long id = fingerprintIds.get(idx);
+                JqValue fingerprint = fingerprints.get(id);
+                if(!fingerPrintWhere.isEmpty()){
+                    fingerPrintWhere+=" and ";
+                }
+                fingerPrintWhere+= " root_id in ( select ft.root_id from tree ft where ft.node_id = "+id+" and ft.data = "+
+                        switch(dbKind){
+                            case "sqlite"->":data_"+idx;
+                            case "postgresql"->"cast( :data_"+idx+" as jsonb)";
+                            default -> "";
+                        }+") ";
+            }
+        }
+
+        String filter = !nodeFilter.isEmpty() || !fingerPrintWhere.isEmpty() ? "where "+ nodeFilter + (!nodeFilter.isEmpty() && !fingerPrintWhere.isEmpty() ? " and " : "" ) + fingerPrintWhere : "";
 
         var query = em.unwrap(Session.class).createNativeQuery(
                 switch (dbKind) {
@@ -490,7 +523,7 @@ public class ValueService implements ValueServiceInterface {
                             select json_group_object(n.name,json((case when json_array_length(b.data) > 1 then b.data else b.data->0 end))) as data
                                 from bynode b join node n on b.node_id = n.id SORT_JOIN group by b.root_id SORT_GROUPBY SORT_ORDER;
                             """
-                                    .replace("NODE_FILTER", nodeFilter).replace("SORT_CTE", sortCte)
+                                    .replace("NODE_FILTER", filter).replace("SORT_CTE", sortCte)
                                     .replace("SORT_JOIN", sortJoin).replace("SORT_GROUPBY", sortGroupBy).replace("SORT_ORDER", sortOrder);
                     case "postgresql" ->
                             """
@@ -510,13 +543,20 @@ public class ValueService implements ValueServiceInterface {
                             select jsonb_object_agg(n.name,to_jsonb((case when jsonb_array_length(b.data) > 1 then b.data else b.data->0 end))) as data
                                 from bynode b join node n on b.node_id = n.id SORT_JOIN group by b.root_id SORT_GROUPBY SORT_ORDER;
                             """
-                                    .replace("NODE_FILTER", nodeFilter).replace("SORT_CTE", sortCte)
+                                    .replace("NODE_FILTER", filter).replace("SORT_CTE", sortCte)
                                     .replace("SORT_JOIN", sortJoin).replace("SORT_GROUPBY", sortGroupBy).replace("SORT_ORDER", sortOrder);
                     default -> "";
                 }, String.class
         ).setParameter("nodeId", nodeId);
         if (filterNodeIds != null && !filterNodeIds.isEmpty()) query.setParameter("nodeIds", filterNodeIds);
         if (sortByNodeId != null)  query.setParameter("sortNodeId", sortByNodeId);
+        if(!fingerprintIds.isEmpty()){
+            for(int idx=0;idx<fingerprintIds.size();idx++){
+                Long id = fingerprintIds.get(idx);
+                JqValue fingerprint = fingerprints.get(id);
+                query.setParameter("data_"+idx,fingerprint.toString());
+            }
+        }
         return query.getResultList().stream().map(JqValues::parse).toList();
     }
 
@@ -666,7 +706,7 @@ public class ValueService implements ValueServiceInterface {
         if(sortByNodeId != null){
             filterNodeIds.add(sortByNodeId);
         }
-        return getGroupedValues(rootNodeId, filterNodeIds.isEmpty() ? null : filterNodeIds, sortByNodeId);
+        return getGroupedValues(rootNodeId, filterNodeIds.isEmpty() ? null : filterNodeIds, null, sortByNodeId);
 
     }
 
