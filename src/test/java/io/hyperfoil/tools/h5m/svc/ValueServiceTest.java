@@ -1277,7 +1277,93 @@ public class ValueServiceTest extends FreshDb {
         assertEquals(2,found.size(),"expect to see 2 entry: "+found);
         assertFalse(found.contains(bravobravoValue),"should not contain bravobravo["+bravobravoValue.id+"]'s value: "+found);
     }
+    @Test
+    public void getGroupedValues_fingerprinted() throws HeuristicRollbackException, SystemException, HeuristicMixedException, RollbackException, NotSupportedException
+    {
+        tm.begin();
+        NodeEntity rootNode = new RootNode();
+        rootNode.persist();
+        NodeEntity group = new JqNode("group",".group",rootNode);
+        group.persist();
+        NodeEntity alpha = new JqNode("alpha",".a",group);
+        alpha.persist();
+        NodeEntity bravo = new JqNode("bravo",".b",group);
+        bravo.persist();
+        NodeEntity charlie = new JqNode("charlie",".c",group);
+        charlie.persist();
+        ValueEntity root1 = new ValueEntity(null,rootNode,JqValues.parse(
+            """
+            {
+              "group": [
+                { "a": 1, "b": 1, "c": "oneone"},
+                { "a": 1, "b": 2, "c": "onetwo"}
+              ]
+            }
+            """
+        ));
+        root1.persist();
+        ValueEntity group1_0 = new ValueEntity(null,group,root1.data.getField("group").getElement(0));
+        group1_0.persist();
+        ValueEntity alpha1_0 = new ValueEntity(null,alpha,group1_0.data.getField("a"),List.of(group1_0));
+        alpha1_0.persist();
+        ValueEntity bravo1_0 = new ValueEntity(null,bravo,group1_0.data.getField("b"),List.of(group1_0));
+        bravo1_0.persist();
+        ValueEntity charlie1_0 = new ValueEntity(null,charlie,group1_0.data.getField("c"),List.of(group1_0));
+        charlie1_0.persist();
+        ValueEntity group1_1 = new  ValueEntity(null,group,root1.data.getField("group").getElement(1));
+        group1_1.persist();
+        ValueEntity alpha1_1 = new ValueEntity(null,alpha,group1_1.data.getField("a"),List.of(group1_1));
+        alpha1_1.persist();
+        ValueEntity bravo1_1 = new ValueEntity(null,bravo,group1_1.data.getField("b"),List.of(group1_1));
+        bravo1_1.persist();
+        ValueEntity charlie1_1 = new ValueEntity(null,charlie,group1_1.data.getField("c"),List.of(group1_1));
+        charlie1_1.persist();
 
+        ValueEntity root2 = new ValueEntity(null,rootNode,JqValues.parse(
+                """
+                {
+                  "group": [
+                    { "a": 2, "b": 1, "c": "twoone"},
+                    { "a": 2, "b": 2, "c": "twotwo"}
+                  ]
+                }
+                """
+        ));
+        root2.persist();
+        ValueEntity group2_0 = new ValueEntity(null,group,root2.data.getField("group").getElement(0));
+        group2_0.persist();
+        ValueEntity alpha2_0 = new ValueEntity(null,alpha,group2_0.data.getField("a"),List.of(group2_0));
+        alpha2_0.persist();
+        ValueEntity bravo2_0 = new ValueEntity(null,bravo,group2_0.data.getField("b"),List.of(group2_0));
+        bravo2_0.persist();
+        ValueEntity charlie2_0 = new ValueEntity(null,charlie,group2_0.data.getField("c"),List.of(group2_0));
+        charlie2_0.persist();
+        ValueEntity group2_1 = new  ValueEntity(null,group,root2.data.getField("group").getElement(1));
+        group2_1.persist();
+        ValueEntity alpha2_1 = new ValueEntity(null,alpha,group2_1.data.getField("a"),List.of(group2_1));
+        alpha2_1.persist();
+        ValueEntity bravo2_1 = new ValueEntity(null,bravo,group2_1.data.getField("b"),List.of(group2_1));
+        bravo2_1.persist();
+        ValueEntity charlie2_1 = new ValueEntity(null,charlie,group2_1.data.getField("c"),List.of(group2_1));
+        charlie2_1.persist();
+        tm.commit();
+
+
+        //fetch only b=2
+        List<JqValue> found = valueService.getGroupedValues(group.id,null,Map.of(bravo.id,bravo1_1.data),alpha.id);
+        assertEquals(2,found.size());
+        for(int i=0; i<found.size(); i++){
+            assertEquals(bravo1_1.data.toString(),found.get(i).getField(bravo.name).toString());
+        }
+        //b=2 a=1
+        found = valueService.getGroupedValues(group.id,null,Map.of(bravo.id,bravo1_1.data,alpha.id,alpha1_0.data),alpha.id);
+        assertEquals(1,found.size());
+        for(int i=0; i<found.size(); i++){
+            assertEquals(bravo1_1.data.toString(),found.get(i).getField(bravo.name).toString());
+            assertEquals(alpha1_0.data.toString(),found.get(i).getField(alpha.name).toString());
+        }
+
+    }
 
     @Test
     public void getGroupedValues_filtered() throws HeuristicRollbackException, SystemException, HeuristicMixedException, RollbackException, NotSupportedException {
@@ -1353,6 +1439,7 @@ public class ValueServiceTest extends FreshDb {
         List<JqValue> results = valueService.getGroupedValues(
                 rootNode.id,
                 List.of(throughputNode.id, buildIdNode.id),
+                null,
                 buildIdNode.id
         );
 
