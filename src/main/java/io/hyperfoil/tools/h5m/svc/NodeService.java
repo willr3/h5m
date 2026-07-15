@@ -286,8 +286,16 @@ public class NodeService implements NodeServiceInterface {
                     delete(dependent.id);
                 }
             }
+
+            List<ValueEntity> nodeValues = ValueEntity.find("node.id", nodeId).list();
+            for (ValueEntity v : nodeValues) {
+                valueService.delete(v);
+            }
+            EdgeQueries.deleteChildEdges(em, "node_edge", node.id);
             // clean up edge rows where this node is a parent (inverse side not managed by JPA)
             EdgeQueries.deleteParentEdges(em, "node_edge", nodeId);
+            em.flush();
+            em.clear();
             NodeEntity.deleteById(nodeId);
         }
     }

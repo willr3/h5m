@@ -95,12 +95,61 @@ public class NodeServiceTest extends FreshDb {
         nodeService.delete(sourceA.id);
         tm.commit();
 
+        // sourceA should be deleted
+        NodeEntity nodeA = NodeEntity.findById(sourceA.id);
+        assertNull(nodeA, "sourceA should be deleted");
         // sharedNode should still exist because sourceB is still a parent
         NodeEntity foundShared = NodeEntity.findById(sharedNode.id);
         assertNotNull(foundShared, "shared node should not be deleted when one source is removed");
         // sourceB should still exist
         NodeEntity foundB = NodeEntity.findById(sourceB.id);
         assertNotNull(foundB, "sourceB should still exist");
+    }
+
+    @Test
+    public void delete_node_that_has_multiple_parents() throws HeuristicRollbackException, SystemException, HeuristicMixedException, RollbackException, NotSupportedException {
+        tm.begin();
+        NodeEntity rootNode = new RootNode();
+        rootNode.persist();
+        NodeEntity parentA = new JqNode("parentA", ".a");
+        parentA.sources = List.of(rootNode);
+        parentA.persist();
+        NodeEntity parentB = new JqNode("parentB", ".b");
+        parentB.sources = List.of(rootNode);
+        parentB.persist();
+
+        NodeEntity child = new JqNode("child", ".t");
+        child.sources = List.of(parentA, parentB);
+        child.persist();
+        tm.commit();
+
+        tm.begin();
+        nodeService.delete(child.id);
+        tm.commit();
+
+        assertNull(NodeEntity.findById(child.id), "child should be deleted");
+        assertNotNull(NodeEntity.findById(parentA.id), "parentA should still exist");
+        assertNotNull(NodeEntity.findById(parentB.id), "parentB should still exist");
+    }
+
+    @Test
+    public void delete_node_with_associated_values() throws HeuristicRollbackException, SystemException, HeuristicMixedException, RollbackException, NotSupportedException {
+        tm.begin();
+        NodeEntity rootNode = new RootNode();
+        rootNode.persist();
+        NodeEntity node = new JqNode("node", ".value");
+        node.sources = List.of(rootNode);
+        node.persist();
+        ValueEntity value = new ValueEntity(null, node, JqNumber.of(42));
+        value.persist();
+        tm.commit();
+
+        tm.begin();
+        nodeService.delete(node.id);
+        tm.commit();
+
+        assertNull(NodeEntity.findById(node.id), "node should be deleted");
+        assertNull(ValueEntity.findById(value.id), "value associated with the node should be deleted");
     }
 
     @Test
