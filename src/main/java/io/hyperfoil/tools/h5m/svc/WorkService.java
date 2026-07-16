@@ -78,11 +78,11 @@ public class WorkService implements WorkServiceInterface {
      * This derives the association from sourceValues rather than duplicating state on Work.
      */
     private List<UploadTracker> findTrackers(Work work) {
-        if (work.sourceValueIds == null || trackers.isEmpty()) {
+        if (work.getSourceValueIds() == null || trackers.isEmpty()) {
             return List.of();
         }
         List<UploadTracker> found = new ArrayList<>();
-        for (Long valueId : work.sourceValueIds) {
+        for (Long valueId : work.getSourceValueIds()) {
             if (valueId != null) {
                 UploadTracker tracker = trackers.get(valueId);
                 if (tracker != null) {
@@ -142,6 +142,7 @@ public class WorkService implements WorkServiceInterface {
             }
             newWorks.add(work);
         }
+
         if (!newWorks.isEmpty()) {
             List<Work> toQueue = List.copyOf(newWorks);
             for (Work work : toQueue) {
@@ -149,7 +150,7 @@ public class WorkService implements WorkServiceInterface {
                 // WorkQueue.sort() → dependsOn() which runs in afterCompletion
                 // outside the session. Without this, dependsOn() would try to
                 // lazily traverse NodeEntity.sources and fail.
-                if (work.activeNodes != null) {
+                if (work.getActiveNodes() != null) {
                     work.dependsOn(work);
                 }
                 // Increment trackers for each work item (before afterCompletion decrement)
@@ -223,6 +224,8 @@ public class WorkService implements WorkServiceInterface {
         return Optional.ofNullable(trackers.get(rootValueId));
     }
 
+    public WorkQueue getQueue(){return workExecutor.getWorkQueue();}
+
     @Override
     public boolean isIdle() {
         return workExecutor.getWorkQueue().isIdle();
@@ -243,7 +246,7 @@ public class WorkService implements WorkServiceInterface {
             // Work only carries value IDs — full entities are loaded here in
             // the transaction that needs them.
             List<ValueEntity> sourceValues = new ArrayList<>();
-            for (Long valueId : w.sourceValueIds) {
+            for (Long valueId : w.getSourceValueIds()) {
                 ValueEntity managed = em.find(ValueEntity.class, valueId);
                 if (managed != null) {
                     Hibernate.initialize(managed.data);
@@ -254,7 +257,7 @@ public class WorkService implements WorkServiceInterface {
             // Reload active nodes in this transaction's persistence context —
             // calculateValues() accesses node.sources which is lazy
             Set<NodeEntity> activeNodes = new HashSet<>();
-            for (NodeEntity an : w.activeNodes) {
+            for (NodeEntity an : w.getActiveNodes()) {
                 NodeEntity managed = em.find(NodeEntity.class, an.id);
                 if (managed != null) {
                     activeNodes.add(managed);
@@ -332,19 +335,22 @@ public class WorkService implements WorkServiceInterface {
                                 .map(v -> v.folder.id)
                                 .findFirst()
                                 .orElse(-1L);
-                        changeDetectedEvent.fire(new ChangeDetectedEvent(folderId, node.getId(), node.name, valueIds, w.dispatch));
+                        changeDetectedEvent.fire(new ChangeDetectedEvent(folderId, node.getId(), node.name, valueIds, w.isDispatch()));
                     }
                     // Cascade work inherits source value IDs and dispatch flag, so
                     // tracker association is derived automatically via findTrackers()
-                    List<Long> sourceValueIds = sourceValues.stream().map(ValueEntity::getId).toList();
-                    List<Work> cascadeWork = nodeService.getDependentNodes(node).stream()
-                            .map(n -> {
-                                Work cascaded = new Work(n, n.sources, sourceValueIds);
-                                cascaded.dispatch = w.dispatch;
-                                return cascaded;
-                            })
-                            .toList();
-                    create(cascadeWork);
+                    if(w.isCascade()) {
+                        List<Long> sourceValueIds = sourceValues.stream().map(ValueEntity::getId).toList();
+                        List<Work> cascadeWork = nodeService.getDependentNodes(node).stream()
+                                .map(n -> {
+                                    Work cascaded = new Work(n, n.sources, sourceValueIds);
+                                    cascaded.setDispatch(w.isDispatch());
+                                    return cascaded;
+                                })
+                                .toList();
+
+                        create(cascadeWork);
+                    }
                 }
             }
 
@@ -358,7 +364,7 @@ public class WorkService implements WorkServiceInterface {
 
             // Defer decrement until after this transaction commits so that
             // isIdle() cannot return true while the DB commit is still in flight.
-            if(w.activeNodes != null && !w.activeNodes.isEmpty()){
+            if(w.getActiveNodes() != null && !w.getActiveNodes().isEmpty()){
                 decrementDeferred = true;
                 tm.getTransaction().registerSynchronization(new Synchronization() {
                     @Override public void beforeCompletion() {}
@@ -370,8 +376,8 @@ public class WorkService implements WorkServiceInterface {
             }
         }catch( Exception e){
             Log.errorf(e, "WorkRunner caught: %s\n work=%s", e.getMessage(), w);
-            w.retryCount++;
-            if(w.retryCount > RETRY_LIMIT){
+            w.incrementRetryCount();
+            if(w.getRetryCount() > RETRY_LIMIT){
                 Log.error("Work exceeded retry limit");
                 // Fail trackers so CompletableFutures complete exceptionally
                 failTrackers(w, e);
@@ -383,7 +389,7 @@ public class WorkService implements WorkServiceInterface {
                 decrementDeferred = true;
             }
         } finally {
-            if(!decrementDeferred && w.activeNodes != null && !w.activeNodes.isEmpty()){
+            if(!decrementDeferred && w.getActiveNodes() != null && !w.getActiveNodes().isEmpty()){
                 workQueue.decrement(w);
                 decrementTrackers(w);
             }

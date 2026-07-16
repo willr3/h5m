@@ -48,6 +48,8 @@ import java.util.stream.Collectors;
 @ApplicationScoped
 public class NodeService implements NodeServiceInterface {
 
+    private static final String ANALYSIS_NODES = "("+Arrays.stream(NodeType.values()).filter(NodeType::isAnalysis).map(t->"'"+t.display()+"'").collect(Collectors.joining(","))+")";
+
     private static final ConcurrentHashMap<String, JqProgram> JQ_CACHE = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, JqProgram> JSONATA_CACHE = new ConcurrentHashMap<>();
 
@@ -253,6 +255,47 @@ public class NodeService implements NodeServiceInterface {
             em.flush();
         }
         return node.id;
+    }
+
+    /**
+     * returns this list of Ephemeral nodes that must be recalculated to be able to recalculate the input node
+     * @param node
+     * @return
+     */
+    @Transactional
+    public Set<NodeEntity> getEphemeralSources(NodeEntity node){
+        Set<NodeEntity> rtrn = new HashSet<>();
+        Set<NodeEntity> seen = new HashSet<>();
+        Queue<NodeEntity> queue = new LinkedList<>(node.sources);
+
+        while(!queue.isEmpty()){
+            NodeEntity n = queue.poll();
+            if (isEphemeral(n) && !seen.contains(n)) {
+                seen.add(n);
+                rtrn.add(n);
+                queue.addAll(n.sources);
+            }
+        }
+        return rtrn;
+    }
+
+    @Transactional
+    public boolean isEphemeral(NodeEntity node){
+        Boolean result = (Boolean) em.createNativeQuery("""
+            select exists(
+                select 1
+                    from node n
+                    where n.id = :node_id and n.type != 'root' and n.type NOT IN ANALYSIS_NODES and (n.ephemeral = 'DISCARD' OR (
+                        n.ephemeral = 'AUTO' and
+                        EXISTS (
+                            select 1
+                            from node_edge ne JOIN node child ON child.id = ne.child_id
+                            where ne.parent_id = n.id AND child.type NOT IN ANALYSIS_NODES
+                        )
+                    ))
+             )
+            """.replaceAll("ANALYSIS_NODES",ANALYSIS_NODES),Boolean.class).setParameter("node_id",node.id).getSingleResult();
+        return result !=null && result;
     }
 
     @Transactional

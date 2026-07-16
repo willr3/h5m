@@ -198,41 +198,6 @@ public class RestEndpointTest extends FreshDb {
                 .statusCode(204);
     }
 
-    @Test
-    public void folder_recalculate() {
-        createFolder("recalc-test");
-
-        // Start recalculation — should return status with ID and progress fields
-        String id = given()
-                .contentType(MediaType.APPLICATION_JSON)
-                .when().post("/api/folder/recalc-test/recalculate")
-                .then()
-                .statusCode(200)
-                .body("id", org.hamcrest.Matchers.notNullValue())
-                .body("folderName", org.hamcrest.Matchers.equalTo("recalc-test"))
-                .body("state", org.hamcrest.Matchers.notNullValue())
-                .body("totalRoots", org.hamcrest.Matchers.notNullValue())
-                .body("completedRoots", org.hamcrest.Matchers.notNullValue())
-                .body("durationMs", org.hamcrest.Matchers.notNullValue())
-                .extract().path("id");
-
-        // Poll recalculation status
-        given()
-                .contentType(MediaType.APPLICATION_JSON)
-                .when().get("/api/folder/recalculation/" + id)
-                .then()
-                .statusCode(200)
-                .body("id", org.hamcrest.Matchers.equalTo(id))
-                .body("state", org.hamcrest.Matchers.notNullValue());
-
-        // Non-existent recalculation should return 404
-        given()
-                .contentType(MediaType.APPLICATION_JSON)
-                .when().get("/api/folder/recalculation/does-not-exist")
-                .then()
-                .statusCode(404);
-    }
-
     // -- Node endpoints --
 
     @Test

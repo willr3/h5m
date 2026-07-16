@@ -1,5 +1,6 @@
 package io.hyperfoil.tools.h5m.svc;
 
+import io.hyperfoil.tools.h5m.api.EphemeralMode;
 import io.hyperfoil.tools.jjq.value.*;
 import io.hyperfoil.tools.h5m.FreshDb;
 import io.hyperfoil.tools.h5m.api.Node;
@@ -36,6 +37,128 @@ public class NodeServiceTest extends FreshDb {
     ValueService valueService;
     @Inject
     EntityManager em;
+
+
+    @Test
+    public void isEphemeral_KEEP() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        tm.begin();
+        NodeEntity node = new JqNode("keep",".keep");
+        node.ephemeral = EphemeralMode.KEEP;
+        node.persist();
+        tm.commit();
+        boolean result =  nodeService.isEphemeral(node);
+
+        assertFalse(result);
+    }
+
+    @Test
+    public void isEphemeral_DISCARD() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        tm.begin();
+        NodeEntity node = new JqNode("node",".node");
+        node.ephemeral = EphemeralMode.DISCARD;
+        node.persist();
+        tm.commit();
+        boolean result =  nodeService.isEphemeral(node);
+
+        assertTrue(result);
+    }
+
+    @Test
+    public void isEphemeral_AUTO() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        tm.begin();
+        NodeEntity node = new JqNode("node",".node");
+        node.ephemeral = EphemeralMode.AUTO;
+        node.persist();
+        NodeEntity child = new JqNode("child",".child",node);
+        child.ephemeral = EphemeralMode.AUTO;
+        child.persist();
+        tm.commit();
+
+        assertTrue(nodeService.isEphemeral(node),"auto node with child is ephemeral");
+        assertFalse(nodeService.isEphemeral(child),"auto node without child is not ephemeral");
+    }
+    @Test
+    public void isEphemeral_root() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        tm.begin();
+        NodeEntity node = new RootNode();
+        node.persist();
+        NodeEntity child = new JqNode("child",".child",node);
+        child.ephemeral = EphemeralMode.AUTO;
+        child.persist();
+        tm.commit();
+
+        assertFalse(nodeService.isEphemeral(node),"root cannot be ephemeral");
+    }
+    @Test
+    public void isEphemeral_analysis_with_child() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        tm.begin();
+        NodeEntity node = new RelativeDifference("rd","");
+        node.persist();
+        NodeEntity child = new JqNode("child",".child",node);
+        child.persist();
+        tm.commit();
+
+        assertFalse(nodeService.isEphemeral(node),"analysis node cannot be ephemeral");
+    }
+
+    @Test
+    public void getEphemeralSources_root_source() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        tm.begin();
+        NodeEntity root = new RootNode();
+        root.persist();
+        NodeEntity a = new JqNode("a",".a",root);
+        a.persist();
+        tm.commit();
+
+        Set<NodeEntity> found =  nodeService.getEphemeralSources(a);
+        assertNotNull(found);
+        assertTrue(found.isEmpty());
+    }
+
+    @Test
+    public void getEphemeralSources_single_source() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        tm.begin();
+        NodeEntity root = new RootNode();
+        root.persist();
+        NodeEntity a = new JqNode("a",".a",root);
+        a.persist();
+        NodeEntity b = new JqNode("b",".b",root,a);
+        b.persist();
+        tm.commit();
+
+        assertTrue(nodeService.isEphemeral(a));
+
+        Set<NodeEntity>  found =  nodeService.getEphemeralSources(b);
+        assertNotNull(found);
+        assertEquals(1,found.size());
+        assertTrue(found.contains(a));
+    }
+    @Test
+    public void getEphemeralSources_walk_source_dag() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        tm.begin();
+        NodeEntity root = new RootNode();
+        root.persist();
+        NodeEntity group = new JqNode("group",".group",root);
+        group.persist();
+        NodeEntity a = new JqNode("a",".a",group);
+        a.ephemeral=EphemeralMode.KEEP;
+        a.persist();
+        NodeEntity b = new JqNode("b",".b",a);
+        b.persist();
+        NodeEntity c = new JqNode("c",".c",b);
+        c.persist();
+        NodeEntity d = new JqNode("d",".d",c);
+        d.persist();
+        tm.commit();
+
+        Set<NodeEntity>  found =  nodeService.getEphemeralSources(d);
+        assertNotNull(found);
+
+        assertEquals(2,found.size());
+        assertTrue(found.contains(b));
+        assertTrue(found.contains(c));
+    }
+
 
     @Test
     public void create_without_group() {

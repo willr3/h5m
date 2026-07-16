@@ -68,15 +68,6 @@ public interface FolderServiceInterface {
     Upload upload(String name, String path, JqValue data);
 
     /**
-     * Recalculates all values in the folder by reprocessing each root value
-     * through the node graph. Returns a status tracker with progress information.
-     *
-     * @param name The name of the folder to recalculate.
-     * @return tracker with progress and completion future
-     */
-    RecalculationTracker recalculate(String name);
-
-    /**
      * Selectively recalculates values for a specific node and its dependents.
      *
      * @param nodeId The ID of the node to recalculate.

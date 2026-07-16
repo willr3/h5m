@@ -97,14 +97,6 @@ public class FolderResource {
         return folderService.upload(name, path, data).uploadId;
     }
 
-    @POST
-    @Path("{name}/recalculate")
-    @Authenticated
-    @Operation(description = "Start recalculation of all values in a folder. Returns immediately with a status for progress polling.")
-    public RecalculationStatus recalculate(@PathParam("name") String name) {
-        return folderService.recalculate(name).toStatus();
-    }
-
     @GET
     @Path("/recalculation/{id}")
     @Authenticated

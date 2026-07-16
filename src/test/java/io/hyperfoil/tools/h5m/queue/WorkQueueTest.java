@@ -12,6 +12,7 @@ import io.hyperfoil.tools.h5m.svc.WorkService;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.transaction.*;
+import org.hibernate.Hibernate;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
@@ -28,7 +29,7 @@ public class WorkQueueTest extends FreshDb {
 
     @Inject
     WorkService workService;
-
+    
     @Test
     public void isRoot_true() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
         tm.begin();
@@ -103,7 +104,7 @@ public class WorkQueueTest extends FreshDb {
 
 
     @Test
-    public void reject_relativedifference_as_duplicate() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+    public void accept_relativedifference_with_different_sourceValues() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
         tm.begin();
         NodeEntity rootNode = new JqNode("root",".root");
         rootNode.persist();
@@ -119,7 +120,7 @@ public class WorkQueueTest extends FreshDb {
         Work work1 = new Work(relativeDifference,List.of(rootNode),List.of(rootValue1.id));
         Work work2 = new Work(relativeDifference,List.of(rootNode),List.of(rootValue2.id));
 
-        assertEquals(work1.hashCode(),work2.hashCode(),"both worth should have the same hashcode despite different values");
+        assertNotEquals(work1.hashCode(),work2.hashCode(),"both work should have different hashCodes");
 
         WorkQueue q = new WorkQueue();
 
@@ -127,7 +128,7 @@ public class WorkQueueTest extends FreshDb {
         assertEquals(1,q.size(),"first work should be added");
         q.addWorks(List.of(work2));
         assertTrue(q.isPending(work2),"work 2 should be pending since it matches work1");
-        assertEquals(1,q.size(),"seconds work should not be added because it should have the same hash");
+        assertEquals(2,q.size(),"seconds work should not be added because it should have the same hash");
         tm.commit();
     }
 
