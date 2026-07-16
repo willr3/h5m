@@ -15,19 +15,29 @@ import java.util.stream.Collectors;
 //custom post nodegroup actions could have sourceNodes without activeNode
 public class Work implements Runnable, Comparable<Work>{
 
-    public List<Long> sourceValueIds;//IDs of source values — full entities are loaded in WorkService.execute()
+    private List<Long> sourceValueIds;//IDs of source values — full entities are loaded in WorkService.execute()
 
-    public List<NodeEntity> sourceNodes; //what is going to use a list of sources that are not already listed for the activeNode?
+    private List<NodeEntity> sourceNodes; //what is going to use a list of sources that are not already listed for the activeNode?
 
-    public int retryCount;
+    private int retryCount;
 
-    public Set<NodeEntity> activeNodes;
+    private Set<NodeEntity> activeNodes;
 
-    public boolean cumulative = false;
+    /*
+     * If the work should be performed after work for any dependent Nodes regardless of Values
+     */
+    private boolean cumulative = false;
 
-    /** Whether external notifications should be dispatched for detection results.
-     *  Set to false for recalculations and bulk imports. */
-    public boolean dispatch = true;
+    /*
+     * Whether external notifications should be dispatched for detection results.
+     * Set to false for recalculations and bulk imports.
+     */
+    private boolean dispatch = true;
+
+    /*
+     * If the work should queue activeNode child values if it creates new values
+     */
+    private boolean cascade = true;
 
     public Work(){
         retryCount = 0;
@@ -38,8 +48,7 @@ public class Work implements Runnable, Comparable<Work>{
     public Work(Set<NodeEntity> activeNodes,List<NodeEntity> sourceNodes,List<Long> sourceValueIds){
         this();
         this.activeNodes = new HashSet<>(activeNodes); //so that it will be mutable
-        if(activeNodes.stream().anyMatch(node -> node instanceof RelativeDifference
-                || node instanceof StdDevAnomaly || node instanceof EDivisive)){
+        if(activeNodes.stream().anyMatch(node -> node instanceof StdDevAnomaly || node instanceof EDivisive)){
             this.cumulative = true;
         }
         this.sourceValueIds = sourceValueIds == null ? Collections.emptyList() : new ArrayList<>(sourceValueIds);
@@ -52,13 +61,13 @@ public class Work implements Runnable, Comparable<Work>{
 
     public void setActiveNodes(Set<NodeEntity> activeNodes) {
         this.activeNodes = activeNodes;
-        if(activeNodes.stream().anyMatch(node -> node instanceof RelativeDifference
-                || node instanceof StdDevAnomaly || node instanceof EDivisive)){
+        if(activeNodes.stream().anyMatch(node -> node instanceof StdDevAnomaly || node instanceof EDivisive)){
             this.cumulative = true;
         }else{
             this.cumulative = false;
         }
     }
+    public List<Long> getSourceValueIds(){return sourceValueIds;}
 
     //work A depends on work B if A.activeNode depends on B.activeNode
     public boolean dependsOn(Work work){
@@ -186,4 +195,17 @@ public class Work implements Runnable, Comparable<Work>{
                 " retry="+retryCount+
                 " hashCode="+hashCode()+" >";
     }
+
+    public boolean isCascade() { return cascade; }
+    public void setCascade(boolean cascade) { this.cascade = cascade; }
+
+    public boolean isDispatch() { return dispatch; }
+    public void setDispatch(boolean dispatch) { this.dispatch = dispatch; }
+
+    public boolean isCumulative() { return cumulative; }
+    public void setCumulative(boolean cumulative) { this.cumulative = cumulative; }
+
+
+    public int getRetryCount() { return retryCount; }
+    public void incrementRetryCount(){ this.retryCount++; }
 }

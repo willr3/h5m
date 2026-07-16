@@ -29,8 +29,8 @@ public class WorkTest {
         Work work1 = new Work(relativeDifference,List.of(rootNode),List.of(rootValue1.id));
         Work work2 = new Work(relativeDifference,List.of(rootNode),List.of(rootValue2.id));
 
-        assertEquals(work1.hashCode(),work2.hashCode(),"both work should have the same hash code despite different values");
-        assertEquals(work1,work2,"work1 and work2 should be considered equal despite different source values");
+        assertNotEquals(work1.hashCode(),work2.hashCode(),"both work should not have the same hash code due to different values");
+        assertNotEquals(work1,work2,"work1 and work2 should not be considered equal due to different source values");
     }
 
     @Test

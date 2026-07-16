@@ -185,7 +185,7 @@ public abstract class NodeEntity extends PanacheEntity implements Comparable<Nod
     @Override
     public int hashCode(){
         if(id != null){
-            return Objects.hash(id, name, operation);
+            return Objects.hash(id);//, name, operation);
         }
         // hash source ids one level deep to avoid recursion on deep graphs
         int sourcesHash = 1;

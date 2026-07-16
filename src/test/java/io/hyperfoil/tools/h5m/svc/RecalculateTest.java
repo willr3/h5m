@@ -1,5 +1,6 @@
 package io.hyperfoil.tools.h5m.svc;
 
+import io.hyperfoil.tools.h5m.api.Folder;
 import io.hyperfoil.tools.jjq.value.JqValues;
 import io.hyperfoil.tools.h5m.FreshDb;
 import io.hyperfoil.tools.h5m.entity.FolderEntity;
@@ -24,8 +25,10 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -127,9 +130,10 @@ public class RecalculateTest extends FreshDb {
         assertEquals("\"hello_done\"", transformValues.get(0).data.toString());
         tm.commit();
 
+        CompletableFuture.allOf(folder.group.getTopLevelNodes().stream().map(n->
+                folderService.recalculateNode(n.id).getFuture()
+                ).toList().toArray(new CompletableFuture[]{})).orTimeout(30, TimeUnit.SECONDS).join();
         // Recalculate and wait for completion
-        folderService.recalculate("recalc-test").getFuture()
-                .orTimeout(30, TimeUnit.SECONDS).join();
 
         // Verify values are unchanged (dedup should preserve identical values)
         tm.begin();
@@ -181,8 +185,10 @@ public class RecalculateTest extends FreshDb {
 
         // Recalculate — should suppress notifications
         eventObserver.clear();
-        folderService.recalculate("recalc-notify-test").getFuture()
-                .orTimeout(30, TimeUnit.SECONDS).join();
+        CompletableFuture.allOf(folder.group.getTopLevelNodes().stream().map(n->
+                folderService.recalculateNode(n.id).getFuture()
+        ).toList().toArray(new CompletableFuture[]{})).orTimeout(30, TimeUnit.SECONDS).join();
+
 
         List<ChangeDetectedEvent> recalcEvents = eventObserver.getEvents();
         boolean hasNonDispatchedEvent = recalcEvents.stream().anyMatch(e -> !e.dispatch());
@@ -254,12 +260,15 @@ public class RecalculateTest extends FreshDb {
     public void recalculate_returns_completable_future() throws Exception {
         // Verify that recalculate returns a future we can wait on
         tm.begin();
-        folderService.create("future-test");
+        long id = folderService.create("future-test");
+        FolderEntity folder = folderService.read(id);
         tm.commit();
 
         // Recalculate empty folder — should complete immediately
-        folderService.recalculate("future-test").getFuture()
-                .orTimeout(10, TimeUnit.SECONDS).join();
+        CompletableFuture.allOf(folder.group.getTopLevelNodes().stream().map(n->
+                folderService.recalculateNode(n.id).getFuture()
+        ).toList().toArray(new CompletableFuture[]{})).orTimeout(30, TimeUnit.SECONDS).join();
+
         // No exception = success
     }
 
@@ -313,8 +322,10 @@ public class RecalculateTest extends FreshDb {
                 "Each upload with y > 50 should produce a change detection");
 
         // Recalculate
-        folderService.recalculate("multi-recalc-test").getFuture()
-                .orTimeout(30, TimeUnit.SECONDS).join();
+        CompletableFuture.allOf(folder.group.getTopLevelNodes().stream().map(n->
+                folderService.recalculateNode(n.id).getFuture()
+        ).toList().toArray(new CompletableFuture[]{})).orTimeout(30, TimeUnit.SECONDS).join();
+
 
         // Verify change detection count is the same after recalculation
         tm.begin();
@@ -327,7 +338,7 @@ public class RecalculateTest extends FreshDb {
     }
 
     @Test
-    public void recalculate_after_node_update_uses_new_operation() throws Exception {
+    public void recalculateNode_after_node_update_uses_new_operation() throws Exception {
         // When a node's operation changes, recalculateNode should produce
         // values reflecting the new operation, not the old one.
         tm.begin();
@@ -378,7 +389,7 @@ public class RecalculateTest extends FreshDb {
     }
 
     @Test
-    public void recalculate_tracks_progress() throws Exception {
+    public void recalculateNode_tracks_progress() throws Exception {
         // Upload multiple values, then recalculate and verify progress tracking
         tm.begin();
         long folderId = folderService.create("progress-test");
@@ -399,12 +410,12 @@ public class RecalculateTest extends FreshDb {
         }
 
         // Start recalculation — returns tracker immediately
-        RecalculationTracker tracker = folderService.recalculate("progress-test");
+        RecalculationTracker tracker = folderService.recalculateNode(extract.id);
 
         assertNotNull(tracker, "Should return a recalculation tracker");
         assertNotNull(tracker.getId(), "Tracker should have an ID");
         assertEquals("progress-test", tracker.getFolderName());
-        assertEquals(-1, tracker.getNodeId(), "Full recalculate should have nodeId=-1");
+        assertEquals(extract.id, tracker.getNodeId(), "Full recalculate should have nodeId=-1");
 
         // Snapshot before completion
         RecalculationStatus before = tracker.toStatus();
@@ -482,7 +493,7 @@ public class RecalculateTest extends FreshDb {
         tm.commit();
 
         // Recalculate
-        folderService.recalculate("split-recalc-test").getFuture()
+        folderService.recalculateNode(valueNodeId).getFuture()
                 .orTimeout(30, TimeUnit.SECONDS).join();
 
         // Verify values are preserved — same count, same data
@@ -558,7 +569,7 @@ public class RecalculateTest extends FreshDb {
         // Recalculate — this must work even though extract.data is NULL.
         // The pipeline should re-extract from root.data → recompute extract → 
         // recompute transform → nullify extract again.
-        folderService.recalculate("ephemeral-recalc-test").getFuture()
+        folderService.recalculateNode(transformId).getFuture()
                 .orTimeout(30, TimeUnit.SECONDS).join();
 
         // Verify: transform data should still be correct after recalculation
@@ -874,16 +885,16 @@ public class RecalculateTest extends FreshDb {
                 .future.orTimeout(30, TimeUnit.SECONDS).join();
 
         // Recalculate and wait
-        folderService.recalculate("tracking-test").getFuture()
+        folderService.recalculateNode(extract.id).getFuture()
                 .orTimeout(30, TimeUnit.SECONDS).join();
 
         // Verify tracking entity exists and is completed
         tm.begin();
         ProcessingTrackerEntity tracker = ProcessingTrackerEntity.find(
-                "type = ?1 and folderId = ?2", ProcessingType.RECALCULATE, folderId).firstResult();
+                "type = ?1 and folderId = ?2", ProcessingType.RECALCULATE_NODE, folderId).firstResult();
         assertNotNull(tracker, "Recalculation should create a tracking entity");
         assertTrue(tracker.completed, "Tracking entity should be marked completed");
-        assertEquals(-1, tracker.referenceId, "Full recalculate should have referenceId=-1");
+        assertEquals(extract.id, tracker.referenceId, "Full recalculate should have referenceId=-1");
         tm.commit();
     }
 
@@ -910,7 +921,7 @@ public class RecalculateTest extends FreshDb {
         // Simulate crash: create incomplete recalculation tracker
         tm.begin();
         ProcessingTrackerEntity tracker = new ProcessingTrackerEntity(
-                ProcessingType.RECALCULATE, folderId, -1);
+                ProcessingType.RECALCULATE_NODE, folderId, extractId);
         tracker.persist();
         long trackerId = tracker.id;
         tm.commit();
@@ -1230,21 +1241,6 @@ public class RecalculateTest extends FreshDb {
     }
 
     @Test
-    public void recalculate_rejects_when_upload_in_progress() throws Exception {
-        tm.begin();
-        long folderId = folderService.create("upload-guard-test");
-        // Simulate in-flight upload
-        ProcessingTrackerEntity inFlight = new ProcessingTrackerEntity(
-                ProcessingType.UPLOAD, folderId, 1L);
-        inFlight.persist();
-        tm.commit();
-
-        assertThrows(IllegalStateException.class,
-                () -> folderService.recalculate("upload-guard-test"),
-                "Should reject recalculation when uploads are in progress");
-    }
-
-    @Test
     public void findRecomputationStartNodes_diamond_dag() throws Exception {
         // Diamond: root → A[DISCARD] → C[KEEP]
         //          root → B[KEEP]    → C[KEEP]
@@ -1295,7 +1291,7 @@ public class RecalculateTest extends FreshDb {
     public void recovery_with_deleted_folder_cleans_up_tracker() throws Exception {
         tm.begin();
         ProcessingTrackerEntity tracker = new ProcessingTrackerEntity(
-                ProcessingType.RECALCULATE, 999999L, -1);
+                ProcessingType.RECALCULATE_NODE, 999999L, -1);
         tracker.persist();
         long trackerId = tracker.id;
         tm.commit();

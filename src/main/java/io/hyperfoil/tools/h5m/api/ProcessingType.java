@@ -6,8 +6,6 @@ package io.hyperfoil.tools.h5m.api;
 public enum ProcessingType {
     /** An upload of new data being processed through the pipeline */
     UPLOAD,
-    /** A full folder recalculation (all nodes, all root values) */
-    RECALCULATE,
     /** A selective node recalculation (specific node and its dependents) */
     RECALCULATE_NODE
 }

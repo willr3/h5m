@@ -21,6 +21,7 @@ import jakarta.transaction.Transactional;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * Handles pipeline processing lifecycle: recalculation, selective node
@@ -48,6 +49,8 @@ public class ProcessingService {
     WorkService workService;
     @Inject
     RecalculationService recalculationService;
+    @Inject
+    NodeService nodeService;
 
     // --- Recovery ---
 
@@ -68,7 +71,6 @@ public class ProcessingService {
                 for (ProcessingTrackerEntity tracking : incomplete) {
                     switch (tracking.type) {
                         case UPLOAD -> recoverUpload(tracking);
-                        case RECALCULATE -> recoverRecalculate(tracking);
                         case RECALCULATE_NODE -> recoverRecalculateNode(tracking);
                     }
                 }
@@ -104,7 +106,11 @@ public class ProcessingService {
         Log.infof("Re-triggering processing for upload %d in folder %d", tracking.referenceId, tracking.folderId);
         // Use all source nodes (not just top-level) to handle mid-cascade crashes
         List<Work> works = List.copyOf(folder.group.sources).stream()
-                .map(node -> new Work(node, new ArrayList<>(node.sources), List.of(rootValue.id)))
+                .map(node -> {
+                    Work w = new Work(node, new ArrayList<>(node.sources), List.of(rootValue.id));
+                    w.setCascade(false);
+                    return w;
+                })
                 .toList();
         if (!works.isEmpty()) {
             CompletableFuture<Void> future = workService.createTracked(works, Set.of(rootValue.id));
@@ -123,18 +129,6 @@ public class ProcessingService {
         } else {
             tracking.completed = true;
         }
-    }
-
-    private void recoverRecalculate(ProcessingTrackerEntity tracking) {
-        FolderEntity folder = findFolderById(tracking.folderId);
-        if (folder == null) {
-            Log.warnf("Folder %d not found for incomplete recalculation, removing tracking record", tracking.folderId);
-            tracking.delete();
-            return;
-        }
-        Log.infof("Re-triggering full recalculation for folder '%s' (id=%d)", folder.name, tracking.folderId);
-        tracking.completed = true;
-        recalculate(folder.name);
     }
 
     private void recoverRecalculateNode(ProcessingTrackerEntity tracking) {
@@ -172,7 +166,7 @@ public class ProcessingService {
         // Create a new tracker for this recovery work — if recovery itself crashes,
         // the new tracker ensures it's re-triggered on next startup.
         ProcessingTrackerEntity recoveryTracker = new ProcessingTrackerEntity(
-                ProcessingType.RECALCULATE, tracking.folderId, -1);
+                ProcessingType.RECALCULATE_NODE, tracking.folderId, tracking.referenceId);
         recoveryTracker.persist();
         tracking.completed = true;
 
@@ -184,7 +178,8 @@ public class ProcessingService {
             rootValueIds.add(rootValue.id);
             for (NodeEntity sourceNode : List.copyOf(folder.group.sources)) {
                 Work w = new Work(sourceNode, new ArrayList<>(sourceNode.sources), List.of(rootValue.id));
-                w.dispatch = false;
+                w.setDispatch(false);
+                w.setCascade(false);
                 works.add(w);
             }
         }
@@ -231,144 +226,105 @@ public class ProcessingService {
     // --- Recalculation ---
 
     /**
-     * Recalculates all values in the folder by reprocessing each root value
-     * through the node graph. Queues top-level nodes for each root value and
-     * relies on cascade in {@code WorkService.execute()} for downstream nodes.
-     *
-     * @param name the folder name to recalculate
-     * @return recalculation status with progress tracking
-     * @throws IllegalStateException if uploads are in progress for this folder
-     */
-    public RecalculationTracker recalculate(String name) {
-        return QuarkusTransaction.requiringNew().call(() -> {
-            FolderEntity folder = findFolderByName(name);
-            List<NodeEntity> topLevelNodes = folder.group.getTopLevelNodes();
-            return doRecalculate(folder, -1, ProcessingType.RECALCULATE, topLevelNodes);
-        });
-    }
-
-    /**
      * Selectively recalculates values for a specific node and its dependents.
-     * Walks up the source chain to find the highest ancestor nodes whose
-     * source data is available (not ephemeral-nullified). Queues Work from
-     * those ancestors — cascade in WorkService.execute() recomputes the
-     * intermediate nodes before reaching the target.
+     * Walks up the source chain to find ephemeral ancestor.
+     * Queues Work from those ancestors along with Work for target node
      *
-     * Use case: user changes a JQ expression or detection config for a node.
+     * Use cases:
+     * * A user adds a new Node to the NodeGroup
+     * * A user changes a Node's operation or sources
      *
      * @param nodeId the node to recalculate
      * @return recalculation status with progress tracking
      * @throws IllegalStateException if uploads are in progress for this folder
      * @throws IllegalArgumentException if the node is not found or has no group
      */
-    public RecalculationTracker recalculateNode(long nodeId) {
+    public RecalculationTracker recalculateNode(long nodeId){
         return QuarkusTransaction.requiringNew().call(() -> {
             NodeEntity targetNode = NodeEntity.findById(nodeId);
-            if (targetNode == null) {
+            if(targetNode == null){
                 throw new IllegalArgumentException("Node not found: " + nodeId);
             }
             if (targetNode.group == null) {
                 throw new IllegalArgumentException("Node " + nodeId + " has no group");
             }
             FolderEntity folder = findFolderByGroupId(targetNode.group.id);
-            List<NodeEntity> allGroupNodes = List.copyOf(folder.group.sources);
-            Set<NodeEntity> startNodes = findRecomputationStartNodes(targetNode, folder.group.root, allGroupNodes);
-            return doRecalculate(folder, nodeId, ProcessingType.RECALCULATE_NODE, startNodes);
-        });
-    }
-
-    /**
-     * Shared recalculation logic for both full-folder and selective-node recalculation.
-     * Rejects if uploads are in progress, builds Work items for each root value × node,
-     * creates a crash-recovery tracker, wires progress callbacks, and schedules
-     * ephemeral data nullification on completion.
-     *
-     * @param folder the folder to recalculate (must be fetched with group, sources, root)
-     * @param nodeId the target node ID, or -1 for full folder recalculation
-     * @param trackingType RECALCULATE or RECALCULATE_NODE
-     * @param nodesToQueue the nodes to create Work items for
-     * @return recalculation status with progress tracking
-     */
-    private RecalculationTracker doRecalculate(FolderEntity folder, long nodeId,
-                                               ProcessingType trackingType,
-                                               Collection<NodeEntity> nodesToQueue) {
-        // Reject if uploads are in progress to avoid conflicting Work items
-        // with different dispatch flags (upload=true vs recalculate=false)
-        long inFlight = ProcessingTrackerEntity.count(
-                "type = ?1 and folderId = ?2 and completed = false", ProcessingType.UPLOAD, folder.id);
-        if (inFlight > 0) {
-            throw new IllegalStateException(
-                    "Cannot recalculate while " + inFlight + " upload(s) are in progress for folder " + folder.name);
-        }
-
-        List<ValueEntity> rootValues = valueService.getValues(folder.group.root);
-        rootValues.forEach(ValueEntity::getPath); // initialize lazy proxies
-
-        if (rootValues.isEmpty()) {
-            return recalculationService.create(folder.name, nodeId, 0, COMPLETED);
-        }
-
-        List<Work> works = new ArrayList<>();
-        Set<Long> rootValueIds = new HashSet<>();
-        for (ValueEntity rootValue : rootValues) {
-            rootValueIds.add(rootValue.id);
-            for (NodeEntity node : nodesToQueue) {
-                Work w = new Work(node, new ArrayList<>(node.sources), List.of(rootValue.id));
-                w.dispatch = false; // suppress external notifications during recalculation
-                works.add(w);
+            List<ValueEntity> rootValues = valueService.getValues(targetNode.group.root);
+            if (rootValues.isEmpty()) {
+                return recalculationService.create(folder.name, nodeId, 0, COMPLETED);
             }
-        }
+            rootValues.forEach(ValueEntity::getPath); // initialize lazy proxies
 
-        if (works.isEmpty()) {
-            return recalculationService.create(folder.name, nodeId, 0, COMPLETED);
-        }
+            Set<Long> rootValueIds = new HashSet<>(rootValues.size());
+            Set<NodeEntity> ephemeralSources = nodeService.getEphemeralSources(targetNode);
+            List<Work> todo = new  ArrayList<>();
 
-        // Track for crash recovery
-        ProcessingTrackerEntity tracking = new ProcessingTrackerEntity(trackingType, folder.id, nodeId);
-        tracking.persist();
-
-        CompletableFuture<Void> future = workService.createTracked(works, rootValueIds);
-
-        // Create status tracker with per-root progress callbacks.
-        // This wiring is safe from races: createTracked() defers work queue insertion
-        // to afterCompletion (transaction commit), so no work has started yet.
-        RecalculationTracker status = recalculationService.create(folder.name, nodeId, rootValues.size(), future);
-        for (Long rootId : rootValueIds) {
-            workService.getTracker(rootId).ifPresent(tracker ->
-                tracker.getFuture().whenComplete((v, t) -> status.incrementCompleted())
-            );
-        }
-
-        // Mark completed and null out ephemeral data after recalculation finishes
-        long trackingId = tracking.id;
-        future.whenComplete((v, t) -> {
-            if (t != null) {
-                Log.errorf(t, "Recalculation failed for folder '%s' (nodeId=%d)", folder.name, nodeId);
-            }
-            // Mark tracker completed even on failure to prevent infinite retry on restart.
-            // On success, also nullify ephemeral data and evict the 2LC.
-            QuarkusTransaction.requiringNew().run(() -> {
-                ProcessingTrackerEntity entity = ProcessingTrackerEntity.findById(trackingId);
-                if (entity != null) {
-                    entity.completed = true;
-                }
-                if (t == null) {
-                    for (ValueEntity rootValue : rootValues) {
-                        int nullified = valueService.nullifyEphemeralData(rootValue.id);
-                        if (nullified > 0) {
-                            Log.debugf("Nullified data for %d ephemeral values (root %d)", nullified, rootValue.id);
-                        }
+            for(ValueEntity rootValue : rootValues){
+                rootValueIds.add(rootValue.id);
+                if(!ephemeralSources.isEmpty()){
+                    for(NodeEntity ephemeralSource : ephemeralSources){
+                        Work ephemeralWork = new Work(ephemeralSource,new ArrayList<>(ephemeralSource.sources),List.of(rootValue.id));
+                        ephemeralWork.setCascade(false);
+                        ephemeralWork.setDispatch(false);
+                        todo.add(ephemeralWork);
                     }
-                    // Evict cached ValueEntity instances since data was nullified via native SQL
-                    em.getEntityManagerFactory().getCache().evict(ValueEntity.class);
                 }
+                Work nodeWork = new Work(targetNode, new ArrayList<>(targetNode.sources), List.of(rootValue.id));
+                nodeWork.setDispatch(false);
+                todo.add(nodeWork);
+            }
+
+            if(todo.isEmpty()){
+                return recalculationService.create(folder.name, nodeId, 0, COMPLETED);
+            }
+
+            // Track for crash recovery
+            ProcessingTrackerEntity tracking = new ProcessingTrackerEntity(ProcessingType.RECALCULATE_NODE, folder.id, nodeId);
+            tracking.persist();
+
+            CompletableFuture<Void> future = workService.createTracked(todo, rootValueIds);
+
+            // Create status tracker with per-root progress callbacks.
+            // This wiring is safe from races: createTracked() defers work queue insertion
+            // to afterCompletion (transaction commit), so no work has started yet.
+            RecalculationTracker status = recalculationService.create(folder.name, nodeId, rootValues.size(), future);
+            for (Long rootId : rootValueIds) {
+                workService.getTracker(rootId).ifPresent(tracker ->
+                        tracker.getFuture().whenComplete((v, t) -> status.incrementCompleted())
+                );
+            }
+
+            // Mark completed and null out ephemeral data after recalculation finishes
+            long trackingId = tracking.id;
+            future.whenComplete((v, t) -> {
+                if (t != null) {
+                    Log.errorf(t, "Recalculation failed for folder '%s' (nodeId=%d)", folder.name, nodeId);
+                }
+                // Mark tracker completed even on failure to prevent infinite retry on restart.
+                // On success, also nullify ephemeral data and evict the 2LC.
+                QuarkusTransaction.requiringNew().run(() -> {
+                    ProcessingTrackerEntity entity = ProcessingTrackerEntity.findById(trackingId);
+                    if (entity != null) {
+                        entity.completed = true;
+                    }
+                    if (t == null) {
+                        for (ValueEntity rootValue : rootValues) {
+                            int nullified = valueService.nullifyEphemeralData(rootValue.id);
+                            if (nullified > 0) {
+                                Log.debugf("Nullified data for %d ephemeral values (root %d)", nullified, rootValue.id);
+                            }
+                        }
+                        // Evict cached ValueEntity instances since data was nullified via native SQL
+                        em.getEntityManagerFactory().getCache().evict(ValueEntity.class);
+                    }
+                });
             });
+            return status;
+
         });
-        return status;
     }
 
     // --- Ephemeral chain walking ---
-
     /**
      * Walks up the source chain from the target node to find the nodes where
      * recomputation should start. Ephemeral nodes (DISCARD, or AUTO with

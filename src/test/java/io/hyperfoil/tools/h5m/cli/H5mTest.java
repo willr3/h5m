@@ -598,42 +598,6 @@ public class H5mTest {
     }
 
     @Test
-    public void recalculate_jq_multi_input(QuarkusMainLauncher launcher) throws IOException {
-        String testName = StackWalker.getInstance()
-                .walk(s -> s.skip(0).findFirst())
-                .get()
-                .getMethodName();
-        Path folder = Files.createTempDirectory("h5m");
-        Path filePath = Files.writeString(Files.createTempFile(folder,"h5m",".json").toAbsolutePath(),
-                """
-                {
-                  "foo":[
-                   { "mem": "1gb", "cpu": 2},
-                   { "mem": "2gb", "cpu": 4}
-                  ]
-                }
-                """
-        );
-        List<LaunchResult> results = run(launcher,
-                new String[]{"add","folder",testName},
-                new String[]{"add","jq","to",testName,"foo",".foo[]"},
-                new String[]{"add","jq","to",testName,"cpu","{foo}:.cpu"},
-                new String[]{"add","jq","to",testName,"mem","{foo}:.mem"},
-                new String[]{"add","jq","to",testName,"fingerprint","{mem,cpu}:."},
-                new String[]{"list",testName,"nodes"},
-                new String[]{"upload",folder.toString(),"to",testName},
-                new String[]{"list","value","from",testName},
-                new String[]{"recalculate",testName},
-                new String[]{"list","value","from",testName}
-
-        );
-        results.forEach(result->{
-            assertEquals(0,result.exitCode(),result.getOutput());
-        });
-        LaunchResult result = results.getLast();
-        assertTrue(result.getOutput().contains("Count: 8"));
-    }
-    @Test
     public void calculate_fixedthreshold_node(QuarkusMainLauncher launcher) throws IOException {
         String testName = StackWalker.getInstance()
                 .walk(s -> s.skip(0).findFirst())

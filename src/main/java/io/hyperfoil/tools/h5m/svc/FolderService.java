@@ -247,11 +247,6 @@ public class FolderService implements FolderServiceInterface {
 
 
     @Override
-    public RecalculationTracker recalculate(String name) {
-        return processingService.recalculate(name);
-    }
-
-    @Override
     public RecalculationTracker recalculateNode(long nodeId) {
         return processingService.recalculateNode(nodeId);
     }

@@ -25,7 +25,7 @@ public class FreshDb {
     String dbKind;
 
     @BeforeEach
-    @AfterEach
+    //@AfterEach
     public void dropRows() throws SQLException {
         // Evict 2LC before truncating tables — prevents stale cached entities
         emf.getCache().evictAll();

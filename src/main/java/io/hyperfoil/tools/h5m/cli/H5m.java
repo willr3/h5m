@@ -75,16 +75,6 @@ public class H5m implements QuarkusApplication {
         }
         return 0;
     }
-    @CommandLine.Command(name="recalculate",description = "recalculate values for all entries in folder")
-    public int recalculate(String folderName){
-        try {
-            folderService.recalculate(folderName);
-        } catch (NoResultException e) {
-            System.err.println("could not find folder "+folderName);
-            return 1;
-        }
-        return 0;
-    }
     @CommandLine.Command(name="upload",description = "")
     public int upload(
             @CommandLine.Parameters(index="0")
