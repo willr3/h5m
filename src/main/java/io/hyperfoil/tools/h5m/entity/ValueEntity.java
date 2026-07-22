@@ -135,9 +135,13 @@ public class ValueEntity extends PanacheEntity {
     public boolean dependsOn(ValueEntity source){
         if(source == null) return false;
         Queue<ValueEntity> queue = new ArrayDeque<>(sources);
+        Set<Long> visited = new HashSet<>();
         boolean result = false;
         while(!queue.isEmpty() && !result){
             ValueEntity value = queue.poll();
+            if (value.id != null && !visited.add(value.id)) {
+                continue; // already visited — avoids redundant traversal of shared ancestors in diamond DAGs
+            }
             result = value.equals(source);
             if(!result){
                 queue.addAll(value.sources);

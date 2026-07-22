@@ -178,8 +178,17 @@ public class WorkQueue implements BlockingQueue<Runnable> {
         }
         return Collections.emptyList();
     }
+    // Tracks whether any queued Work depends on another queued Work.
+    // Set to true when addWorks detects a dependency. Reset after sort.
+    // When false, sort() is skipped (no dependencies to order).
+    private boolean dependenciesExist = false;
+
     private void sort(){
+        if (!dependenciesExist) {
+            return; // no dependencies between queued items — skip O(n²) sort
+        }
         runnables = KahnDagSort.sort(runnables,this::getRequiredPrecedingRunnables);
+        dependenciesExist = false;
     }
     public Collection<Work> addWorks(Collection<Work> works){
 //        putLock.lock();
@@ -199,6 +208,19 @@ public class WorkQueue implements BlockingQueue<Runnable> {
                 assert isPending(w);
             }).toList();
             if (!acceptedWork.isEmpty()) {
+                // Check if any new Work depends on any existing queued Work.
+                // Uses Work.dependsOn() as the single source of truth for dependency.
+                if (!dependenciesExist) {
+                    outer:
+                    for (Work newWork : acceptedWork) {
+                        for (Runnable r : runnables) {
+                            if (r instanceof Work existing && r != newWork && newWork.dependsOn(existing)) {
+                                dependenciesExist = true;
+                                break outer;
+                            }
+                        }
+                    }
+                }
                 sort();
                 if (wasEmpty) {
                     signalNotEmpty();
