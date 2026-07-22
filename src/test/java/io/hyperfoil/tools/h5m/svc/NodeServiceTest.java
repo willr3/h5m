@@ -59,8 +59,7 @@ public class NodeServiceTest extends FreshDb {
         tm.begin();
         NodeEntity rootNode = new RootNode();
         rootNode.persist();
-        NodeEntity aNode = new JqNode("a",".a");
-        aNode.sources=List.of(rootNode);
+        NodeEntity aNode = new JqNode("a",".a",List.of(rootNode));
         aNode.persist();
         tm.commit();
 
@@ -79,15 +78,12 @@ public class NodeServiceTest extends FreshDb {
         tm.begin();
         NodeEntity rootNode = new RootNode();
         rootNode.persist();
-        NodeEntity sourceA = new JqNode("sourceA",".a");
-        sourceA.sources=List.of(rootNode);
+        NodeEntity sourceA = new JqNode("sourceA",".a",List.of(rootNode));
         sourceA.persist();
-        NodeEntity sourceB = new JqNode("sourceB",".b");
-        sourceB.sources=List.of(rootNode);
+        NodeEntity sourceB = new JqNode("sourceB",".b",List.of(rootNode));
         sourceB.persist();
         // sharedNode has both sourceA and sourceB as parents
-        NodeEntity sharedNode = new JqNode("shared",".shared");
-        sharedNode.sources=List.of(sourceA, sourceB);
+        NodeEntity sharedNode = new JqNode("shared",".shared",List.of(sourceA, sourceB));
         sharedNode.persist();
         tm.commit();
 
@@ -111,15 +107,12 @@ public class NodeServiceTest extends FreshDb {
         tm.begin();
         NodeEntity rootNode = new RootNode();
         rootNode.persist();
-        NodeEntity parentA = new JqNode("parentA", ".a");
-        parentA.sources = List.of(rootNode);
+        NodeEntity parentA = new JqNode("parentA", ".a",List.of(rootNode));
         parentA.persist();
-        NodeEntity parentB = new JqNode("parentB", ".b");
-        parentB.sources = List.of(rootNode);
+        NodeEntity parentB = new JqNode("parentB", ".b",List.of(rootNode));
         parentB.persist();
 
-        NodeEntity child = new JqNode("child", ".t");
-        child.sources = List.of(parentA, parentB);
+        NodeEntity child = new JqNode("child", ".t",List.of(parentA, parentB));
         child.persist();
         tm.commit();
 
@@ -137,8 +130,7 @@ public class NodeServiceTest extends FreshDb {
         tm.begin();
         NodeEntity rootNode = new RootNode();
         rootNode.persist();
-        NodeEntity node = new JqNode("node", ".value");
-        node.sources = List.of(rootNode);
+        NodeEntity node = new JqNode("node", ".value",rootNode);
         node.persist();
         ValueEntity value = new ValueEntity(null, node, JqNumber.of(42));
         value.persist();
@@ -182,8 +174,7 @@ public class NodeServiceTest extends FreshDb {
         tm.begin();
         NodeEntity n = new JqNode("oldName", "operation");
         n.persist();
-        NodeEntity js = new JsNode("jsNode", "(oldName)=>oldName");
-        js.sources=List.of(n);
+        NodeEntity js = new JsNode("jsNode", "(oldName)=>oldName",List.of(n));
         js.persist();
         tm.commit();
 
@@ -261,8 +252,7 @@ public class NodeServiceTest extends FreshDb {
         rootNode.persist();
         ValueEntity rootValue = new ValueEntity(null,rootNode,JqString.of("Bright"));
         rootValue.persist();
-        JsNode jsNode = new JsNode("js","arg=>'Hi, '+arg");
-        jsNode.sources=List.of(rootNode);
+        JsNode jsNode = new JsNode("js","arg=>'Hi, '+arg",List.of(rootNode));
         jsNode.persist();
         tm.commit();
 
@@ -292,8 +282,7 @@ public class NodeServiceTest extends FreshDb {
         otherSource.persist();
         ValueEntity rootValue = new ValueEntity(null,rootNode,JqString.of("Bright"));
         rootValue.persist();
-        JsNode jsNode = new JsNode("js","arg=>arg");
-        jsNode.sources = List.of(rootNode,otherSource);
+        JsNode jsNode = new JsNode("js","arg=>arg",List.of(rootNode,otherSource));
         jsNode.persist();
         tm.commit();
 
@@ -319,16 +308,14 @@ public class NodeServiceTest extends FreshDb {
         rootNode.persist();
         JqNode node = new JqNode("field",".buz",List.of(rootNode));
         node.persist();
-        ValueEntity v1 = new ValueEntity();
-        v1.data = JqValues.parse("""
+        ValueEntity v1 = new ValueEntity(null,rootNode,JqValues.parse("""
                 {
                   "foo": [ { "key": "one"}, { "key" : "two" } ],
                   "bar": [ { "k": "uno" }, { "k": "dos"}, { "k" : "tres"} ],
                   "biz": "cat",
                   "buz": "dog"
                 }
-                """);
-        v1.node=rootNode;
+                """));
         v1.persist();
 
         tm.commit();
@@ -339,7 +326,11 @@ public class NodeServiceTest extends FreshDb {
         List<ValueEntity> calculated = nodeService.calculateJqValues(node,sourceValueMap,0);
         assertNotNull(calculated);
         assertEquals(1,calculated.size());
-
+        ValueEntity found = calculated.getFirst();
+        assertNotNull(found);
+        JqValue data = found.data;
+        assertNotNull(data);
+        assertEquals("dog",data.asText());
     }
     @Test
     public void calculateJqValues_legacy_sql_missing_field() throws IOException, SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
@@ -349,16 +340,14 @@ public class NodeServiceTest extends FreshDb {
         rootNode.persist();
         JqNode node = new JqNode("field",".miss",List.of(rootNode));
         node.persist();
-        ValueEntity v1 = new ValueEntity();
-        v1.data = JqValues.parse("""
+        ValueEntity v1 = new ValueEntity(null,rootNode,JqValues.parse("""
                 {
                   "foo": [ { "key": "one"}, { "key" : "two" } ],
                   "bar": [ { "k": "uno" }, { "k": "dos"}, { "k" : "tres"} ],
                   "biz": "cat",
                   "buz": "dog"
                 }
-                """);
-        v1.node=rootNode;
+                """));
         v1.persist();
 
         tm.commit();
@@ -379,16 +368,14 @@ public class NodeServiceTest extends FreshDb {
         rootNode.persist();
         JqNode node = new JqNode("jqall","[.miss[]?]",List.of(rootNode));
         node.persist();
-        ValueEntity v1 = new ValueEntity();
-        v1.data = JqValues.parse("""
+        ValueEntity v1 = new ValueEntity(null,rootNode,JqValues.parse("""
                 {
                   "foo": [ { "key": "one"}, { "key" : "two" } ],
                   "bar": [ { "k": "uno" }, { "k": "dos"}, { "k" : "tres"} ],
                   "biz": "cat",
                   "buz": "dog"
                 }
-                """);
-        v1.node=rootNode;
+                """));
         v1.persist();
         tm.commit();
 
@@ -410,14 +397,12 @@ public class NodeServiceTest extends FreshDb {
         rootNode.persist();
         JqNode node = new JqNode("jqall","[.foo[]?]",List.of(rootNode));
         node.persist();
-        ValueEntity v1 = new ValueEntity();
-        v1.data = JqValues.parse("""
+        ValueEntity v1 = new ValueEntity(null,rootNode,JqValues.parse("""
                 {
                   "foo": [ { "key": "one"}, { "key" : "two" } ],
                   "biz": "cat"
                 }
-                """);
-        v1.node=rootNode;
+                """));
         v1.persist();
         tm.commit();
 
@@ -439,16 +424,14 @@ public class NodeServiceTest extends FreshDb {
         rootNode.persist();
         JqNode node = new JqNode("array","[.miss]",List.of(rootNode));
         node.persist();
-        ValueEntity v1 = new ValueEntity();
-        v1.data = JqValues.parse("""
+        ValueEntity v1 = new ValueEntity(null,rootNode,JqValues.parse("""
                 {
                   "foo": [ { "key": "one"}, { "key" : "two" } ],
                   "bar": [ { "k": "uno" }, { "k": "dos"}, { "k" : "tres"} ],
                   "biz": "cat",
                   "buz": "dog"
                 }
-                """);
-        v1.node=rootNode;
+                """));
         v1.persist();
         tm.commit();
 
@@ -533,43 +516,46 @@ public class NodeServiceTest extends FreshDb {
         NodeEntity fingerprintNode = new JqNode("fingerprint",".fingerprint",rootNode);
         fingerprintNode.persist();
 
-        ValueEntity rootValue01 = new ValueEntity(null,rootNode,JqString.of("root1"));
+        ValueEntity rootValue01 = new ValueEntity(null,rootNode,JqValues.parse(
+                """
+                { "range": 1, "domain": 10, "fp": "fp" }
+                """
+        ));
         rootValue01.persist();
-        ValueEntity rootValue02 = new ValueEntity(null,rootNode,JqString.of("root2"));
+        ValueEntity rootValue02 = new ValueEntity(null,rootNode,JqValues.parse(
+                """
+                { "range": 2, "domain": 20, "fp": "fp" }
+                """
+        ));
         rootValue02.persist();
-        ValueEntity rootValue03 = new ValueEntity(null,rootNode,JqString.of("root3"));
+        ValueEntity rootValue03 = new ValueEntity(null,rootNode,JqValues.parse(
+                """
+                { "range": 3, "domain": 30, "fp": "fp" }
+                """
+        ));
         rootValue03.persist();
 
-        ValueEntity rangeValue01 = new ValueEntity(null,rangeNode, JqNumber.of(1));
-        rangeValue01.sources=List.of(rootValue01);
+        ValueEntity rangeValue01 = new ValueEntity(null,rangeNode, rootValue01.data.getField("range"),List.of(rootValue01));
         rangeValue01.persist();
-        ValueEntity rangeValue02 = new ValueEntity(null,rangeNode, JqNumber.of(2));
-        rangeValue02.sources=List.of(rootValue02);
+        ValueEntity rangeValue02 = new ValueEntity(null,rangeNode, rootValue02.data.getField("range"),List.of(rootValue02));
         rangeValue02.persist();
-        ValueEntity rangeValue03 = new ValueEntity(null,rangeNode, JqNumber.of(3));
-        rangeValue03.sources=List.of(rootValue03);
+        ValueEntity rangeValue03 = new ValueEntity(null,rangeNode, rootValue03.data.getField("range"),List.of(rootValue03));
         rangeValue03.persist();
 
         //somehow domain values are missing value_edge...
         //LongNode.valueOf breaks this???
-        ValueEntity domainValue01 = new ValueEntity(null,domainNode,JqNumber.of(10));
-        domainValue01.sources=List.of(rootValue01);
+        ValueEntity domainValue01 = new ValueEntity(null,domainNode, rootValue01.data.getField("domain"),List.of(rootValue01));
         domainValue01.persist();
-        ValueEntity domainValue02 = new ValueEntity(null,domainNode,JqNumber.of(20));
-        domainValue02.sources=List.of(rootValue02);
+        ValueEntity domainValue02 = new ValueEntity(null,domainNode, rootValue02.data.getField("domain"),List.of(rootValue02));
         domainValue02.persist();
-        ValueEntity domainValue03 = new ValueEntity(null,domainNode, JqNumber.of(30));
-        domainValue03.sources=List.of(rootValue03);
+        ValueEntity domainValue03 = new ValueEntity(null,domainNode, rootValue03.data.getField("domain"),List.of(rootValue03));
         domainValue03.persist();
 
-        ValueEntity fingerprintValue01 = new ValueEntity(null,fingerprintNode,JqString.of("fp"));
-        fingerprintValue01.sources=List.of(rootValue01);
+        ValueEntity fingerprintValue01 = new ValueEntity(null,fingerprintNode, rootValue01.data.getField("fp"),List.of(rootValue01));
         fingerprintValue01.persist();
-        ValueEntity fingerprintValue02 = new ValueEntity(null,fingerprintNode,JqString.of("fp"));
-        fingerprintValue02.sources=List.of(rootValue02);
+        ValueEntity fingerprintValue02 = new ValueEntity(null,fingerprintNode, rootValue02.data.getField("fp"),List.of(rootValue02));
         fingerprintValue02.persist();
-        ValueEntity fingerprintValue03 = new ValueEntity(null,fingerprintNode,JqString.of("fp"));
-        fingerprintValue03.sources=List.of(rootValue03);
+        ValueEntity fingerprintValue03 = new ValueEntity(null,fingerprintNode, rootValue03.data.getField("fp"),List.of(rootValue03));
         fingerprintValue03.persist();
         tm.commit();
 
@@ -611,19 +597,14 @@ public class NodeServiceTest extends FreshDb {
         tm.begin();
         RootNode root = new RootNode();
         root.persist();
-        NodeEntity upload = new JqNode();//should be a different type of node?
-        upload.name="upload";
-        upload.persist();
-        ValueEntity v1 = new ValueEntity();
-        v1.node = root;
-        v1.data = JqValues.parse("""
+        ValueEntity v1 = new ValueEntity(null,root,JqValues.parse("""
                 {
                   "foo": [ { "key": "one"}, { "key" : "two" } ],
                   "bar": [ { "k": "uno" }, { "k": "dos"}, { "k" : "tres"} ],
                   "biz": "cat",
                   "buz": "dog"
                 }
-                """);
+                """));
         v1.persist();
         tm.commit();
 
@@ -639,19 +620,14 @@ public class NodeServiceTest extends FreshDb {
         tm.begin();
         RootNode root = new RootNode();
         root.persist();
-        NodeEntity upload = new JqNode();//should be a different type of node?
-        upload.name="upload";
-        upload.persist();
-        ValueEntity v1 = new ValueEntity();
-        v1.node=root;
-        v1.data= JqValues.parse("""
+        ValueEntity v1 = new ValueEntity(null,root,JqValues.parse("""
                 {
                   "foo": [ { "key": "one"}, { "key" : "two" } ],
                   "bar": [ { "k": "uno" }, { "k": "dos"}, { "k" : "tres"} ],
                   "biz": "cat",
                   "buz": "dog"
                 }
-                """);
+                """));
         v1.persist();
         tm.commit();
 
@@ -674,13 +650,9 @@ public class NodeServiceTest extends FreshDb {
         tm.begin();
         RootNode root = new RootNode();
         root.persist();
-        ValueEntity v1 = new ValueEntity();
-        v1.node=root;
-        v1.data=JqString.of("cat");
+        ValueEntity v1 = new ValueEntity(null,root,JqString.of("cat"));
         v1.persist();
-        ValueEntity v2 = new ValueEntity();
-        v2.node=root;
-        v2.data=JqString.of("dog");
+        ValueEntity v2 = new ValueEntity(null,root,JqString.of("dog"));
         v2.persist();
 
         JqNode node = new JqNode("foo",".");
@@ -706,11 +678,11 @@ public class NodeServiceTest extends FreshDb {
         tm.begin();
         NodeEntity root = new RootNode();
         root.persist();
-        NodeEntity transform1 = new JqNode("transform1","$.config");
+        NodeEntity transform1 = new JqNode("transform1","$.config",List.of(root));
         transform1.persist();
-        NodeEntity transform2 = new JqNode("transform2","$.foo");
+        NodeEntity transform2 = new JqNode("transform2","$.foo",List.of(root));
         transform2.persist();
-        NodeEntity transform3 = new JqNode("transform3","$.bar");
+        NodeEntity transform3 = new JqNode("transform3","$.bar",List.of(root));
         transform3.persist();
         JsNode dataset = new JsNode("dataset", """
                 function* (value){
@@ -732,7 +704,7 @@ public class NodeServiceTest extends FreshDb {
                   }
                   //return rtrn
                 }
-                """);
+                """,List.of(transform1, transform2, transform3));
         dataset.persist();
         ValueEntity upload = new ValueEntity(null,root,JqValues.parse("""
             { "config": { "alpha" : "apple"},
@@ -741,13 +713,13 @@ public class NodeServiceTest extends FreshDb {
             }
         """));
         upload.persist();
-        ValueEntity t1 = new ValueEntity(null,transform1,upload.data.getField("config"));
+        ValueEntity t1 = new ValueEntity(null,transform1,upload.data.getField("config"),List.of(upload));
         t1.persist();
-        ValueEntity t2 = new ValueEntity(null,transform2,upload.data.getField("foo"));
+        ValueEntity t2 = new ValueEntity(null,transform2,upload.data.getField("foo"),List.of(upload));
         t2.persist();
-        ValueEntity t3 = new ValueEntity(null,transform3,upload.data.getField("bar"));
+        ValueEntity t3 = new ValueEntity(null,transform3,upload.data.getField("bar"),List.of(upload));
         t3.persist();
-        dataset.sources = List.of(transform1, transform2, transform3);
+
         tm.commit();
 
         List<ValueEntity> values = nodeService.calculateJsValues(dataset,Map.of(transform1.id,t1,transform2.id,t2,transform3.id,t3),0);
@@ -767,15 +739,15 @@ public class NodeServiceTest extends FreshDb {
         tm.begin();
         NodeEntity root = new RootNode();
         root.persist();
-        NodeEntity transform1 = new JqNode("transform1","$.config");
+        NodeEntity transform1 = new JqNode("transform1","$.config",List.of(root));
         transform1.persist();
-        NodeEntity transform2 = new JqNode("transform2","$.foo");
+        NodeEntity transform2 = new JqNode("transform2","$.foo",List.of(root));
         transform2.persist();
-        NodeEntity transform3 = new JqNode("transform3","$.bar");
+        NodeEntity transform3 = new JqNode("transform3","$.bar",List.of(root));
         transform3.persist();
         JqNode dataset = new JqNode("dataset", """
                 . as $a | ([.[]|if type=="array" then length else 1 end]|max) as $m | [range($m)|. as $p | [$a[]|if type=="object" then . elif type=="array" and $p<length then .[$p] else empty end]]
-                """);
+                """,List.of(transform1, transform2, transform3));
         dataset.persist();
         ValueEntity upload = new ValueEntity(null,root,JqValues.parse("""
             { "config": { "alpha" : "apple"},
@@ -784,13 +756,12 @@ public class NodeServiceTest extends FreshDb {
             }
         """));
         upload.persist();
-        ValueEntity t1 = new ValueEntity(null,transform1,upload.data.getField("config"));
+        ValueEntity t1 = new ValueEntity(null,transform1,upload.data.getField("config"),List.of(upload));
         t1.persist();
-        ValueEntity t2 = new ValueEntity(null,transform2,upload.data.getField("foo"));
+        ValueEntity t2 = new ValueEntity(null,transform2,upload.data.getField("foo"),List.of(upload));
         t2.persist();
-        ValueEntity t3 = new ValueEntity(null,transform3,upload.data.getField("bar"));
+        ValueEntity t3 = new ValueEntity(null,transform3,upload.data.getField("bar"),List.of(upload));
         t3.persist();
-        dataset.sources = List.of(transform1, transform2, transform3);
         tm.commit();
 
         List<ValueEntity> values = nodeService.calculateJqValues(dataset,Map.of(transform1.id,t1,transform2.id,t2,transform3.id,t3),0);
@@ -827,17 +798,14 @@ public class NodeServiceTest extends FreshDb {
         rootValue.persist();
         
         // First node produces 3 values
-        ValueEntity firstValue1 = new ValueEntity(null, firstNode, JqValues.parse("1"));
+        ValueEntity firstValue1 = new ValueEntity(null, firstNode, rootValue.data.getField("first").getElement(0),List.of(rootValue));
         firstValue1.idx=1;
-        firstValue1.sources=List.of(rootValue);
         firstValue1.persist();
-        ValueEntity firstValue2 = new ValueEntity(null, firstNode, JqValues.parse("2"));
+        ValueEntity firstValue2 = new ValueEntity(null, firstNode, rootValue.data.getField("first").getElement(1),List.of(rootValue));
         firstValue2.idx=2;
-        firstValue2.sources=List.of(rootValue);
         firstValue2.persist();
-        ValueEntity firstValue3 = new ValueEntity(null, firstNode, JqValues.parse("3"));
+        ValueEntity firstValue3 = new ValueEntity(null, firstNode, rootValue.data.getField("first").getElement(2),List.of(rootValue));
         firstValue3.idx=3;
-        firstValue3.sources=List.of(rootValue);
         firstValue3.persist();
 
         tm.commit();
@@ -852,19 +820,13 @@ public class NodeServiceTest extends FreshDb {
     @Test
     public void calculateJqValues_multiple_source_order() throws IOException, HeuristicRollbackException, SystemException, HeuristicMixedException, RollbackException, NotSupportedException {
         tm.begin();
-        NodeEntity node1 = new JqNode();
-        node1.name="v1";
+        NodeEntity node1 = new JqNode("v1",".");
         node1.persist();
-        ValueEntity v1 = new ValueEntity();
-        v1.data=JqString.of("cat");
-        v1.node = node1;
+        ValueEntity v1 = new ValueEntity(null, node1,JqString.of("cat"));
         v1.persist();
-        NodeEntity node2 = new JqNode();
-        node2.name="v2";
+        NodeEntity node2 = new JqNode("v2",".");
         node2.persist();
-        ValueEntity v2 = new ValueEntity();
-        v2.data=JqString.of("dog");
-        v2.node = node2;
+        ValueEntity v2 = new ValueEntity(null, node2,JqString.of("dog"));
         v2.persist();
         tm.commit();
 
@@ -872,9 +834,7 @@ public class NodeServiceTest extends FreshDb {
         sourceValueMap.put(node1.id,v1);
         sourceValueMap.put(node2.id,v2);
 
-        JqNode node = new JqNode("foo",".");
-
-        node.sources=List.of(node1,node2);
+        JqNode node = new JqNode("foo",".",List.of(node1,node2));
 
         List<ValueEntity> calculated = nodeService.calculateJqValues(node,sourceValueMap,0);
         assertEquals(1,calculated.size(),"expect to create a single value from two sources");
@@ -914,13 +874,11 @@ public class NodeServiceTest extends FreshDb {
         rootValue.persist();
 
         // Create values for both source nodes (simulating what the pipeline produces)
-        ValueEntity valueA = new ValueEntity(null, sourceA, JqNumber.of(42));
+        ValueEntity valueA = new ValueEntity(null, sourceA, JqNumber.of(42),List.of(rootValue));
         valueA.idx = 1;
-        valueA.sources = List.of(rootValue);
         valueA.persist();
-        ValueEntity valueB = new ValueEntity(null, sourceB, JqNumber.of(99));
+        ValueEntity valueB = new ValueEntity(null, sourceB, JqNumber.of(99),List.of(rootValue));
         valueB.idx = 1;
-        valueB.sources = List.of(rootValue);
         valueB.persist();
         tm.commit();
 
@@ -1066,9 +1024,8 @@ public class NodeServiceTest extends FreshDb {
         decoy.group = group;
         decoy.persist();
 
-        NodeEntity child = new JqNode("child",".correct");
+        NodeEntity child = new JqNode("child",".correct",List.of(parent));
         child.group = group;
-        child.sources=List.of(parent);
         child.persist();
 
         tm.commit();

@@ -285,13 +285,13 @@ public class ValueServiceTest extends FreshDb {
 
         rootValue01 = null;
 
+        tm.begin();
         List<ValueEntity> found = valueService.getValues(rootNode);
         assertEquals(1, found.size());
-        // Data is available because findMultiple() serves from the 2LC
-        // (the entity was cached when persisted above)
         for(ValueEntity v : found){
             assertNotNull(v.data, "data should be available from 2LC");
         }
+        tm.commit();
 
 
     }
@@ -1370,20 +1370,22 @@ public class ValueServiceTest extends FreshDb {
         tm.begin();
         NodeEntity rootNode = new RootNode();
         rootNode.persist();
-        NodeEntity throughputNode = new JqNode("throughput");
+        NodeEntity throughputNode = new JqNode("throughput",".tps");
         throughputNode.sources = List.of(rootNode);
         throughputNode.persist();
-        NodeEntity buildIdNode = new JqNode("build_id");
+        NodeEntity buildIdNode = new JqNode("build_id",".id");
         buildIdNode.sources = List.of(rootNode);
         buildIdNode.persist();
 
-        ValueEntity root1 = new ValueEntity(null, rootNode, JqString.of("r1"));
+        ValueEntity root1 = new ValueEntity(null, rootNode, JqValues.parse(
+                """
+                { "tps": 100, "id": 201 }
+                """
+        ));
         root1.persist();
-        ValueEntity t1 = new ValueEntity(null, throughputNode, JqString.of("100"));
-        t1.sources = List.of(root1);
+        ValueEntity t1 = new ValueEntity(null, throughputNode, root1.data.getField("tps"),List.of(root1));
         t1.persist();
-        ValueEntity b1 = new ValueEntity(null, buildIdNode, JqString.of("201"));
-        b1.sources = List.of(root1);
+        ValueEntity b1 = new ValueEntity(null, buildIdNode, root1.data.getField("id"),List.of(root1));
         b1.persist();
         tm.commit();
 
@@ -1401,38 +1403,44 @@ public class ValueServiceTest extends FreshDb {
         tm.begin();
         NodeEntity rootNode = new RootNode();
         rootNode.persist();
-        NodeEntity throughputNode = new JqNode("throughput");
+        NodeEntity throughputNode = new JqNode("throughput",".tps");
         throughputNode.sources = List.of(rootNode);
         throughputNode.persist();
-        NodeEntity buildIdNode = new JqNode("build_id");
+        NodeEntity buildIdNode = new JqNode("build_id",".id");
         buildIdNode.sources = List.of(rootNode);
         buildIdNode.persist();
 
-        ValueEntity root1 = new ValueEntity(null, rootNode, JqString.of("r1"));
+        ValueEntity root1 = new ValueEntity(null, rootNode, JqValues.parse(
+                """
+                { "tps": 100, "id": 202 }
+                """
+        ));
         root1.persist();
-        ValueEntity throughputv1 = new ValueEntity(null, throughputNode, JqString.of("100"));
-        throughputv1.sources = List.of(root1);
+        ValueEntity throughputv1 = new ValueEntity(null, throughputNode, root1.data.getField("tps"),List.of(root1));
         throughputv1.persist();
-        ValueEntity buildv1 = new ValueEntity(null, buildIdNode, JqString.of("202"));
-        buildv1.sources = List.of(root1);
+        ValueEntity buildv1 = new ValueEntity(null, buildIdNode, root1.data.getField("id"),List.of(root1));
         buildv1.persist();
 
-        ValueEntity root2 = new ValueEntity(null, rootNode, JqString.of("r2"));
+        ValueEntity root2 = new ValueEntity(null, rootNode, JqValues.parse(
+                """
+                { "tps": 101, "id": 201 }
+                """
+                ));
         root2.persist();
-        ValueEntity throughputv2 = new ValueEntity(null, throughputNode, JqString.of("101"));
-        throughputv2.sources = List.of(root2);
+        ValueEntity throughputv2 = new ValueEntity(null, throughputNode, root2.data.getField("tps"),List.of(root2));
         throughputv2.persist();
-        ValueEntity buildv2 = new ValueEntity(null, buildIdNode, JqString.of("201"));
-        buildv2.sources = List.of(root2);
+        ValueEntity buildv2 = new ValueEntity(null, buildIdNode, root2.data.getField("id"),List.of(root2));
         buildv2.persist();
 
-        ValueEntity root3 = new ValueEntity(null, rootNode, JqString.of("r3"));
+        ValueEntity root3 = new ValueEntity(null, rootNode, JqValues.parse(
+                """
+                { "tps": 102, "id": 200 }
+                """
+        ));
         root3.persist();
-        ValueEntity throughputv3 = new ValueEntity(null, throughputNode, JqString.of("102"));
-        throughputv3.sources = List.of(root3);
+        ValueEntity throughputv3 = new ValueEntity(null, throughputNode, root3.data.getField("tps"),List.of(root3));
         throughputv3.persist();
-        ValueEntity buildv3 = new ValueEntity(null, buildIdNode, JqString.of("200"));
-        buildv3.sources = List.of(root3);
+        ValueEntity buildv3 = new ValueEntity(null, buildIdNode, root3.data.getField("id"),List.of(root3));
         buildv3.persist();
         tm.commit();
 
@@ -1456,38 +1464,42 @@ public class ValueServiceTest extends FreshDb {
         tm.begin();
         NodeEntity rootNode = new RootNode();
         rootNode.persist();
-        NodeEntity throughputNode = new JqNode("throughput");
-        throughputNode.sources = List.of(rootNode);
+        NodeEntity throughputNode = new JqNode("throughput",".tps",rootNode);
         throughputNode.persist();
-        NodeEntity buildNode = new JqNode("build_id");
-        buildNode.sources = List.of(rootNode);
+        NodeEntity buildNode = new JqNode("build_id",".id",rootNode);
         buildNode.persist();
 
-        ValueEntity root1 = new ValueEntity(null, rootNode, JqString.of("r1"));
+        ValueEntity root1 = new ValueEntity(null, rootNode, JqValues.parse(
+                """
+                { "tps": 100, "id": 101 }
+                """
+        ));
         root1.persist();
-        ValueEntity throughputv1 = new ValueEntity(null, throughputNode, JqString.of("100"));
-        throughputv1.sources = List.of(root1);
+        ValueEntity throughputv1 = new ValueEntity(null, throughputNode, root1.data.getField("tps"),List.of(root1));
         throughputv1.persist();
-        ValueEntity buildv1 = new ValueEntity(null, buildNode, JqString.of("101"));
-        buildv1.sources = List.of(root1);
+        ValueEntity buildv1 = new ValueEntity(null, buildNode, root1.data.getField("id"),List.of(root1));
         buildv1.persist();
 
-        ValueEntity root2 = new ValueEntity(null, rootNode, JqString.of("r2"));
+        ValueEntity root2 = new ValueEntity(null, rootNode, JqValues.parse(
+                """
+                { "tps": 200, "id": 201 }
+                """
+        ));
         root2.persist();
-        ValueEntity throughputv2 = new ValueEntity(null, throughputNode, JqString.of("200"));
-        throughputv2.sources = List.of(root2);
+        ValueEntity throughputv2 = new ValueEntity(null, throughputNode, root2.data.getField("tps"),List.of(root2));
         throughputv2.persist();
-        ValueEntity buildv2 = new ValueEntity(null, buildNode, JqString.of("201"));
-        buildv2.sources = List.of(root2);
+        ValueEntity buildv2 = new ValueEntity(null, buildNode, root2.data.getField("id"),List.of(root2));
         buildv2.persist();
 
-        ValueEntity root3 = new ValueEntity(null, rootNode, JqString.of("r3"));
+        ValueEntity root3 = new ValueEntity(null, rootNode, JqValues.parse(
+                """
+                { "tps": 300, "id" 301 }
+                """
+        ));
         root3.persist();
-        ValueEntity throughputv3 = new ValueEntity(null, throughputNode, JqString.of("300"));
-        throughputv3.sources = List.of(root3);
+        ValueEntity throughputv3 = new ValueEntity(null, throughputNode, root3.data.getField("tps"),List.of(root3));
         throughputv3.persist();
-        ValueEntity buildv3 = new ValueEntity(null, buildNode, JqString.of("301"));
-        buildv3.sources = List.of(root3);
+        ValueEntity buildv3 = new ValueEntity(null, buildNode, root3.data.getField("id"),List.of(root3));
         buildv3.persist();
         tm.commit();
 
@@ -1500,7 +1512,6 @@ public class ValueServiceTest extends FreshDb {
         assertTrue(results.get(1).has("build_id"), "row should have build_id: " + results.get(1));
         assertTrue(results.get(2).has("throughput"), "row should have throughput: " + results.get(2));
         assertTrue(results.get(2).has("build_id"), "row should have build_id: " + results.get(2));
-
 
     }
 
@@ -1517,29 +1528,31 @@ public class ValueServiceTest extends FreshDb {
 
         NodeEntity rootNode = group.root;
 
-        NodeEntity throughputNode = new JqNode("throughput");
-        throughputNode.sources = List.of(rootNode);
+        NodeEntity throughputNode = new JqNode("throughput",".tps",rootNode);
         throughputNode.persist();
-        NodeEntity buildIdNode = new JqNode("build_id");
-        buildIdNode.sources = List.of(rootNode);
+        NodeEntity buildIdNode = new JqNode("build_id",".id",rootNode);
         buildIdNode.persist();
 
-        ValueEntity root1 = new ValueEntity(null, rootNode, JqString.of("r1"));
+        ValueEntity root1 = new ValueEntity(null, rootNode, JqValues.parse(
+                """
+                { "tps": 100, "id": 201 }
+                """
+        ));
         root1.persist();
-        ValueEntity t1 = new ValueEntity(null, throughputNode, JqString.of("100"));
-        t1.sources = List.of(root1);
+        ValueEntity t1 = new ValueEntity(null, throughputNode, root1.data.getField("tps"),List.of(root1));
         t1.persist();
-        ValueEntity b1 = new ValueEntity(null, buildIdNode, JqString.of("201"));
-        b1.sources = List.of(root1);
+        ValueEntity b1 = new ValueEntity(null, buildIdNode, root1.data.getField("id"),List.of(root1));
         b1.persist();
 
-        ValueEntity root2 = new ValueEntity(null, rootNode, JqString.of("r2"));
+        ValueEntity root2 = new ValueEntity(null, rootNode, JqValues.parse(
+                """
+                { "tps": 200, "id": 202 }
+                """
+        ));
         root2.persist();
-        ValueEntity t2 = new ValueEntity(null, throughputNode, JqString.of("200"));
-        t2.sources = List.of(root2);
+        ValueEntity t2 = new ValueEntity(null, throughputNode, root2.data.getField("tps"),List.of(root2));
         t2.persist();
-        ValueEntity b2 = new ValueEntity(null, buildIdNode, JqString.of("202"));
-        b2.sources = List.of(root2);
+        ValueEntity b2 = new ValueEntity(null, buildIdNode, root2.data.getField("id"),List.of(root2));
         b2.persist();
 
         tm.commit();
