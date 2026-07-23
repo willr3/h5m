@@ -188,6 +188,37 @@ public class WorkQueueTest extends FreshDb {
     }
 
     @Test
+    public void addAll_unsorted_sorted_by_queue() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        WorkQueue q = new WorkQueue();
+        tm.begin();
+        NodeEntity root = new RootNode();
+        root.persist();
+        NodeEntity aNode = new JqNode("a",".a",root);
+        aNode.persist();
+        NodeEntity bNode = new JqNode("b",".b",aNode);
+        bNode.persist();
+
+        ValueEntity rootValue = new ValueEntity(null,root,JqValues.parse("""
+                { "a" : { "b" : "found" } }
+                """));
+        rootValue.persist();
+        Work aWork = new Work(aNode,aNode.getSources(),List.of(rootValue.id));
+        Work bWork = new Work(bNode,bNode.getSources(),List.of(rootValue.id));
+
+        q.addAll(List.of(bWork,aWork));
+        tm.commit();
+        Runnable take = q.poll();
+        assertNotNull(take);
+        if(take instanceof Work w){
+            assertEquals(aWork,w,"work for a must process before work for b");
+            assertNotEquals(bWork,w);
+
+        }else{
+            fail("first runnable should be a Work instance");
+        }
+    }
+
+    @Test
     public void addAll_adds_new_items() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
         WorkQueue q = new WorkQueue();
 
