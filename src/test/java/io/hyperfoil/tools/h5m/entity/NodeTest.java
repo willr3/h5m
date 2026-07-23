@@ -6,6 +6,7 @@ import io.hyperfoil.tools.h5m.entity.node.RootNode;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.*;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -18,6 +19,8 @@ public class NodeTest {
     @Inject
     EntityManager em;
 
+    @Inject
+    TransactionManager tm;
 
     @Test
     public void setEphemeral(){
@@ -162,4 +165,46 @@ public class NodeTest {
             fail("infinite recursion in Node.equals");
         }
     }
+
+    @Test
+    public void dependsOn_parent_changes_sources() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
+        tm.begin();
+        NodeEntity root = new RootNode();
+        root.persist();
+        NodeEntity first = new JqNode("first",".",root);
+        first.persist();
+        NodeEntity second = new JqNode("second",".",first);
+        second.persist();
+        NodeEntity third = new JqNode("third",".",root);
+        third.persist();
+
+        assertFalse(second.dependsOn(third));
+        tm.commit();
+
+        tm.begin();
+        root = NodeEntity.findById(root.getId());
+        assertNotNull(root);
+        first = NodeEntity.findById(first.getId());
+        assertNotNull(first);
+        second = NodeEntity.findById(second.getId());
+        assertNotNull(second);
+        third = NodeEntity.findById(third.getId());
+        assertNotNull(third);
+
+        assertFalse(second.dependsOn(third));
+
+        first.sources=List.of(root,third);
+        first.persist();
+
+        assertTrue(second.dependsOn(third));
+
+        tm.commit();
+
+
+
+
+
+
+    }
+
 }
