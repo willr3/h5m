@@ -722,6 +722,16 @@ public class LoadLegacyTestsTest {
     }
 
     @Test
+    public void jsonpathToJqLaxArray_array_in_array(){
+        String jq = LoadLegacyTests.jsonpathToJqLaxArray("$.a.b ? (@.c.e==\"two\").c.d");
+        var program = io.hyperfoil.tools.jjq.JqProgram.compile(jq);
+        var input = JqValues.parse("{ \"a\" : { \"b\" : [ { \"c\" : [{ \"d\" : \"one\", \"e\" : \"two\" }]} ] } }");
+        var results = program.applyAll(input);
+        assertEquals(1, results.size(), "should produce one result: " + results);
+        assertEquals("one", results.get(0).asText(), "should extract 'one' through array: " + results);
+    }
+
+    @Test
     public void jsonpathToJqLax_produces_correct_jq_for_array_at_b() {
         // Verify the actual jq from the issue works: {"a":{"b":[{"c":"one"}]}}
         String jq = LoadLegacyTests.jsonpathToJqLax("$.a.b.c");
