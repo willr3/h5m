@@ -30,7 +30,7 @@ public class FreshDb {
     ValueService valueService;
 
     @BeforeEach
-    @AfterEach
+    //@AfterEach
     public void dropRows() throws Exception {
         // Evict 2LC and in-memory caches before truncating tables —
         // prevents stale cached entities when IDs are reused

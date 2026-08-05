@@ -2,6 +2,7 @@ package io.hyperfoil.tools.h5m.cli;
 
 
 import io.quarkus.test.junit.TestProfile;
+import io.quarkus.test.junit.main.LaunchResult;
 import io.quarkus.test.junit.main.QuarkusMainLauncher;
 import io.quarkus.test.junit.main.QuarkusMainTest;
 import io.quarkus.test.aesh.AeshLauncher;
@@ -115,6 +116,18 @@ public class H5mTest {
         String output = aeshLauncher.executeCommand("legacy load-runs testId=391 username=horreum password=horreum url=jdbc:postgresql://0.0.0.0:6000/horreum", CMD_TIMEOUT);
         System.out.println("output="+output);
         assertNotNull(output);
+    }
+    @Test @Disabled
+    public void veritaserum(QuarkusMainLauncher launcher){
+        LaunchResult result = null;
+//        result = launcher.launch("load-legacy-tests","testId=339","username=horreum","password=horreum","url=jdbc:postgresql://0.0.0.0:6000/horreum");
+//        assertEquals(0,result.exitCode());
+//        result = launcher.launch("load-legacy-runs","testId=339","limit=1","username=horreum","password=horreum","url=jdbc:postgresql://0.0.0.0:6000/horreum");
+//        assertEquals(0,result.exitCode());
+        result = launcher.launch("veritaserum","testId=339","runId=214280","username=horreum","password=horreum","url=jdbc:postgresql://0.0.0.0:6000/horreum");
+        System.out.println("exitCode="+result.exitCode());
+        assertEquals(0,result.exitCode());
+
     }
 
     @Test
