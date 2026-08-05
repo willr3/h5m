@@ -18,7 +18,8 @@ public class KahnDagSort {
         if(list == null || list.size() <= 1){
             return list;
         }
-        Map<T, List<T>> adjacencyMap = new HashMap<>(list.size() * 2);
+
+        Map<T, List<T>> adjacencyMap = new IdentityHashMap<>(list.size() * 2);
         for (int i = 0, size = list.size(); i < size; i++) {
             T item = list.get(i);
             adjacencyMap.put(item, getDependencies.apply(item));
@@ -37,7 +38,7 @@ public class KahnDagSort {
         if (!hasInternalDeps) {
             return list;
         }
-        Map<T, AtomicInteger> inDegrees = new HashMap<>(list.size() * 2);
+        Map<T, AtomicInteger> inDegrees = new IdentityHashMap<>(list.size() * 2);
         for (int i = 0, size = list.size(); i < size; i++) {
             inDegrees.put(list.get(i), new AtomicInteger(0));
         }

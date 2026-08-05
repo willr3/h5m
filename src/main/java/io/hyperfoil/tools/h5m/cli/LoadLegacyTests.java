@@ -1,5 +1,6 @@
 package io.hyperfoil.tools.h5m.cli;
 
+import io.hyperfoil.tools.jjq.jsonpath.JsonpathToJq;
 import io.hyperfoil.tools.jjq.value.JqArray;
 import io.hyperfoil.tools.jjq.value.JqObject;
 import io.hyperfoil.tools.jjq.value.JqValue;
@@ -18,6 +19,7 @@ import io.hyperfoil.tools.h5m.api.node.RelativeDifferenceConfig;
 import io.hyperfoil.tools.h5m.api.svc.ViewServiceInterface;
 import io.hyperfoil.tools.h5m.svc.FolderService;
 import io.hyperfoil.tools.h5m.svc.NodeService;
+import io.hyperfoil.tools.yaup.Counters;
 import io.hyperfoil.tools.yaup.HashedLists;
 import io.hyperfoil.tools.yaup.HashedSets;
 import io.hyperfoil.tools.yaup.StringUtil;
@@ -47,6 +49,17 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
 
     @Option(name = "testId", acceptNameWithoutDashes = true, description = "specify which test to load. Loads all if unspecified")
     Long testId;
+
+    @Option(name = "keepAll", acceptNameWithoutDashes = true, description = "set all nodes to keep", defaultValue = "false")
+    boolean keepAll;
+
+    @Option(name = "extractor-prefix", acceptNameWithoutDashes = true, description = "optional prefix for all extractor names", defaultValue = "")
+    String extractorPrefix = ""; //setting value for @Inject testing in LoadLegacyTestsTest
+
+    @Option(name = "combined-label-prefix", acceptNameWithoutDashes = true, description = "optional prefix for labels combined during schema merge",defaultValue = "")
+    String combinedLabelPrefix = "";
+
+
 
     public static String printTest(Test t){
         StringBuilder sb = new StringBuilder();
@@ -107,7 +120,8 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
 
     public static class NodeTracking {
 
-        Map<Extractor,NodeEntity> extractorNodes = new HashMap<>();
+        //The same extractor can have more than 1 NodeEntity depending on sources :(
+        HashedLists<Extractor,NodeEntity> extractorNodes = new HashedLists<>();
         Map<Label,NodeEntity> labelToNodes = new HashMap<>();
         // Use IdentityHashMap because NodeEntity.hashCode() changes when id is
         // set by em.persist() — a regular HashMap loses entries whose keys were
@@ -139,8 +153,11 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
         public void addNode(NodeEntity node){
             nodesByName.put(node.name, node);
         }
-        public boolean hasNode(Extractor extractor){
+        public boolean hasAnyNode(Extractor extractor){
             return extractorNodes.containsKey(extractor);
+        }
+        public boolean hasNode(Extractor extractor,NodeEntity source){
+            return extractorNodes.containsKey(extractor) && extractorNodes.get(extractor).stream().anyMatch(n->n.sources.contains(source));
         }
         public boolean hasNode(Label label){
             return labelToNodes.containsKey(label);
@@ -148,8 +165,8 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
         public boolean hasNode(String name){
             return nodesByName.containsKey(name);
         }
-        public NodeEntity getNode(Extractor extractor){
-            return extractorNodes.get(extractor);
+        public NodeEntity getNode(Extractor extractor,NodeEntity source){
+            return extractorNodes.get(extractor).stream().filter(n->n.sources.contains(source)).findFirst().orElse(null);
         }
         public NodeEntity getNode(Label label){
             return labelToNodes.get(label);
@@ -258,17 +275,47 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
     //id,name,labels,calculation
     public record Variable(long id,String name,List<String> labels,String calculation){};
 
+    public boolean createSameValue(NodeEntity a, NodeEntity b){
+        if((b == null && a != null) || (a== null && b !=null)){
+            return false;
+        }
+        if(!a.operation.equals(b.operation)){
+            return false;
+        }
+        if(a.sources.size()!=b.sources.size()){
+            return false;
+        }
+        for(int i=0; i<a.sources.size();i++){
+            NodeEntity aSource = a.sources.get(i);
+            NodeEntity bSource = b.sources.get(i);
+            if(!aSource.equals(bSource)){
+                return false;
+            }
+        }
+        return true;
+    }
+
     public NodeEntity createNodesFromLabel(Label label, NodeEntity source, NodeGroupEntity group, NodeTracking nodeTracking, Set<String> usedNames, boolean multiSchema){
+
         // Fix A: Skip labels with no extractors — these are placeholder/stub labels
         // from schemas like rhivos-perf-comprehensive:02 that contribute no data
         if (label.extractors.isEmpty()) {
             return null;
         }
         NodeEntity rtrn = null;
+        Map<String,String> extractorRenames = new HashMap<>();
         HashedLists<String,NodeEntity> labelNodesByName = new HashedLists<>();
         boolean reusedNode = false;
         for(Extractor extractor : label.extractors) {
-            String extractorName = extractor.name;
+            String extractorName = getExtractorRename(extractor.name);
+            if(usedNames.contains(extractorName)){
+                extractorName = "_"+extractorName;
+                //if this extractor conflicts with a label name
+            }
+
+            if(!extractorName.equals(extractor.name)){
+                extractorRenames.put(extractor.name, extractorName);
+            }
 
             // Convert jsonpath to jq — sqlall (isArray) wraps in [...] to collect all matches
             String jqOperation = extractor.isArray
@@ -276,15 +323,24 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
                     : io.hyperfoil.tools.jjq.jsonpath.JsonpathToJq.convert(extractor.jsonpath());
             NodeEntity node = JqNode.parse(extractorName, jqOperation, nodeTracking::getNodes);
             if (node == null) {
-                System.err.println("failed to create node for extractor " + extractor);
+                System.err.println("ERROR: Failed to create node for extractor " + extractor);
                 return null;
             }
+            if(keepAll){
+                node.ephemeral = EphemeralMode.KEEP;
+            }
             node.sources = List.of(source);
-            group.addNode(node);
-            if(nodeTracking.hasNode(extractor) && nodeService.functionalyEquivalent(node,nodeTracking.getNode(extractor))){
-                node = nodeTracking.getNode(extractor);
+
+            //the name is different but then we change the name and it becomes functionally equivalent...
+            //nodeService.functionalyEquivalent(node,nodeTracking.getNode(extractor))
+            if(nodeTracking.hasAnyNode(extractor) && createSameValue(node,nodeTracking.getNode(extractor,source))){
+                node = nodeTracking.getNode(extractor,source);
+                if(!node.name.equals(extractor.name)){
+                    extractorRenames.put(extractor.name, node.name);
+                }
                 reusedNode = true;
             }else{
+                group.addNode(node);
                 nodeTracking.addNode(node);
                 nodeTracking.tagNodeAsExtractor(extractor, node);
             }
@@ -293,28 +349,50 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
         //this could rename a node that is referenced by name by another node! Don't do that!
         if(label.function==null || label.function.trim().isEmpty() || JsNode.isNullEmptyOrIdentityFunction(label.function)){
             if(label.extractors.size() == 1 && label.name!=null && !label.name.trim().isEmpty()){
-                String extractorName = label.extractors.get(0).name;
+                String extractorName = getExtractorRename(label.extractors.get(0).name);
                 List<NodeEntity> extractorNodes = labelNodesByName.get(extractorName);
+                if(extractorNodes.isEmpty() && nodeTracking.hasNode(label.extractors.get(0),source)){
+                    extractorNodes=List.of(nodeTracking.getNode(label.extractors.get(0),source));
+                }
                 if(extractorNodes.size()==1){
                     NodeEntity extractorNode = extractorNodes.get(0);
-                    if (!reusedNode && !multiSchema && !label.name.equals(extractorNode.name)){
-                        // Only rename if the node isn't shared with another label
+                    if (!reusedNode && !multiSchema && !label.name.equals( extractorRenames.get(extractorNode.name) ) ){
+                        // Only rename if the extractor isn't shared with another label
                         // and this label is NOT part of a multi-schema group (where
                         // renaming would create name collisions between variants)
+                        String previousName = extractorNode.name;
                         extractorNode.name = label.name;
-                        nodeTracking.renameNode(extractorNode,label.extractors.get(0).name);
+                        nodeTracking.renameNode(extractorNode,previousName);
+                        rtrn = extractorNode;
+                    }else{
+                        //we need a node with a name that matches the label
+                        rtrn = new JqNode(label.name,".",extractorNodes);
+                        if(keepAll){
+                            rtrn.ephemeral = EphemeralMode.KEEP;
+                        }
+                        nodeTracking.addNode(rtrn);
+                        group.addNode(rtrn);
                     }
-                    // Fix B: return the extractor node directly for identity labels,
-                    // even when reused — don't create a solo=>solo wrapper
-                    rtrn = extractorNode;
                 }else{
-                    System.out.println("FAILED TO FIND SINGLE EXTRACTOR "+label.extractors.get(0).name+" for label "+label.name+
+                    System.out.println("ERROR: FAILED TO FIND SINGLE EXTRACTOR "+label.extractors.get(0).name+" for label "+label.name+
                             "\nextractors:\n  "+label.extractors.stream().map(Objects::toString).collect(Collectors.joining("\n  "))+
                             "\nfound:\n  "+extractorNodes.stream().map(NodeEntity::toString).collect(Collectors.joining("\n  "))+
                             "\nlabelNodes:\n  "+labelNodesByName.keys().stream().map(s->"  "+s+":\n    "+labelNodesByName.get(s).stream().map(NodeEntity::toString).collect(Collectors.joining("\n      "))).collect(Collectors.joining("\n  ")));
                 }
             }else if (label.function==null || label.function.trim().isEmpty()){
-                rtrn = new JsNode(label.name(),"solo=>solo",labelNodesByName.values().stream().flatMap(List::stream).collect(Collectors.toList()));
+                if(extractorRenames.isEmpty()){
+                    rtrn = new JsNode(label.name(),"combined=>combined",labelNodesByName.values().stream().flatMap(List::stream).collect(Collectors.toList()));
+                }else{
+                    //we have to restore the names for the merged object
+                    //TODO this only works if all attributes are renamed, need an alg that works for rename and not-renamed
+                    StringBuilder sb = new StringBuilder("(args)=>({");
+                    sb.append(extractorRenames.keySet().stream().map(k->"...(args['"+extractorRenames.get(k)+"'] != undefined && {'"+k+"':args['"+extractorRenames.get(k)+"']})").collect(Collectors.joining(", ")));
+                    sb.append("})");
+                    rtrn = new JsNode(label.name(),sb.toString(),labelNodesByName.values().stream().flatMap(List::stream).collect(Collectors.toList()));
+                }
+                if(keepAll){
+                    rtrn.ephemeral = EphemeralMode.KEEP;
+                }
                 nodeTracking.addNode(rtrn);
                 group.addNode(rtrn);
             }
@@ -329,11 +407,18 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
             // Try converting simple JS patterns to jq to avoid GraalVM Truffle
             // interpreter overhead (issue #247). Only single-source labels with
             // known patterns are converted.
-            String jqEquivalent = sources.size() == 1 ? JsToJqPatterns.tryConvert(label.function) : null;
+            String labelFunction = label.function;
+            if(!extractorRenames.isEmpty()){
+                labelFunction = NodeService.renameParameters(labelFunction, extractorRenames);
+            }
+            String jqEquivalent = sources.size() == 1 ? JsToJqPatterns.tryConvert(labelFunction) : null;
             if (jqEquivalent != null) {
                 rtrn = new JqNode(label.name, jqEquivalent, sources);
             } else {
-                rtrn = new JsNode(label.name, label.function, sources);
+                rtrn = new JsNode(label.name, labelFunction, sources);
+            }
+            if(keepAll){
+                rtrn.ephemeral = EphemeralMode.KEEP;
             }
             if(rtrn!=null){
                 nodeTracking.addNode(rtrn);
@@ -346,7 +431,25 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
     public static String sanitizeName(String input){
         return input.replaceAll("[^a-zA-Z0-9_$]","_");
     }
-
+    public String getLabelRename(String label){
+        if(combinedLabelPrefix!=null && !combinedLabelPrefix.isEmpty()){
+            return combinedLabelPrefix+label;
+        }else {
+            return label;
+        }
+    }
+    public String getExtractorRename(String extractorName){
+        if(extractorPrefix!=null && !extractorPrefix.isEmpty()){
+            return extractorPrefix + extractorName;
+        }else {
+            return extractorName;
+        }
+    }
+    public static String getRename(Transformer transformer,int count){
+        String transformerSuffix = count > 1 ? "_" + transformer.id() : "";
+        String name = "transformer_"+sanitizeName(transformer.name)+transformerSuffix;
+        return name;
+    }
     public FolderImportResult createFolder(Test test){
         FolderEntity folder = new FolderEntity();
         folder.name = test.name;
@@ -355,15 +458,20 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
         NodeTracking nodeTracking = new NodeTracking();
 
         NodeEntity startingNode = folder.group.root;
+        Set<String> labelNames = new HashSet<>();
+        for(Transformer t : test.transformers()){
+                labelNames.addAll(t.targetSchemaLabels().stream().map(label->label.name).collect(Collectors.toSet()));
+        }
+        test.schemaPaths.forEach((p,lbls)->{
+            lbls.forEach(lbl -> labelNames.add(lbl.name));
+        });
 
         if(!test.transformers().isEmpty()){
             // Phase 1: Create transformer nodes for each transformer
             List<NodeEntity> transformerNodes = new ArrayList<>();
             for(Transformer transformer : test.transformers){
-                String transformerSuffix = test.transformers().size() > 1 ? "_" + transformer.id() : "";
-                String name = "transformer_"+sanitizeName(transformer.name)+transformerSuffix;
-                Label l  = new Label(-1,name,transformer.function,transformer.extractors);
-                NodeEntity transform = createNodesFromLabel(l,folder.group.root,folder.group,nodeTracking,new HashSet<>(), false);
+                Label l  = new Label(-1,getRename(transformer,test.transformers().size()),transformer.function,transformer.extractors);
+                NodeEntity transform = createNodesFromLabel(l,folder.group.root,folder.group,nodeTracking,labelNames, false);
                 folder.group.addNode(transform);
                 nodeTracking.addNode(transform);
                 transformerNodes.add(transform);
@@ -383,11 +491,19 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
             // wrapped in transformer name keys).
             if (transformerNodes.size() == 1) {
                 startingNode = new JqNode("dataset","if type == \"array\" then .[] else . end",List.of(transformerNodes.get(0)));
+                if(keepAll){
+                    startingNode.ephemeral = EphemeralMode.KEEP;
+                }
+
                 folder.group.addNode(startingNode);
                 nodeTracking.addNode(startingNode);
             } else {
                 // Iterate object values (one per transformer), unwrap arrays, yield flat items
                 startingNode = new JqNode("dataset", "[.[] | if type == \"array\" then .[] else . end][]", transformerNodes);
+                if(keepAll){
+                    startingNode.ephemeral = EphemeralMode.KEEP;
+                }
+
                 folder.group.addNode(startingNode);
                 nodeTracking.addNode(startingNode);
             }
@@ -411,30 +527,42 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
                 }
                 NodeEntity sourceNode = startingNode;
                 if(!jsonpath.equals("$.\"$schema\"")){
-                    String sourcePath = jsonpath.substring(0,jsonpath.indexOf(".\"$schema\""));
+                    String sourcePath = JsonpathToJq.convert( jsonpath.substring(0,jsonpath.indexOf(".\"$schema\"")) , JsonpathToJq.Mode.STRICT);
+
                     log(4,"Creating a new source node for "+jsonpath+" -> "+sourcePath);
 
-                    sourceNode = new JqNode("."+sourcePath,"."+sourcePath,startingNode);
+                    sourceNode = new JqNode(jsonpath,sourcePath,startingNode);
+                    if(keepAll){
+                        sourceNode.ephemeral = EphemeralMode.KEEP;
+                    }
+
                     folder.group.addNode(sourceNode);
                     nodeTracking.addNode(sourceNode);
                 }
+                Counters<Extractor> extractorCounts = new Counters<>();
+                labelsForJsonpath.stream().flatMap(l->l.extractors().stream()).forEach(extractorCounts::add);
+                extractorCounts.forEach((e,c)->{
+                    System.out.println(e+" = "+c);
+                });
                 for(Label label : labelsForJsonpath){
                     log(6,"label="+label.name);
                     Collection<Label> labels = labelsByName.get(label.name);
                     boolean multiSchema = labels.size() > 1;
-
-                    NodeEntity labelNode = createNodesFromLabel(label,sourceNode,folder.group,nodeTracking,labelsByName.keys(), multiSchema);
+                    //are any of the current label's extractors used by another label?
+                    long maxCount = label.extractors.stream().mapToLong(e->extractorCounts.count(e)).max().orElse(0);
+                    System.out.println(label.name+" -> "+maxCount);
+                    multiSchema = maxCount > 1;
+                    if(multiSchema){
+                        System.out.println("multiSchema "+label.name+" -> "+maxCount);
+                    }
+                    NodeEntity labelNode = createNodesFromLabel(label,sourceNode,folder.group,nodeTracking,labelNames, multiSchema);
                     if(labelNode!=null){
-                        if(multiSchema) {
-                            // No suffix — the pipeline uses node IDs, not names.
-                            // Extractors keep their original names; the combining step
-                            // creates a combiner with the label name.
-                            nodesByOriginalName.put(label.name,labelNode);
-                            folder.group.addNode(labelNode);
-                        } else {
-                            nodeTracking.tagNodeAsLabel(label, labelNode);
-                            folder.group.addNode(labelNode);
+                        if(keepAll){
+                            labelNode.ephemeral = EphemeralMode.KEEP;
                         }
+                        nodesByOriginalName.put(label.name,labelNode);
+                        nodeTracking.tagNodeAsLabel(label, labelNode);
+                        folder.group.addNode(labelNode);
                     }
 
                 }
@@ -461,7 +589,6 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
                     uniqueSourceNodes.get(0).name = labelName;
                     nodeTracking.tagNodeAsLabel(new Label(-1,labelName,null,Collections.emptyList()), uniqueSourceNodes.get(0));
                 } else if (uniqueSourceNodes.size() > 1) {
-                    System.out.println("combining " + labelName + " (" + uniqueSourceNodes.size() + " unique sources from " + sourceNodes.size() + " variants)");
                     // NaN check required: old-schema JS functions return NaN for missing data
                     // (e.g., empty array → reduce → 0/0 → NaN). NaN is not null in JS,
                     // so find(v => v != null) picks NaN over the correct value from the
@@ -476,6 +603,17 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
                     List<NodeEntity> reversedSources = new ArrayList<>(uniqueSourceNodes);
                     Collections.reverse(reversedSources);
                     NodeEntity newNode = new JsNode(labelName, "obj=>Object.values(obj).find(v => v != null && v !== 'NaN' && (typeof v !== 'number' || !isNaN(v)))", reversedSources);
+                    if(combinedLabelPrefix != null && !combinedLabelPrefix.isEmpty()){
+                        for(int i=0; i<reversedSources.size(); i++){
+                            NodeEntity reversedSource = reversedSources.get(i);
+                            if(labelName.equals(reversedSource.name)){
+                                reversedSource.name = getLabelRename(labelName);
+                            }
+                        }
+                    }
+                    if(keepAll){
+                        newNode.ephemeral = EphemeralMode.KEEP;
+                    }
                     folder.group.addNode(newNode);
                     nodeTracking.addNode(newNode);
                     nodeTracking.tagNodeAsLabel(new Label(-1, labelName, newNode.operation, Collections.emptyList()), newNode);
@@ -493,7 +631,7 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
                     if(found.size()>=1){
                         variableIdToNode.put(variable.id(),found.get(0));
                         if(found.size()>1){
-                            log(4,"variable "+variable.name()+" matched "+found.size()+" label nodes, using first");
+                            log(4,"WARNING: variable "+variable.name()+" matched "+found.size()+" label nodes, using first");
                         }
                     }else {
                         System.out.println("FAILED TO MAKE VARIABLE "+variable.id()+" for "+test.name+". Found count for "+labelName+" is 0\n labels="+variable.labels());
@@ -510,6 +648,7 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
                         List<NodeEntity> foundNodes = nodeTracking.getLabelNodes(sourceName);
                         if(foundNodes.size()>1){
                             //AMBIGUOUS LABEL
+                            log(4,"WARNING: ambiguous label "+sourceName+" for variable "+variable.name()+"="+variable.id());
                         }else{
                             sources.add(foundNodes.get(0));
                         }
@@ -522,6 +661,9 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
                 NodeEntity variableNode = jqCalc != null
                         ? new JqNode(variable.name(), jqCalc, sources)
                         : new JsNode(variable.name(), variable.calculation(), sources);
+                if(keepAll){
+                    variableNode.ephemeral = EphemeralMode.KEEP;
+                }
                 folder.group.addNode(variableNode);
                 nodeTracking.addNode(variableNode);
                 variableIdToNode.put(variable.id(),variableNode);
@@ -540,7 +682,7 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
                         if (foundNodes.size() >= 1) {
                             fingerprintNodes.add(foundNodes.get(0));
                             if (foundNodes.size() > 1) {
-                                log(4, "fingerprint label " + labelName + " matched " + foundNodes.size() + " nodes, using first");
+                                log(4, "WARNING: fingerprint label " + labelName + " matched " + foundNodes.size() + " nodes, using first");
                             }
                         }
                     }else{
@@ -757,61 +899,14 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
                     Set<Long> transformids = testToTransformer.get(test.id);
                     Set<Transformer> transformers = new HashSet<>();
                     for(Long transformId : transformids){
-                        List<Extractor> extractors = new ArrayList<>();
-                        try(PreparedStatement statement = connection.prepareStatement("select name,jsonpath,isarray from transformer_extractors where transformer_id=?;")){
-                            statement.setLong(1,transformId);
-                            try(ResultSet rs = statement.executeQuery()){
-                                while(rs.next()){
-                                    extractors.add(new Extractor(rs.getString(1),rs.getString(2),rs.getBoolean(3)));
-                                }
-                            }
-                        }
-                        try(PreparedStatement statement=connection.prepareStatement("select name,function,targetschemauri from transformer where id = ?")){
-                            statement.setLong(1,transformId);
-                            try(ResultSet rs = statement.executeQuery()){
-                                //should really only happen once
-                                while(rs.next()){
-                                    Transformer t = new Transformer(transformId,rs.getString(1).replaceAll(":","_"),rs.getString(2),rs.getString(3),extractors, new ArrayList<>());
-                                    transformers.add(t);
-                                    test.transformers.add(t);
-                                }
-                            }
-                        }
+                        Transformer t = loadTransformer(connection,transformId);
+                        transformers.add(t);
+                        test.transformers.add(t);
                     }
                     assert transformers.size()==transformids.size();
 
                     if(transformers.size() > 1){
                         log(2, "multiple transformers (" + transformers.size() + ") for same target, creating pipeline for each");
-                    }
-                    {
-                        for (Transformer transformer : transformers) {
-                            List<LabelDef> labelDefs = new ArrayList<>();
-                            //Set<String> labelNames = labelDefs.stream().map(LabelDef::name).collect(Collectors.toSet());
-                            //List<Label> targetSchemaLabels = new ArrayList<>();
-                            try(PreparedStatement statement = connection.prepareStatement("select id,name,function from label where schema_id = (select id from schema where uri = ?)")){
-                                statement.setString(1,transformer.targetUri);
-                                try(ResultSet rs = statement.executeQuery()){
-                                    while(rs.next()){
-                                        labelDefs.add(new LabelDef(rs.getLong(1),rs.getString(2),rs.getString(3)));
-                                    }
-                                }
-                            }
-                            for(LabelDef labelDef : labelDefs){
-                                try(PreparedStatement statement = connection.prepareStatement("select name,jsonpath,isarray from label_extractors where label_id = ?")){
-                                    statement.setLong(1,labelDef.id);
-                                    List<Extractor> extractors = new ArrayList<>();
-                                    try(ResultSet rs = statement.executeQuery()){
-                                        while(rs.next()){
-                                            extractors.add(new Extractor(rs.getString(1),rs.getString(2),rs.getBoolean(3)));
-                                        }
-                                    }
-                                    Label label = new Label(labelDef.id,labelDef.name.replaceAll(":","_"),labelDef.function,extractors);
-                                    transformer.targetSchemaLabels.add(label);
-                                    //targetSchemaLabels.add(label);
-                                }
-                            }
-                            labelDefs.clear();//so we don't accidentally use it
-                        }
                     }
                 } else {
                     //no transform
@@ -834,34 +929,16 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
                         Set<String> schemaUris = schemaByPath.get(path);
                         for(String schemaUri : schemaUris){
                             if(!schemaLabels.containsKey(schemaUri)){
-                                List<LabelDef> labelDefs = new ArrayList<>();
-                                try(PreparedStatement statement = connection.prepareStatement("select id,name,function from label where schema_id = (select id from schema where uri = ?)")){
-                                    statement.setString(1,schemaUri);
-                                    try(ResultSet rs = statement.executeQuery()){
-                                        while(rs.next()){
-                                            labelDefs.add(new LabelDef(rs.getLong(1),rs.getString(2),rs.getString(3)));
-                                        }
-                                    }
-                                }
-                                for(LabelDef labelDef : labelDefs){
-                                    List<Extractor> extractors = new ArrayList<>();
-                                    try(PreparedStatement statement = connection.prepareStatement("select name,jsonpath,isarray from label_extractors where label_id = ?")){
-                                        statement.setLong(1,labelDef.id);
-                                        try(ResultSet rs = statement.executeQuery()){
-                                            while(rs.next()){
-                                                extractors.add(new Extractor(rs.getString(1),rs.getString(2),rs.getBoolean(3)));
-                                            }
-                                        }
-                                    }
-                                    Label newLabel = new Label(labelDef.id,labelDef.name.replaceAll(":","_"),labelDef.function,extractors);
-                                    test.schemaPaths.put(path,newLabel);
+                                List<Label> loadedLabels = loadUriLabels(connection,schemaUri);
+                                loadedLabels.forEach(l->{
+                                    schemaLabels.put(schemaUri,l);
+                                    schemaLabelsByName.put(l.name,l);
+                                });
 
-                                    schemaLabels.put(schemaUri,newLabel);
-                                    schemaLabelsByName.put(newLabel.name,newLabel);
-                                }
                             }else{
                                 schemaLabels.get(schemaUri).forEach(l->schemaLabelsByName.put(l.name,l));
                             }
+                            schemaLabels.get(schemaUri).forEach(l->test.schemaPaths.put(path,l));
                         }
                     }
                     //stores nodes renamed because multiple labels shared that name
@@ -968,7 +1045,61 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
         }
         return CommandResult.SUCCESS;
     }
-
+    public static List<Label> loadUriLabels(Connection connection,String uri) throws SQLException {
+        List<Label> labels = new ArrayList<>();
+        List<LabelDef> labelDefs = new ArrayList<>();
+        //Set<String> labelNames = labelDefs.stream().map(LabelDef::name).collect(Collectors.toSet());
+        //List<Label> targetSchemaLabels = new ArrayList<>();
+        try(PreparedStatement statement = connection.prepareStatement("select id,name,function from label where schema_id = (select id from schema where uri = ?)")){
+            statement.setString(1,uri);
+            try(ResultSet rs = statement.executeQuery()){
+                while(rs.next()){
+                    labelDefs.add(new LabelDef(rs.getLong(1),rs.getString(2),rs.getString(3)));
+                }
+            }
+        }
+        for(LabelDef labelDef : labelDefs){
+            try(PreparedStatement statement = connection.prepareStatement("select name,jsonpath,isarray from label_extractors where label_id = ?")){
+                statement.setLong(1,labelDef.id);
+                List<Extractor> labelExtractors = new ArrayList<>();
+                try(ResultSet rs = statement.executeQuery()){
+                    while(rs.next()){
+                        labelExtractors.add(new Extractor(rs.getString(1),rs.getString(2),rs.getBoolean(3)));
+                    }
+                }
+                Label label = new Label(labelDef.id,labelDef.name.replaceAll(":","_"),labelDef.function,labelExtractors);
+                labels.add(label);
+            }
+        }
+        return labels;
+    }
+    public static Transformer loadTransformer(Connection connection,long transformerId) throws SQLException {
+        Transformer rtrn = null;
+        List<Extractor> transformExtractors = new ArrayList<>();
+        try(PreparedStatement statement = connection.prepareStatement("select name,jsonpath,isarray from transformer_extractors where transformer_id=?;")){
+            statement.setLong(1,transformerId);
+            try(ResultSet rs = statement.executeQuery()){
+                while(rs.next()){
+                    transformExtractors.add(new Extractor(rs.getString(1),rs.getString(2),rs.getBoolean(3)));
+                }
+            }
+        }
+        try(PreparedStatement statement=connection.prepareStatement("select name,function,targetschemauri from transformer where id = ?")){
+            statement.setLong(1,transformerId);
+            try(ResultSet rs = statement.executeQuery()){
+                //should really only happen once
+                while(rs.next()){
+                    if(rtrn != null){
+                        //too many transformers found
+                    }
+                    rtrn = new Transformer(transformerId,rs.getString(1).replaceAll(":","_"),rs.getString(2),rs.getString(3),transformExtractors, new ArrayList<>());
+                }
+            }
+        }
+        List<Label> uriLabels = loadUriLabels(connection,rtrn.targetUri);
+        rtrn.targetSchemaLabels.addAll(uriLabels);
+        return rtrn;
+    }
     /**
      * Import Horreum views for a test into h5m.
      * Queries the view and viewcomponent tables, resolves label names to h5m node IDs

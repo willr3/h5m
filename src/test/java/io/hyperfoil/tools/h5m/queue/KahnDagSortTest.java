@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -26,6 +27,17 @@ public class KahnDagSortTest {
         @Override
         public String toString(){
             return name;
+        }
+        @Override
+        public boolean equals(Object o) {
+            if(o instanceof Item e){
+                return Objects.equals(name,e.name) && Objects.equals(dependencies,e.dependencies);
+            }
+            return false;
+        }
+        @Override
+        public int hashCode(){
+            return Objects.hash(name,dependencies);
         }
     }
     @Test
@@ -50,6 +62,26 @@ public class KahnDagSortTest {
         assertTrue(sorted.indexOf(c) < sorted.indexOf(a),"c should be before a to preserve add order: "+sorted);
         assertTrue(sorted.indexOf(c) < sorted.indexOf(b),"c should be before b to preserve add order: "+sorted);
         assertTrue(sorted.indexOf(b) < sorted.indexOf(a),"b should be before a to preserve add order: "+sorted);
+    }
+
+    @Test
+    public void sort_duplicate_entries(){
+        Item a = new Item("a");
+        Item b = new Item("b");
+        Item c = new Item("c");
+        Item ab = new Item("ab",a,b);
+        Item ab2 = new Item("ab",a,b);
+        Item abc = new Item("abc",a,b,c);
+
+        assertEquals(ab,ab2);
+        assertEquals(ab2,ab);
+        assertEquals(ab.hashCode(),ab2.hashCode());
+
+        List<Item> input = List.of(abc,ab,c,b,ab2,a);
+
+        List<Item> sorted = KahnDagSort.sort(input,Item::getDependencies);
+
+        assertEquals(input.size(),sorted.size());
     }
 }
 

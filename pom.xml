@@ -63,7 +63,7 @@
         <lib.jmh>1.37</lib.jmh>
         <lib.mapstruct>1.6.3</lib.mapstruct>
         <lib.math3>3.6.1</lib.math3>
-        <lib.yaup>0.9.11</lib.yaup>
+        <lib.yaup>0.9.13</lib.yaup>
 
         <!-- compiler -->
         <maven.compiler.release>25</maven.compiler.release>
@@ -85,7 +85,7 @@
         <quarkus.native.container-build>true</quarkus.native.container-build>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
-        <quarkus.platform.version>3.38.2</quarkus.platform.version>
+        <quarkus.platform.version>3.39.1</quarkus.platform.version>
 
         <skipITs>true</skipITs>
 
@@ -218,6 +218,11 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-smallrye-openapi</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.antlr</groupId>
+            <artifactId>antlr4-runtime</artifactId>
+            <version>4.13.2</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>

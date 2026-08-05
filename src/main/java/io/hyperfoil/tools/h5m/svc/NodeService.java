@@ -1,5 +1,6 @@
 package io.hyperfoil.tools.h5m.svc;
 
+import io.hyperfoil.tools.h5m.antlr4.RefactorJs;
 import io.hyperfoil.tools.jjq.jsonata.JsonataCompiler;
 import io.hyperfoil.tools.jjq.jsonata.JsonataException;
 import io.hyperfoil.tools.jjq.value.*;
@@ -1117,19 +1118,6 @@ public class NodeService implements NodeServiceInterface {
 
         return rtrn;
     }
-
-    private static int preceedingNonSpace(int idx,String input){
-        do{
-            idx--;
-        }while(idx >= 0 && " \t\n".contains(input.substring(idx,idx+1)));
-        return idx;
-    }
-    private static int followingNonSpace(int idx,String input){
-        while(idx < input.length() && " \t\n".contains(input.substring(idx,idx+1))){
-            idx++;
-        }
-        return idx;
-    }
     /**
      * Converts a SQL/JSON path to a jq expression using strict mode.
      * Delegates to {@link io.hyperfoil.tools.jjq.jsonpath.JsonpathToJq}.
@@ -1147,36 +1135,9 @@ public class NodeService implements NodeServiceInterface {
         return io.hyperfoil.tools.jjq.jsonpath.JsonpathToJq.convertArray(jsonpath,
                 io.hyperfoil.tools.jjq.jsonpath.JsonpathToJq.Mode.STRICT);
     }
-
     public static String renameParameters(String function,Map<String,String> renames){
-        for(String key:renames.keySet()){
-            Matcher m = Pattern.compile(key).matcher(function);
-            while(m.find()){
-                int before = preceedingNonSpace(m.start(),function);
-                int after = followingNonSpace(m.end(),function);
-
-                String previous = ""+(before > 0 ? function.charAt(before) : ' ');
-                String following = ""+(after < function.length() ? function.charAt(after) : ' ');
-                //conditions that do not match the variable reference
-                if(
-                    previous.matches("[a-zA-Z_\\$]") || //part of another name
-                    following.matches("[a-zA-Z_\\$0-9]") || //part of another name
-                    (previous.equals(".") && following.equals("(")) || //method call
-                            (following.equals(":") && !previous.equals("?")) // key in an object, not a tertiary expression
-                ){
-                    //skip it
-                }else{
-                    function =
-                        function.substring(0, m.start()) +
-                        renames.get(key) +
-                        function.substring(m.end());
-                    m.reset(function);
-                }
-            }
-        }
-        return function;
+        return RefactorJs.refactor(function,renames);
     }
-
     @Transactional
     public List<ValueEntity> calculateJsValues(JsNode node, Map<Long, ValueEntity> sourceValues, int startingOrdinal) throws IOException {
         List<ValueEntity> rtrn = new ArrayList<>();
@@ -1427,10 +1388,11 @@ public class NodeService implements NodeServiceInterface {
                 }
             }
         } catch (Exception e) {
-            System.err.println("Error processing " + node.id + " " + node.name
-                    + "\n  values: " + sourceValues.entrySet().stream()
-                    .map(entry -> entry.getKey() + "=" + entry.getValue().id)
+            System.err.println("Error processing node id=" + node.id + " name=" + node.name+" op="+node.operation
+                    + "\n  sources: " + sourceValues.entrySet().stream()
+                    .map(entry -> "nodeId="+entry.getKey() + ".valueId=" + entry.getValue().id)
                     .collect(Collectors.joining(", "))
+                    + "\n idx="+startingOrdinal
                     + "\n  " + e.getMessage().replaceAll("\n","\n  "));
         }
 

@@ -169,6 +169,33 @@ public class NodeTest extends FreshDb {
     }
 
     @Test
+    public void equals_identical_node_with_different_unpersisted_sources(){
+        NodeGroupEntity g1 = new NodeGroupEntity("group");
+        NodeEntity n1 = new JqNode("node","$.1",g1.root);
+        NodeEntity n2a = new JqNode("node","$.2",g1.root);
+        NodeEntity n2b = new JqNode("node","$.2",n1);
+        NodeEntity n2c = new JqNode("node","$.2",g1.root);
+
+        assertNotEquals(n2a, n2b, "different non-persisted sources should make nodes not equal");
+        assertNotEquals(n2b, n2a, "different non-persisted sources should make nodes not equal");
+        assertEquals(n2a,n2c,"identical nodes with same source object should be equal");
+
+    }
+
+    @Test
+    public void hashCode_identical_node_with_different_unpersisted_sources(){
+        NodeGroupEntity g1 = new NodeGroupEntity("group");
+        NodeEntity n1 = new JqNode("node","$.1",g1.root);
+        NodeEntity n2a = new JqNode("node","$.2",g1.root);
+        NodeEntity n2b = new JqNode("node","$.2",n1);
+        NodeEntity n2c = new JqNode("node","$.2",g1.root);
+
+        assertNotEquals(n2a.hashCode(),n2b.hashCode(),"different non-persisted sources should make hashCode not equal");
+        assertEquals(n2a.hashCode(),n2c.hashCode(),"identical nodes with same sources should have same hashCode");
+    }
+
+
+    @Test
     public void dependsOn_parent_changes_sources() throws SystemException, NotSupportedException, HeuristicRollbackException, HeuristicMixedException, RollbackException {
         tm.begin();
         NodeEntity root = new RootNode();

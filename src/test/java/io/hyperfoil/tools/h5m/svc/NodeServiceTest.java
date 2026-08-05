@@ -267,14 +267,21 @@ public class NodeServiceTest extends FreshDb {
         assertNull(NodeEntity.findById(node.id), "node should be deleted");
         assertNull(ValueEntity.findById(value.id), "value associated with the node should be deleted");
     }
-
+    @Test
+    public void renameParameters_skip_referennces_from_other_objects(){
+        assertEquals("({uno : one,dos : two})=>{ return one.map(val=>val.one+val.two)}",nodeService.renameParameters("({one,two})=>{ return one.map(val=>val.one+val.two)}",Map.of("one","uno","two","dos")));
+    }
+    @Test
+    public void renameParameters_spread_parameter_uses_map(){
+        assertEquals("({\ne_bar : bar,\nbuz\n})=>{\n  return bar.map(v=>v['bar'])\n}",nodeService.renameParameters("({\nbar,\nbuz\n})=>{\n  return bar.map(v=>v['bar'])\n}",Map.of("bar","e_bar")));
+    }
     @Test
     public void renameParameters_spaced_parameters() {
         assertEquals("function foo( biz , buz ){}", nodeService.renameParameters("function foo( fiz , fuzz ){}", Map.of("fiz", "biz", "fuzz", "buz")));
     }
     @Test
     public void renameParameters_nested_parameters() {
-        assertEquals("function foo({biz,buz}){}", nodeService.renameParameters("function foo({fiz,fuzz}){}", Map.of("fiz", "biz", "fuzz", "buz")));
+        assertEquals("function foo({biz : fiz,buz : fuzz}){}", nodeService.renameParameters("function foo({fiz,fuzz}){}", Map.of("fiz", "biz", "fuzz", "buz")));
     }
     @Test
     public void renameParameters_skip_method_call() {
@@ -282,7 +289,7 @@ public class NodeServiceTest extends FreshDb {
     }
     @Test
     public void renameParameters_string_literal() {
-        assertEquals("buz=>`{buz}`", nodeService.renameParameters("foo=>`{foo}`", Map.of("foo", "buz")));
+        assertEquals("buz=>`${buz}`", nodeService.renameParameters("foo=>`${foo}`", Map.of("foo", "buz")));
     }
     @Test
     public void renameParameter_skip_object_key(){
@@ -351,7 +358,17 @@ public class NodeServiceTest extends FreshDb {
 
     }
 
+    @Test
+    public void calculateJsValue_reduce_not_matching_name() throws IOException {
+        NodeEntity rootNode = new RootNode();
+        rootNode.id = 1L;
+        JsNode jsNode = new JsNode("js","value=>value.reduce((a,b)=>a+b)");
+        List<ValueEntity> result = nodeService.calculateJsValues(jsNode, Map.of(rootNode.id,new ValueEntity(null,rootNode,JqValues.parse("[1,2,3]"))),0);
 
+        for(ValueEntity v : result){
+            System.out.println(v.data);
+        }
+    }
 
     @Test
     public void calculateJsValue_yield() throws IOException {

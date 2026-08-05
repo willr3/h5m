@@ -177,9 +177,35 @@ public class LoadLegacyTestsTest extends FreshDb {
 
     }
 
+
+    @Test
+    public void createFolder_array_schemaPath(){
+        LoadLegacyTests.Extractor extractor1 = new LoadLegacyTests.Extractor("label","$.one",false);
+        LoadLegacyTests.Label label1 = new LoadLegacyTests.Label(-1,"label","foo=>foo",List.of(extractor1));
+        HashedSets<String,LoadLegacyTests.Label> schemaPaths = new HashedSets<>();
+        schemaPaths.put("$[0].\"$schema\"",label1);
+
+        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1,"test",schemaPaths, Collections.emptyList(),Collections.emptyList(),Collections.emptyList(),Collections.emptyList());
+        FolderEntity folder = loadLegacyTests.createFolder(test).folder();
+
+        folder.group.sources.forEach(System.out::println);
+
+        assertNotNull(folder);
+        assertNotNull(folder.group);
+        assertEquals(2,folder.group.sources.size(),"expect two nodes in the folder");
+
+        NodeEntity dotZero = folder.group.sources.stream().filter(v->v.operation.equals(".[0]")).findAny().orElse(null);
+        assertNotNull(dotZero,"expect to find a node that accesses first entry in array using .[0]");
+
+        NodeEntity labelNode =  folder.group.sources.stream().filter(v->v.name.equals("label")).findAny().orElse(null);
+        assertNotNull(labelNode);
+        assertEquals(1,labelNode.sources.size(),"the extractor should have a single source");
+        assertTrue(labelNode.sources.contains(dotZero),"the .[0] node should be the extractor source");
+
+    }
+
     @Test
     public void createFolder_one_schemaPath_duplicate_label_name(){
-
         LoadLegacyTests.Extractor extractor1 = new LoadLegacyTests.Extractor("extractor","$.one",false);
         LoadLegacyTests.Label label1 = new LoadLegacyTests.Label(-1,"label","foo=>foo",List.of(extractor1));
 
@@ -198,10 +224,40 @@ public class LoadLegacyTestsTest extends FreshDb {
         assertNotNull(folder);
         assertNotNull(folder.group);
 
-        assertEquals(3,folder.group.sources.size(),"Expect 2 SqlNodes and 1 JsNode\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
+        assertEquals(3,folder.group.sources.size(),"Expect 2 JqNodes and 1 JsNode\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
         assertEquals(1,folder.group.sources.stream().filter(v -> (v instanceof JsNode)).count(),"Expect 1 Js \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
-        assertEquals(2,folder.group.sources.stream().filter(v -> (v instanceof JqNode)).count(),"Expect 2 SqlNodes\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
-        assertEquals(1,folder.group.sources.stream().filter(v->v.name.equals("label")).count(),"Expect 1 named label \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
+        assertEquals(2,folder.group.sources.stream().filter(v -> (v instanceof JqNode)).count(),"Expect 2 JqNodes\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
+        assertEquals(3,folder.group.sources.stream().filter(v->v.name.equals("label")).count(),"Expect 3 named label \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
+
+    }
+
+    @Test
+    public void createFolder_two_schemaPath_same_schema(){
+        LoadLegacyTests.Extractor extractor1 = new LoadLegacyTests.Extractor("extractor","$.one",false);
+        LoadLegacyTests.Label label1 = new LoadLegacyTests.Label(-1,"label","",List.of(extractor1));
+
+        HashedSets<String,LoadLegacyTests.Label> schemaPaths = new HashedSets<>();
+        schemaPaths.put("$.\"$schema\"",label1);
+        schemaPaths.put("$[0].\"$schema\"",label1);
+
+        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1,"test",schemaPaths, Collections.emptyList(),Collections.emptyList(),Collections.emptyList(),Collections.emptyList());
+
+        FolderEntity folder = loadLegacyTests.createFolder(test).folder();
+
+        assertNotNull(folder);
+        assertNotNull(folder.group);
+
+        folder.group.sources.forEach(System.out::println);
+        assertTrue(folder.group.sources.stream().anyMatch(v->v.operation.equals(".[0]")),"folder should have node for $[0].'$schema' jsonpath");
+        assertTrue(folder.group.sources.stream().anyMatch(v->v.name.equals("label")),"folder should have a node that corresponds to the label");
+        assertEquals(2,folder.group.sources.stream().filter(v->v.operation.contains(".one")).count(),
+                "folder should have two nodes that correspond to the extractor:\n"
+                        +folder.group.sources.stream().filter(v->v.operation.contains(".one"))
+                        .map(Object::toString).collect(Collectors.joining("\n"))
+        );
+        assertEquals(4,folder.group.sources.size(),"expect 4 nodes in group\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
+
+
 
     }
 
@@ -229,7 +285,7 @@ public class LoadLegacyTestsTest extends FreshDb {
         assertEquals(4,folder.group.sources.size(),"Expect 3 JqNodes and 1 JsNode\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
         assertEquals(3,folder.group.sources.stream().filter(v -> (v instanceof JqNode)).count(),"Expect 3 JqNodes (1 original + 2 converted from sql)\n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
         assertEquals(1,folder.group.sources.stream().filter(v -> (v instanceof JsNode)).count(),"Expect 1 Js \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
-        assertEquals(1,folder.group.sources.stream().filter(v->v.name.equals("label")).count(),"Expect 1 named label \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
+        assertEquals(3,folder.group.sources.stream().filter(v->v.name.equals("label")).count(),"Expect 3  named label \n"+folder.group.sources.stream().map(ne->ne.toString()).collect(Collectors.joining("\n")));
     }
 
     @Test
@@ -361,9 +417,22 @@ public class LoadLegacyTestsTest extends FreshDb {
 
     }
 
+    @Test
+    public void createNodeFromLabel_extractorPrefix_renames_js_parameter(){
+        LoadLegacyTests.Extractor extractor1 = new LoadLegacyTests.Extractor("one","$.one",false);
+        LoadLegacyTests.Extractor extractor2 = new LoadLegacyTests.Extractor("two","$.two",false);
+        LoadLegacyTests.Label label = new LoadLegacyTests.Label(-1,"label","(one,two)=>one+two",List.of(extractor1,extractor2));
 
+        LoadLegacyTests withPrefix = new LoadLegacyTests();
+        withPrefix.extractorPrefix="_";
 
-        @Test
+        NodeGroupEntity group = new NodeGroupEntity();
+        LoadLegacyTests.NodeTracking tracker = new LoadLegacyTests.NodeTracking();
+        NodeEntity labelNode = withPrefix.createNodesFromLabel(label,group.root,group,tracker,new HashSet<>(),false);
+        assertEquals("(_one,_two)=>_one+_two",labelNode.operation,"expect extractor prefix to rename node label operation parameters");
+    }
+
+    @Test
     public void createNodesFromLabel_single_extractor_null_function(){
         LoadLegacyTests.Extractor extractor1 = new LoadLegacyTests.Extractor("extractor","$.one",false);
         LoadLegacyTests.Label label1 = new LoadLegacyTests.Label(-1,"label",null,List.of(extractor1));
@@ -390,6 +459,7 @@ public class LoadLegacyTestsTest extends FreshDb {
 
         assertNotNull(entity);
         assertInstanceOf(JqNode.class,entity,"Js should be dropped when function returns input");
+        assertEquals(label1.name(),entity.name,"Created entity should have name from label not extractor");
 
     }
     @Test
@@ -453,6 +523,31 @@ public class LoadLegacyTestsTest extends FreshDb {
         assertTrue(entity.sources.stream().anyMatch(s -> "results".equals(s.name)), "should have results source");
     }
     @Test
+    public void createFolder_combinedLabelPrefix(){
+        LoadLegacyTests.Extractor extractor1 = new LoadLegacyTests.Extractor("extractor","$.one",false);
+        LoadLegacyTests.Label label1 = new LoadLegacyTests.Label(-1,"label","val=>val+val",List.of(extractor1));
+
+        HashedSets<String,LoadLegacyTests.Label> schemaPaths = new HashedSets<>();
+        schemaPaths.put("$.\"$schema\"",label1);
+        schemaPaths.put("$[0].\"$schema\"",label1);
+
+        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1,"test",schemaPaths, Collections.emptyList(),Collections.emptyList(),Collections.emptyList(),Collections.emptyList());
+
+
+        loadLegacyTests.combinedLabelPrefix="_";
+
+        FolderEntity folder = loadLegacyTests.createFolder(test).folder();
+
+        loadLegacyTests.combinedLabelPrefix=""; // reset for other unit tests
+
+        assertNotNull(folder);
+        assertNotNull(folder.group);
+
+        List<NodeEntity> labelNodes = folder.group.sources.stream().filter(n->n.name.equals("label")).toList();
+        assertNotNull(labelNodes);
+        assertEquals(1,labelNodes.size(),"only combining label should be named 'label'\n"+labelNodes.stream().map(Object::toString).collect(Collectors.joining("\n")));
+    }
+    @Test
     public void createFolder_two_transformers_creates_two_pipelines() {
         LoadLegacyTests.Extractor ext1 = new LoadLegacyTests.Extractor("data", "$.values[*]", true);
         LoadLegacyTests.Extractor ext2 = new LoadLegacyTests.Extractor("data", "$.data.values[*]", true);
@@ -476,6 +571,34 @@ public class LoadLegacyTestsTest extends FreshDb {
         assertEquals(2, transformerCount, "Expect 2 transformer nodes\n" + folder.group.sources.stream().map(NodeEntity::toString).collect(Collectors.joining("\n")));
         assertEquals(1, datasetCount, "Expect 1 dataset node (after coalesced transformers)\n" + folder.group.sources.stream().map(NodeEntity::toString).collect(Collectors.joining("\n")));
 
+    }
+
+    @Test
+    public void createFolder_extractor_name_conflicts_with_another_label_name(){
+        LoadLegacyTests.Extractor ext1 = new LoadLegacyTests.Extractor("label_two", "$.one", true);
+        LoadLegacyTests.Extractor ext2 = new LoadLegacyTests.Extractor("extractor_two", "$.two", true);
+
+        LoadLegacyTests.Label label1 = new LoadLegacyTests.Label(-1, "label_one", null, List.of(ext1,ext2));
+
+        LoadLegacyTests.Extractor ext3 = new LoadLegacyTests.Extractor("extractor_three", "$.three", true);
+        LoadLegacyTests.Label label2 = new LoadLegacyTests.Label(-1, "label_two", null, List.of(ext3));
+
+        HashedSets<String,LoadLegacyTests.Label> schemaPaths = new HashedSets<>();
+        schemaPaths.put("$.\"$schema\"", label1);
+        schemaPaths.put("$.\"$schema\"", label2);
+
+        LoadLegacyTests.Test test = new LoadLegacyTests.Test(-1, "test", schemaPaths,
+                Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+        FolderEntity folder = loadLegacyTests.createFolder(test).folder();
+
+        assertNotNull(folder);
+        assertNotNull(folder.group);
+        assertNotNull(folder.group.sources);
+
+        assertEquals(1,folder.group.sources.stream().filter(v -> v.name.equals("label_two")).count(),
+                "only one node should use label_two name\n"+
+                        folder.group.sources.stream().filter(v -> v.name.equals("label_two")).map(Object::toString).collect(Collectors.joining("\n"))
+        );
     }
 
     @Test
@@ -637,9 +760,10 @@ public class LoadLegacyTestsTest extends FreshDb {
     public void createFolder_no_transform_deduplicates_coalesce_sources() {
         // When the same label appears across multiple schemas but resolves to the same
         // extractor node, the coalesce should deduplicate to avoid value_edge violations
-        LoadLegacyTests.Extractor ext = new LoadLegacyTests.Extractor("value","$.value",false);
-        LoadLegacyTests.Label label1 = new LoadLegacyTests.Label(1,"metric","v => v * 2",List.of(ext));
-        LoadLegacyTests.Label label2 = new LoadLegacyTests.Label(2,"metric","v => v * 3",List.of(ext));
+        LoadLegacyTests.Extractor ext1 = new LoadLegacyTests.Extractor("value","$.value",false);
+        LoadLegacyTests.Extractor ext2 = new LoadLegacyTests.Extractor("value","$.value",false);
+        LoadLegacyTests.Label label1 = new LoadLegacyTests.Label(1,"metric","v => v * 2",List.of(ext1));
+        LoadLegacyTests.Label label2 = new LoadLegacyTests.Label(2,"metric","v => v * 3",List.of(ext2));
 
         HashedSets<String,LoadLegacyTests.Label> schemaPaths = new HashedSets<>();
         schemaPaths.put("$.\"$schema\"", label1);
@@ -654,7 +778,11 @@ public class LoadLegacyTestsTest extends FreshDb {
         // With dedup, the combining should produce at most 1 unique source
         // (both variants use the same extractor node via nodeTracking reuse)
         long metricCount = folder.group.sources.stream().filter(v -> v.name.equals("metric")).count();
+
+        folder.group.sources.forEach(System.out::println);
+
         assertTrue(metricCount >= 1, "should have at least one metric node");
+
     }
 
     @Test
@@ -686,7 +814,7 @@ public class LoadLegacyTestsTest extends FreshDb {
         long variantCount = folder.group.sources.stream()
                 .filter(v -> v.name.equals("val"))
                 .count();
-        assertTrue(variantCount >= 1, "variant extractor nodes (named 'val') should be in the group\n"
+        assertTrue(variantCount == 0, "variant extractor nodes (named 'val') should not be in the group\n"
                 + folder.group.sources.stream().map(NodeEntity::toString).collect(Collectors.joining("\n")));
         assertTrue(folder.group.sources.stream().anyMatch(v -> v.name.equals("metric") && v instanceof JsNode),
                 "combiner node named 'metric' should be in the group\n"

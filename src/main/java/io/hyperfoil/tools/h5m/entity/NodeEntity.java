@@ -156,11 +156,19 @@ public abstract class NodeEntity extends PanacheEntityBase implements Comparable
 
     @Override
     public String toString(){
-        return getClass().getSimpleName()+"< name="+name+", op="+operation+", id="+id+", source.ids=["+sources.stream().map(s->""+s.id).collect(Collectors.joining(" "))+"]>";
+        return getClass().getSimpleName()+"< name="+name+", op="+operation+", id="+id+", source.ids=["+sources.stream().map(s->"["+(s.name==null?s.type():s.name)+"="+s.id+"]").collect(Collectors.joining(" "))+"]>";
+    }
+
+    private static boolean equalIdOrInstance(NodeEntity a, NodeEntity b){
+        if(a.id == null || b.id == null){
+            return a == b;//same object
+        }else{
+            return Objects.equals(a.id, b.id); // same id
+        }
     }
 
     @Override
-    public boolean equals(Object o){
+    public final boolean equals(Object o){
         if(o instanceof NodeEntity){
             NodeEntity n = (NodeEntity)o;
             if(id == null && n.id == null){
@@ -171,7 +179,7 @@ public abstract class NodeEntity extends PanacheEntityBase implements Comparable
                 for(int i = 0, size = sources.size(); i < size; i++){
                     NodeEntity s1 = sources.get(i);
                     NodeEntity s2 = n.sources.get(i);
-                    if(!Objects.equals(s1.id, s2.id)){
+                    if(!equalIdOrInstance(s1, s2)){
                         return false;
                     }
                 }
@@ -192,7 +200,7 @@ public abstract class NodeEntity extends PanacheEntityBase implements Comparable
      * Use IdentityHashMap instead.
      */
     @Override
-    public int hashCode(){
+    public final int hashCode(){
         if(id != null){
             return Objects.hash(id);
         }
@@ -200,7 +208,7 @@ public abstract class NodeEntity extends PanacheEntityBase implements Comparable
         int sourcesHash = 1;
         for(int i = 0, size = sources.size(); i < size; i++){
             Long sourceId = sources.get(i).id;
-            sourcesHash = 31 * sourcesHash + (sourceId != null ? Long.hashCode(sourceId) : 0);
+            sourcesHash = 31 * sourcesHash + (sourceId != null ? Long.hashCode(sourceId) : System.identityHashCode(sources.get(i)));
         }
         return Objects.hash(name, operation, sourcesHash);
     }
