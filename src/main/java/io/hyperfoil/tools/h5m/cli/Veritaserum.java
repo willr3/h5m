@@ -111,7 +111,35 @@ public class Veritaserum implements Callable<Integer> {
             }
 
             List<LoadLegacyTests.Transformer> transformers = loadTransformers(legacyConn,testId);
-            if(!transformers.isEmpty()){
+            if(transformers.isEmpty()){
+                List<LoadLegacyTests.Label> usedLabels = fetchRunLabels(legacyConn,runId);
+                for(LoadLegacyTests.Label label : usedLabels){
+                    List<Node> matchingNodes = nodeService.findNodeByFqdn(label.name(),folder.groupId());
+                    if(matchingNodes.isEmpty()){
+                        System.out.println("failed to find match for label "+label.name());
+                        continue;
+                    }
+                    Node matchingNode = matchingNodes.get(0);
+                    List<Node> toCompare = matchingNode.type().equals(NodeType.JQ) ? List.of(matchingNode) : matchingNode.sources();
+                    for(Node node : toCompare){
+                        var matchingExtractor = label.extractors().stream().filter(e->equalish(e.name(),node.name())).findFirst().orElse(null);
+                        if(matchingExtractor == null){
+                            if(label.extractors().size() == 1){
+                                matchingExtractor = label.extractors().iterator().next();
+                            } else {
+                                System.out.println("failed to find match for label extractor \"" + node.name() + "\" (" + nameSanitize(node.name()) + ") from: " + label.extractors().stream().map(e -> e.name() + "=(" + nameSanitize(e.name()) + ")").collect(Collectors.joining(", ")));
+                                continue;
+                            }
+                            JqValue fromExtractor = extractRun(legacyConn,runId,matchingExtractor.jsonpath(),matchingExtractor.isArray());
+                            List<Value> h5mValues = valueService.getD(node.id());
+                            JqValue fromH5m = h5mValues.isEmpty() ? null : h5mValues.getFirst().data();
+                            compare(fromExtractor,fromH5m,node,matchingExtractor,"run",runId,h5mValues.getFirst().id());
+                        }
+
+                    }
+
+                }
+            }else{
                 for(LoadLegacyTests.Transformer transformer : transformers){
                     System.out.println("Transformer: "+transformer.name());
                     List<Node> transformerMatches = nodeService.findNodeByFqdn(transformer.name(),folder.groupId());
@@ -163,8 +191,9 @@ public class Veritaserum implements Callable<Integer> {
                                     matchingExtractor = label.extractors().iterator().next();
                                 } else {
                                     System.out.println("failed to find match for label extractor \"" + extractorNode.name() + "\" (" + nameSanitize(extractorNode.name()) + ") from: " + label.extractors().stream().map(e -> e.name() + "=(" + nameSanitize(e.name()) + ")").collect(Collectors.joining(", ")));
+                                    continue;
                                 }
-                                continue;
+
                             }
                             List<Value> h5mValues = valueService.getNodeValues(extractorNode.id());
                             List<JqValue> fromExtractors = new ArrayList<>();
@@ -228,6 +257,32 @@ public class Veritaserum implements Callable<Integer> {
             }
         }
         return datasetIds;
+    }
+    private List<LoadLegacyTests.Label> fetchRunLabels(Connection connection, Long runId) throws SQLException {
+        List<LoadLegacyTests.Label> labels = new ArrayList<>();
+        List<LoadLegacyTests.LabelDef> labelDefs = new ArrayList<>();
+        try(PreparedStatement statement = connection.prepareStatement("select distinct l.id,l.name,l.function from label l where exists (select 1 from label_values v where v.label_id = l.id and v.dataset_id in (select runid from dataset where id = ?))")){
+            statement.setLong(1, runId);
+            try (ResultSet rs = statement.executeQuery()){
+                while (rs.next()) {
+                    labelDefs.add(new LoadLegacyTests.LabelDef(rs.getLong(1),rs.getString(2),rs.getString(3)));
+                }
+            }
+        }
+        for(LoadLegacyTests.LabelDef labelDef : labelDefs){
+            try(PreparedStatement statement = connection.prepareStatement("select name,jsonpath,isarray from label_extractors where label_id = ?")){
+                statement.setLong(1,labelDef.id());
+                List<LoadLegacyTests.Extractor> labelExtractors = new ArrayList<>();
+                try(ResultSet rs = statement.executeQuery()){
+                    while(rs.next()){
+                        labelExtractors.add(new LoadLegacyTests.Extractor(rs.getString(1),rs.getString(2),rs.getBoolean(3)));
+                    }
+                }
+                LoadLegacyTests.Label label = new LoadLegacyTests.Label(labelDef.id(),labelDef.name().replaceAll(":","_"),labelDef.function(),labelExtractors);
+                labels.add(label);
+            }
+        }
+        return labels;
     }
     private JqValue fetchRun(Connection legacyConn,long runId) throws SQLException{
         JqValue rtrn = null;
