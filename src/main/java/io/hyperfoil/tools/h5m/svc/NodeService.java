@@ -1372,10 +1372,11 @@ public class NodeService implements NodeServiceInterface {
                 }
             }
         } catch (Exception e) {
-            System.err.println("Error processing " + node.id + " " + node.name
-                    + "\n  values: " + sourceValues.entrySet().stream()
-                    .map(entry -> entry.getKey() + "=" + entry.getValue().id)
+            System.err.println("Error processing node id=" + node.id + " name=" + node.name+" op="+node.operation
+                    + "\n  sources: " + sourceValues.entrySet().stream()
+                    .map(entry -> "nodeId="+entry.getKey() + ".valueId=" + entry.getValue().id)
                     .collect(Collectors.joining(", "))
+                    + "\n idx="+startingOrdinal
                     + "\n  " + e.getMessage().replaceAll("\n","\n  "));
         }
 

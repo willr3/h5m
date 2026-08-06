@@ -18,6 +18,7 @@ import java.sql.*;
 import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @CommandLine.Command(name = "veritaserum", description = "find the truth")
 public class Veritaserum implements Callable<Integer> {
@@ -101,7 +102,7 @@ public class Veritaserum implements Callable<Integer> {
                 return 1;
             }
 
-            Upload upload = folderService.upload(folder.name(),"",runData);
+            Upload upload = folderService.upload(folder.name(),runData);
             upload.future.orTimeout(3, TimeUnit.MINUTES);
             upload.future.join();
             if(upload.future.isCompletedExceptionally()){
@@ -112,7 +113,7 @@ public class Veritaserum implements Callable<Integer> {
             List<LoadLegacyTests.Transformer> transformers = loadTransformers(legacyConn,testId);
             if(!transformers.isEmpty()){
                 for(LoadLegacyTests.Transformer transformer : transformers){
-                    System.out.println("Transfomer: "+transformer.name());
+                    System.out.println("Transformer: "+transformer.name());
                     List<Node> transformerMatches = nodeService.findNodeByFqdn(transformer.name(),folder.groupId());
                     if(transformerMatches.isEmpty()){
                         String name = LoadLegacyTests.getRename(transformer,transformers.size());
@@ -132,17 +133,7 @@ public class Veritaserum implements Callable<Integer> {
                         JqValue fromExtractor = extractRun(legacyConn,runId,matchingExtractor.jsonpath(),matchingExtractor.isArray());
                         List<Value> h5mValues = valueService.getNodeValues(extractorNode.id());
                         JqValue fromH5m = h5mValues.isEmpty() ? null : h5mValues.getFirst().data();
-                        boolean eq = fromExtractor.equals(fromH5m);
-
-                        System.out.println(extractorNode.name() + " eq=" + fromExtractor.equals(fromH5m));
-                        if (!eq) {
-                            System.out.println("  H: ");
-                            System.out.println("    filter: " + matchingExtractor.jsonpath()+" array="+matchingExtractor.isArray());
-                            System.out.println("    value:  " + s(fromExtractor));
-                            System.out.println("  5: ");
-                            System.out.println("    filter: " + extractorNode.operation());
-                            System.out.println("    value:  " + s(fromH5m));
-                        }
+                        compare(fromExtractor,fromH5m,extractorNode,matchingExtractor,"run",runId,h5mValues.getFirst().id());
                     }
                     List<Long> datasetIds = getDatasetIds(legacyConn,runId);
                     System.out.println("Target Labels");
@@ -153,34 +144,30 @@ public class Veritaserum implements Callable<Integer> {
                             System.out.println("failed to find match for label "+label.name());
                         }
                         Node labelNode = labelNodes.get(0);
-                        for(Node extractorNode : labelNode.sources()){
-                            var matchingExtractor = label.extractors().stream().filter(e->e.name().equals(extractorNode.name())).findFirst().orElse(null);
+                        List<Node> toCompare = labelNode.type().equals(NodeType.JQ) ? List.of(labelNode) : labelNode.sources();
+                        for(Node extractorNode : toCompare){
+                            var matchingExtractor = label.extractors().stream().filter(e->equalish(e.name(),extractorNode.name())).findFirst().orElse(null);
                             if(matchingExtractor == null){
-                                System.out.println("failed to find match for label extractor "+extractorNode.name());
+                                if(label.extractors().size() == 1){
+                                    matchingExtractor = label.extractors().iterator().next();
+                                } else {
+                                    System.out.println("failed to find match for label extractor \"" + extractorNode.name() + "\" (" + nameSanitize(extractorNode.name()) + ") from: " + label.extractors().stream().map(e -> e.name() + "=(" + nameSanitize(e.name()) + ")").collect(Collectors.joining(", ")));
+                                }
                                 continue;
                             }
                             List<Value> h5mValues = valueService.getNodeValues(extractorNode.id());
-                            List<JqValue> fromExtractors = datasetIds.stream().map(id-> {
+                            List<JqValue> fromExtractors = new ArrayList<>();
+                            for(long id : datasetIds){
                                 try {
-                                    return extractDataset(legacyConn,id,matchingExtractor.jsonpath(),matchingExtractor.isArray());
+                                    fromExtractors.add( extractDataset(legacyConn,id,matchingExtractor.jsonpath(),matchingExtractor.isArray()) );
                                 } catch (SQLException e) {
-                                    return JqNull.NULL;
+                                    fromExtractors.add(JqNull.NULL);
                                 }
-                            }).toList();
+                            }
                             for(int i=0; i<fromExtractors.size(); i++){
                                 JqValue fromExtractor = fromExtractors.get(i);
                                 JqValue fromH5m = h5mValues.size() > i ? fromExtractors.get(i) : null;
-                                boolean eq = fromExtractor.equals(fromH5m);
-
-                                System.out.println(extractorNode.name() + " eq=" + fromExtractor.equals(fromH5m));
-                                if (!eq) {
-                                    System.out.println("  H: ");
-                                    System.out.println("    filter: " + matchingExtractor.jsonpath()+" array="+matchingExtractor.isArray());
-                                    System.out.println("    value:  " + s(fromExtractor));
-                                    System.out.println("  5: ");
-                                    System.out.println("    filter: " + extractorNode.operation());
-                                    System.out.println("    value:  " + s(fromH5m));
-                                }
+                                compare(fromExtractor,fromH5m,extractorNode,matchingExtractor,"dataset",datasetIds.get(i),(h5mValues.size()>i ? h5mValues.get(i).id() : -1));
                             }
 
                         }
@@ -192,6 +179,30 @@ public class Veritaserum implements Callable<Integer> {
         }
         return 0;
     }
+    private void compare(JqValue fromHorreum,JqValue fromH5m,Node node,LoadLegacyTests.Extractor extractor,String target,long id,long valueId){
+        boolean eq = fromHorreum.equals(fromH5m);
+        if(!eq){
+            if(fromHorreum.isNull() && (fromH5m == null || fromH5m.isNull())){
+                eq = true;
+            }
+        }
+        System.out.println(node.name()+" eq="+eq+(!eq?(" "+target+" "+id+" valueId="+valueId):""));
+        if(!eq) {
+            System.out.println("  H: " + extractor.name());
+            System.out.println("    filter: " + extractor.jsonpath() + " array=" + extractor.isArray());
+            System.out.println("    value:  " + s(fromHorreum));
+            System.out.println("  5: " + node.name());
+            System.out.println("    filter: " + node.operation());
+            System.out.println("    value:  " + s(fromH5m));
+        }
+    }
+    private static boolean equalish(String a,String b){
+        return nameSanitize(a).equalsIgnoreCase(nameSanitize(b));
+    }
+    private static String nameSanitize(String s){
+        return s.replaceAll("[ \\-_]","").toLowerCase();
+    }
+
     private List<Long> getDatasetIds(Connection connection, Long runId) throws SQLException {
         List<Long> datasetIds = new ArrayList<>();
         try(PreparedStatement statement = connection.prepareStatement("select id from dataset where runid = ?")){
