@@ -131,7 +131,7 @@ public class Veritaserum implements Callable<Integer> {
                                 continue;
                             }
                             JqValue fromExtractor = extractRun(legacyConn,runId,matchingExtractor.jsonpath(),matchingExtractor.isArray());
-                            List<Value> h5mValues = valueService.getD(node.id());
+                            List<Value> h5mValues = valueService.getNodeValues(node.id());
                             JqValue fromH5m = h5mValues.isEmpty() ? null : h5mValues.getFirst().data();
                             compare(fromExtractor,fromH5m,node,matchingExtractor,"run",runId,h5mValues.getFirst().id());
                         }
