@@ -16,12 +16,13 @@ public class CliProfile implements QuarkusTestProfile {
             Path dir = Files.createTempDirectory("h5m-test-");
             Path db = dir.resolve("h5m.db");
 
-            dir.toFile().deleteOnExit();
-            db.toFile().deleteOnExit();
-            dir.resolve("h5m.db-shm").toFile().deleteOnExit();
-            dir.resolve("h5m.db-wal").toFile().deleteOnExit();
+//            dir.toFile().deleteOnExit();
+//            db.toFile().deleteOnExit();
+//            dir.resolve("h5m.db-shm").toFile().deleteOnExit();
+//            dir.resolve("h5m.db-wal").toFile().deleteOnExit();
 
             TEST_DB_PATH = db.toString();
+            System.out.println("TEST_DB_PATH="+TEST_DB_PATH);
         } catch (IOException e) {
             throw new ExceptionInInitializerError(e);
         }

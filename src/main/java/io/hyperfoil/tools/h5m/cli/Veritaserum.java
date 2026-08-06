@@ -90,7 +90,7 @@ public class Veritaserum implements Callable<Integer> {
                 System.err.println("Test not found: " + testId);
                 return 1;
             }
-            folder = folderService.byName(testName);
+            folder = folderService.find(testName);
             if (folder == null) {
                 System.out.println("failed to find folder "+testName);
                 return 1;
@@ -102,7 +102,7 @@ public class Veritaserum implements Callable<Integer> {
                 return 1;
             }
 
-            Upload upload = folderService.upload(folder.name(),runData);
+            Upload upload = folderService.upload(folder.id(),runData);
             upload.future.orTimeout(3, TimeUnit.MINUTES);
             upload.future.join();
             if(upload.future.isCompletedExceptionally()){
@@ -136,6 +136,17 @@ public class Veritaserum implements Callable<Integer> {
                         compare(fromExtractor,fromH5m,extractorNode,matchingExtractor,"run",runId,h5mValues.getFirst().id());
                     }
                     List<Long> datasetIds = getDatasetIds(legacyConn,runId);
+                    List<Node> datasetNodes = nodeService.findNodeByFqdn("dataset",folder.groupId());
+                    if(datasetNodes.isEmpty()){
+                        System.out.println("cannot find dataset node for "+folder.name()+" groupId="+folder.groupId());
+                        return 1;
+                    }
+                    Node datasetNode = datasetNodes.get(0);
+                    List<Value> datasetValues = valueService.getNodeValues(datasetNode.id());
+                    if(datasetIds.size() != datasetValues.size()){
+                        System.out.println("INCORRECT NUMBER OF DATASETS h5m="+datasetValues.size()+" horreum="+datasetIds.size());
+                        return 1;
+                    }
                     System.out.println("Target Labels");
                     for(LoadLegacyTests.Label label : transformer.targetSchemaLabels()){
                         System.out.println("\nLabel: "+label.name());
@@ -163,6 +174,9 @@ public class Veritaserum implements Callable<Integer> {
                                 } catch (SQLException e) {
                                     fromExtractors.add(JqNull.NULL);
                                 }
+                            }
+                            if(h5mValues.size() != fromExtractors.size()){
+                                System.out.println("INCORRECT NUMBER OF VALUES h5m="+h5mValues.size()+" horreum="+fromExtractors.size());
                             }
                             for(int i=0; i<fromExtractors.size(); i++){
                                 JqValue fromExtractor = fromExtractors.get(i);
@@ -240,7 +254,7 @@ public class Veritaserum implements Callable<Integer> {
                 System.err.println("Test not found: " + testId);
                 return 1;
             }
-            folder = folderService.byName(testName);
+            folder = folderService.find(testName);
             if (folder == null) {
                 System.out.println("failed to find folder "+testName);
                 return 1;
