@@ -9,6 +9,8 @@ import io.hyperfoil.tools.h5m.svc.NodeService;
 import io.hyperfoil.tools.h5m.svc.ValueService;
 import io.hyperfoil.tools.jjq.value.*;
 import io.hyperfoil.tools.yaup.Sets;
+import io.hyperfoil.tools.yaup.json.Json;
+import io.hyperfoil.tools.yaup.json.JsonComparison;
 import jakarta.inject.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +21,7 @@ import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 @CommandLine.Command(name = "veritaserum", description = "find the truth")
 public class Veritaserum implements Callable<Integer> {
@@ -43,9 +46,9 @@ public class Veritaserum implements Callable<Integer> {
     @CommandLine.Option(names = {"url"}, description = "legacy connection url", defaultValue = "jdbc:postgresql://0.0.0.0:6000/horreum")
     String url;
     @CommandLine.Option(names = {"testId"}, description = "Horreum test ID")
-    Long testId;
+    List<Long> testIds;
     @CommandLine.Option(names = {"runId"}, description = "verify a specific run (optional)")
-    Long runId;
+    List<Long> runIds;
     @CommandLine.Option(names = {"limit"}, description = "max runs to verify", defaultValue = "5")
     int limit;
     @CommandLine.Option(names = {"offset"}, description = "max runs to verify", defaultValue = "0")
@@ -56,7 +59,8 @@ public class Veritaserum implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
-
+        int exitCode = 0;
+        List<Delta> deltas = new ArrayList<>();
 
 
         Map<String, String> props = new HashMap<>();
@@ -73,154 +77,329 @@ public class Veritaserum implements Callable<Integer> {
                 .readProperties(props).get());
         Folder folder = null;
 
-        loadLegacyTests.username = username;
-        loadLegacyTests.password = password;
-        loadLegacyTests.url      = url;
-        loadLegacyTests.testId   = testId;
-        loadLegacyTests.keepAll  = true;
-
-        int ec = loadLegacyTests.call();
-
-        System.out.println(ec);
 
 
         try (Connection legacyConn = legacyDs.getConnection()) {
-            String testName = getTestName(legacyConn,testId);
-            if (testName == null) {
-                System.err.println("Test not found: " + testId);
-                return 1;
-            }
-            folder = folderService.find(testName);
-            if (folder == null) {
-                System.out.println("failed to find folder "+testName);
-                return 1;
-            }
 
-            JqValue runData = fetchRun(legacyConn,runId);
-            if (runData == null) {
-                System.out.println("failed to find run "+runId);
-                return 1;
+            if(testIds == null || testIds.isEmpty()){
+                //fetch all the tests
+                testIds = fetchTestIds(legacyConn);
             }
+            //for each test
+            for(Long testId : testIds){
 
-            Upload upload = folderService.upload(folder.id(),runData);
-            upload.future.orTimeout(3, TimeUnit.MINUTES);
-            upload.future.join();
-            if(upload.future.isCompletedExceptionally()){
-                System.out.println("upload failed");
-                return 1;
-            }
 
-            List<LoadLegacyTests.Transformer> transformers = loadTransformers(legacyConn,testId);
-            if(transformers.isEmpty()){
-                List<LoadLegacyTests.Label> usedLabels = fetchRunLabels(legacyConn,runId);
-                for(LoadLegacyTests.Label label : usedLabels){
-                    List<Node> matchingNodes = nodeService.findNodeByFqdn(label.name(),folder.groupId());
-                    if(matchingNodes.isEmpty()){
-                        System.out.println("failed to find match for label "+label.name());
+                String testName = getTestName(legacyConn,testId);
+                if (testName == null) {
+                    System.err.println("Test not found: " + testId);
+                    exitCode = 1;
+                    continue;
+                }
+                folder = folderService.find(testName);
+                if(folder == null){
+                    System.out.println("loading test "+testName+" id="+testId);
+                    loadLegacyTests.username = username;
+                    loadLegacyTests.password = password;
+                    loadLegacyTests.url      = url;
+                    loadLegacyTests.testId   = testId;
+                    loadLegacyTests.keepAll  = true;
+                    int ec = loadLegacyTests.call();
+                    if(ec != 0){
+                        System.out.println("Error loading test "+testName+" id="+testId);
+                        exitCode = 1;
                         continue;
                     }
-                    Node matchingNode = matchingNodes.get(0);
-                    List<Node> toCompare = matchingNode.type().equals(NodeType.JQ) ? List.of(matchingNode) : matchingNode.sources();
-                    for(Node node : toCompare){
-                        var matchingExtractor = label.extractors().stream().filter(e->equalish(e.name(),node.name())).findFirst().orElse(null);
-                        if(matchingExtractor == null){
-                            if(label.extractors().size() == 1){
-                                matchingExtractor = label.extractors().iterator().next();
-                            } else {
-                                System.out.println("failed to find match for label extractor \"" + node.name() + "\" (" + nameSanitize(node.name()) + ") from: " + label.extractors().stream().map(e -> e.name() + "=(" + nameSanitize(e.name()) + ")").collect(Collectors.joining(", ")));
+                    folder = folderService.find(testName);
+                }
+                if (folder == null) {
+                    System.out.println("failed to find folder "+testName);
+                    exitCode = 1;
+                    continue;
+                }
+                NodeGroup nodeGroup = nodeGroupService.byId(folder.groupId());
+
+
+
+                //for each run
+                if(runIds == null || runIds.isEmpty()){
+                    runIds = fetchRunIds(legacyConn,testId,limit,offset);
+                }
+                System.out.println(runIds.size()+" runs");
+                for(Long runId : runIds){
+                    JqValue runData = fetchRun(legacyConn,runId);
+                    if (runData == null) {
+                        System.out.println("failed to find run "+runId);
+                        exitCode = 1;
+                        continue;
+                    }
+                    System.out.println("Uploading run "+runId);
+                    Upload upload = folderService.upload(folder.id(),runData);
+                    upload.future.orTimeout(3, TimeUnit.MINUTES);
+                    upload.future.join();
+                    if(upload.future.isCompletedExceptionally()){
+                        System.out.println("upload failed");
+                        exitCode = 1;
+                        continue;
+                    }
+
+                    List<LoadLegacyTests.Transformer> transformers = loadTransformers(legacyConn,testId);
+                    if(!transformers.isEmpty()){
+                        for (LoadLegacyTests.Transformer transformer : transformers) {
+                            System.out.println("\nTransformer: " + transformer.name());
+                            List<Node> transformerMatches = nodeService.findNodeByFqdn(transformer.name(), folder.groupId());
+                            if (transformerMatches.isEmpty()) {
+                                String name = LoadLegacyTests.getRename(transformer, transformers.size());
+                                transformerMatches = nodeService.findNodeByFqdn(name, folder.groupId());
+                            }
+                            if (transformerMatches.isEmpty()) {
+                                System.out.println("failed to find match for transformer " + transformer.name());
+                                exitCode = 1;
                                 continue;
                             }
-                            JqValue fromExtractor = extractRun(legacyConn,runId,matchingExtractor.jsonpath(),matchingExtractor.isArray());
-                            List<Value> h5mValues = valueService.getNodeValues(node.id());
-                            JqValue fromH5m = h5mValues.isEmpty() ? null : h5mValues.getFirst().data();
-                            compare(fromExtractor,fromH5m,node,matchingExtractor,"run",runId,h5mValues.getFirst().id());
+                            Node transformerMatch = transformerMatches.get(0);
+                            for (Node extractorNode : transformerMatch.sources()) {
+                                var matchingExtractor = transformer.extractors().stream().filter(e -> e.name().equals(extractorNode.name())).findFirst().orElse(null);
+                                if (matchingExtractor == null) {
+                                    System.out.println("failed to find match for transformer extractor " + extractorNode.name());
+                                    exitCode = 1;
+                                    continue;
+                                }
+                                JqValue fromExtractor = extractRun(legacyConn, runId, matchingExtractor.jsonpath(), matchingExtractor.isArray());
+                                List<Value> h5mValues = valueService.getDescendantValues(upload.uploadId,List.of(extractorNode.id()));
+                                JqValue fromH5m = h5mValues.isEmpty() ? null : h5mValues.getFirst().data();
+                                boolean eq = equalish(fromExtractor, fromH5m);
+                                if(!eq){
+                                    Delta d = new Delta(
+                                            folder.name(),
+                                            extractorNode.id(),
+                                            extractorNode.name(),
+                                            "transformer_extractors",
+                                            matchingExtractor.name(),
+                                            transformer.id(),
+                                            "run",
+                                            runId,
+                                            upload.uploadId,
+                                            matchingExtractor.jsonpath(),
+                                            fromExtractor,
+                                            extractorNode.operation(),
+                                            fromH5m
+                                    );
+                                    deltas.add(d);
+                                }
+                            }
                         }
-
                     }
 
-                }
-            }else{
-                for(LoadLegacyTests.Transformer transformer : transformers){
-                    System.out.println("Transformer: "+transformer.name());
-                    List<Node> transformerMatches = nodeService.findNodeByFqdn(transformer.name(),folder.groupId());
-                    if(transformerMatches.isEmpty()){
-                        String name = LoadLegacyTests.getRename(transformer,transformers.size());
-                        transformerMatches = nodeService.findNodeByFqdn(name,folder.groupId());
-                    }
-                    if(transformerMatches.isEmpty()){
-                        System.out.println("failed to find match for transformer "+transformer.name());
+                    List<LoadLegacyTests.Label> usedLabels = fetchRunLabels(legacyConn,runId);
+
+                    List<Long> datasetIds = getDatasetIds(legacyConn, runId);
+                    List<Node> datasetNodes = !transformers.isEmpty() ? nodeService.findNodeByFqdn("dataset", folder.groupId()) : List.of(nodeGroup.root());
+                    if (datasetNodes.isEmpty()) {
+                        System.out.println("Cannot find dataset node for " + folder.name() + " groupId=" + folder.groupId());
+                        exitCode = 1;
                         continue;
-                    }
-                    Node transformerMatch = transformerMatches.get(0);
-                    for(Node extractorNode : transformerMatch.sources()){
-                        var matchingExtractor = transformer.extractors().stream().filter(e->e.name().equals(extractorNode.name())).findFirst().orElse(null);
-                        if(matchingExtractor == null){
-                            System.out.println("failed to find match for transformer extractor "+extractorNode.name());
-                            continue;
-                        }
-                        JqValue fromExtractor = extractRun(legacyConn,runId,matchingExtractor.jsonpath(),matchingExtractor.isArray());
-                        List<Value> h5mValues = valueService.getNodeValues(extractorNode.id());
-                        JqValue fromH5m = h5mValues.isEmpty() ? null : h5mValues.getFirst().data();
-                        compare(fromExtractor,fromH5m,extractorNode,matchingExtractor,"run",runId,h5mValues.getFirst().id());
-                    }
-                    List<Long> datasetIds = getDatasetIds(legacyConn,runId);
-                    List<Node> datasetNodes = nodeService.findNodeByFqdn("dataset",folder.groupId());
-                    if(datasetNodes.isEmpty()){
-                        System.out.println("cannot find dataset node for "+folder.name()+" groupId="+folder.groupId());
-                        return 1;
                     }
                     Node datasetNode = datasetNodes.get(0);
                     List<Value> datasetValues = valueService.getNodeValues(datasetNode.id());
-                    if(datasetIds.size() != datasetValues.size()){
-                        System.out.println("INCORRECT NUMBER OF DATASETS h5m="+datasetValues.size()+" horreum="+datasetIds.size());
-                        return 1;
+                    if (datasetIds.size() != datasetValues.size()) {
+                        System.out.println("INCORRECT NUMBER OF DATASETS h5m=" + datasetValues.size() + " horreum=" + datasetIds.size());
+                        //TODO do we stop doing this because now we have comparison?
+//                        Delta d = new Delta(
+//                                folder.name(),
+//                                datasetNode.id(),
+//                                "dataset",
+//                                "-",
+//                                transformers.stream().map(t->t.name()+"="+t.id()).collect(Collectors.joining(",")),
+//                                -1,
+//                                "run",
+//                                runId,
+//                                -1,
+//                                "",
+//                                JqNumber.of(datasetIds.size()),
+//                                datasetNode.operation(),
+//                                JqNumber.of(datasetValues.size())
+//                        );
+//                        deltas.add(d);
                     }
-                    System.out.println("Target Labels");
-                    for(LoadLegacyTests.Label label : transformer.targetSchemaLabels()){
-                        System.out.println("\nLabel: "+label.name());
-                        List<Node> labelNodes = nodeService.findNodeByFqdn(label.name(),folder.groupId());
-                        if(labelNodes.isEmpty()){
-                            System.out.println("failed to find match for label "+label.name());
+                    //find the best match between datasets
+                    List<DatasetValuePair> pairs = matchDatasetToValue(legacyConn,datasetIds,datasetValues);
+
+                    //compare datasets
+                    for (int i = 0; i < pairs.size(); i++) {
+                        DatasetValuePair pair = pairs.get(i);
+                        long horreumDatasetId = pair.datasetId;
+                        long h5mDatasetId = pair.valueId;
+                        if(horreumDatasetId == -1 || h5mDatasetId == -1){
+                            Delta d = new Delta(
+                                    testName,
+                                    datasetNode.id(),
+                                    datasetNode.name(),
+                                    "-",
+                                    transformers.stream().map(t->t.name()+"="+t.id()).collect(Collectors.joining(",")),
+                                    -1,
+                                    "run",
+                                    horreumDatasetId,
+                                    h5mDatasetId,
+                                    "",
+                                    horreumDatasetId == -1 ? JqNull.NULL : JqObject.EMPTY,
+                                    datasetNode.operation(),
+                                    h5mDatasetId == -1 ? JqNull.NULL : JqObject.EMPTY
+                            );
+                            deltas.add(d);
+                            continue;
                         }
-                        Node labelNode = labelNodes.get(0);
-                        List<Node> toCompare = labelNode.type().equals(NodeType.JQ) ? List.of(labelNode) : labelNode.sources();
-                        for(Node extractorNode : toCompare){
-                            var matchingExtractor = label.extractors().stream().filter(e->equalish(e.name(),extractorNode.name())).findFirst().orElse(null);
-                            if(matchingExtractor == null){
-                                if(label.extractors().size() == 1){
-                                    matchingExtractor = label.extractors().iterator().next();
-                                } else {
-                                    System.out.println("failed to find match for label extractor \"" + extractorNode.name() + "\" (" + nameSanitize(extractorNode.name()) + ") from: " + label.extractors().stream().map(e -> e.name() + "=(" + nameSanitize(e.name()) + ")").collect(Collectors.joining(", ")));
-                                    continue;
-                                }
+                        System.out.println("Dataset: " + horreumDatasetId + " value: " + h5mDatasetId + " label_values "+getLabelValueCount(legacyConn,horreumDatasetId)+"\n");
 
+                        for(LoadLegacyTests.Label label : usedLabels){
+                            List<Node> matchingNodes = nodeService.findNodeByFqdn(label.name(),folder.groupId());
+                            if(matchingNodes.isEmpty()){
+                                System.out.println("failed to find match for label "+label.name());
+                                exitCode = 1;
+                                continue;
                             }
-                            List<Value> h5mValues = valueService.getNodeValues(extractorNode.id());
-                            List<JqValue> fromExtractors = new ArrayList<>();
-                            for(long id : datasetIds){
-                                try {
-                                    fromExtractors.add( extractDataset(legacyConn,id,matchingExtractor.jsonpath(),matchingExtractor.isArray()) );
-                                } catch (SQLException e) {
-                                    fromExtractors.add(JqNull.NULL);
+                            for(Node matchingNode : matchingNodes){
+                                List<Node> toCompare = matchingNode.type().equals(NodeType.JQ) ? List.of(matchingNode) : matchingNode.sources();
+                                for(Node node : toCompare){
+                                    var matchingExtractor = label.extractors().stream().filter(e->equalish(e.name(),node.name())).findFirst().orElse(null);
+                                    if(matchingExtractor == null) {
+                                        if (label.extractors().size() == 1) {
+                                            matchingExtractor = label.extractors().iterator().next();
+                                        } else {
+                                            System.out.println("failed to find match for label extractor \"" + node.name() + "\" (" + nameSanitize(node.name()) + ") from: " + label.extractors().stream().map(e -> e.name() + "=(" + nameSanitize(e.name()) + ")").collect(Collectors.joining(", ")));
+                                            exitCode = 1;
+                                            continue;
+                                        }
+                                    }
+                                    JqValue fromExtractor = extractDataset(legacyConn,horreumDatasetId,matchingExtractor.jsonpath(),matchingExtractor.isArray());
+                                    List<Value> h5mValues = valueService.getDescendantValues(h5mDatasetId,List.of(node.id()));
+                                    JqValue fromH5m = h5mValues.isEmpty() ? null : h5mValues.getFirst().data();
+                                    boolean eq = equalish(fromExtractor,fromH5m);
+                                    if(!eq){
+                                        Delta d = new Delta(
+                                                folder.name(),
+                                                node.id(),
+                                                node.name(),
+                                                "label_extractors",
+                                                matchingExtractor.name(),
+                                                label.id(),
+                                                "dataset",
+                                                horreumDatasetId,
+                                                h5mDatasetId,
+                                                matchingExtractor.jsonpath(),
+                                                fromExtractor,
+                                                node.operation(),
+                                                fromH5m
+                                        );
+                                        deltas.add(d);
+                                    }
                                 }
                             }
-                            if(h5mValues.size() != fromExtractors.size()){
-                                System.out.println("INCORRECT NUMBER OF VALUES h5m="+h5mValues.size()+" horreum="+fromExtractors.size());
-                            }
-                            for(int i=0; i<fromExtractors.size(); i++){
-                                JqValue fromExtractor = fromExtractors.get(i);
-                                JqValue fromH5m = h5mValues.size() > i ? fromExtractors.get(i) : null;
-                                compare(fromExtractor,fromH5m,extractorNode,matchingExtractor,"dataset",datasetIds.get(i),(h5mValues.size()>i ? h5mValues.get(i).id() : -1));
-                            }
-
                         }
                     }
+                }// for runId
+            }// for testid
+        }
+        System.out.println(deltas.size()+" DELTAS");
+        for(Delta d : deltas){
+            System.out.println(d);
+        }
+        return exitCode;
+    }
+    record Delta(String folderName,long nodeId,String nodeName,String extractorTable,String extractorName,long parentId,String dataTable,long dataId,long valueId,String jsonpath,JqValue horreum,String jq,JqValue h5m){
 
+        @Override
+        public String toString() {
+            StringBuilder extra = new StringBuilder();
+            if((horreum.toString().length()>=120) || (h5m.toString().length()>=120)){
+                Json horreumJson = Json.fromString(horreum.toString());
+                Json h5mJson = Json.fromString(h5m.toString());
+                JsonComparison comp = new JsonComparison();
+                if(horreumJson != null && h5mJson != null){
+                    comp.load("hrm", horreumJson);
+                    comp.load("h5m", h5mJson);
+                    comp.getDiffs().forEach(d -> {
+                        extra.append(d.getPath());
+                        d.forEach((k, v) -> {
+                            extra.append(System.lineSeparator());
+                            extra.append(k);
+                            extra.append(" : ");
+                            extra.append(v);
+
+                        });
+                        extra.append(System.lineSeparator());
+                    });
                 }
             }
-
+            return folderName+" "+dataTable+"="+dataId+" "+extractorTable+" label/transform="+parentId+" valueId="+valueId+"\n"
+                    +"  hrm: "+extractorName+"\n"
+                    +"    filter: "+jsonpath+"\n"
+                    +"    value: "+((horreum.toString().length()<120)?horreum.toString():("length="+horreum.toString().length()))+"\n"
+                    +"  h5m: "+nodeName+"\n"
+                    +"    filter: "+jq+"\n"
+                    +"    value: "+((h5m.toString().length()<120)?h5m.toString():("length="+h5m.toString().length()))+"\n"
+                    +(extra.length()>0 ?("  diffs:\n    "+extra.toString().replaceAll("\n","\n    ")):"");
         }
-        return 0;
+    }
+    record DatasetValuePair(long datasetId,long valueId){}
+    private List<DatasetValuePair> matchDatasetToValue(Connection conn, List<Long> datasetIds,List<Value> values) throws SQLException {
+        List<DatasetValuePair> pairs = new ArrayList<>();
+        List<JqObject> datasetLabelValues = new ArrayList<>();
+        for (Long id : datasetIds) {
+            JqObject jqObject = fetchDatasetLabelValues(conn, id);
+            datasetLabelValues.add(jqObject);
+        }
+        List<JqObject> valueLabelValues = new ArrayList<>();
+        for(Value v : values) {
+            List<JqObject> jqObjects = valueService.getGroupedValues(
+                    v.node().id(),
+                    v.id(),
+                    Collections.EMPTY_LIST,
+                    Collections.EMPTY_MAP,
+                    null
+            );
+            if(jqObjects.isEmpty()){
+                //this shouldn't happen, what do we do?
+                System.out.println("Error: value "+v.id()+" from node="+v.node().name()+"="+v.node().id()+" is missing grouped values");
+            } else {
+                valueLabelValues.add(jqObjects.getFirst());
+            }
+        }
+
+        Set<String> datasetKeys = datasetLabelValues.stream().flatMap(o->o.keys().stream()).collect(Collectors.toSet());
+        double scores[][] = new double[datasetLabelValues.size()][valueLabelValues.size()];
+        for(int d=0; d<datasetLabelValues.size(); d++){
+            for(int v=0; v<valueLabelValues.size(); v++){
+                scores[d][v] = score(datasetLabelValues.get(d),valueLabelValues.get(v));
+            }
+        }
+        //pick the best matches
+        Set<Integer> remainingValueIndexes = new HashSet<>(IntStream.rangeClosed(0, valueLabelValues.size()-1).boxed().toList());
+
+        for(int d=0; d<datasetLabelValues.size(); d++){
+            int bestIndex = -1;
+            double bestScore = -1;
+            for(int remainingIndex : remainingValueIndexes){
+                if(scores[d][remainingIndex] > bestScore){
+                    bestScore = scores[d][remainingIndex];
+                    bestIndex = remainingIndex;
+                }
+            }
+            if(bestIndex != -1){
+                remainingValueIndexes.remove(bestIndex);
+            }
+            DatasetValuePair dpv = new DatasetValuePair(d,bestIndex);
+            pairs.add(dpv);
+        }
+        if(!remainingValueIndexes.isEmpty()){
+            for(int remainingIndex : remainingValueIndexes){
+                DatasetValuePair dvp = new DatasetValuePair(-1,remainingIndex);
+                pairs.add(dvp);
+            }
+        }
+        return pairs;
+    }
+    private boolean equalish(JqValue horreum, JqValue h5m){
+        return horreum.equals(h5m) || (horreum.isNull() && (h5m == null || h5m.isNull()));
     }
     private void compare(JqValue fromHorreum,JqValue fromH5m,Node node,LoadLegacyTests.Extractor extractor,String target,long id,long valueId){
         boolean eq = fromHorreum.equals(fromH5m);
@@ -258,10 +437,25 @@ public class Veritaserum implements Callable<Integer> {
         }
         return datasetIds;
     }
+
+
+
+    private int getLabelValueCount(Connection connection, Long datasetId) throws SQLException {
+        int rtrn = -1;
+        try(PreparedStatement statement = connection.prepareStatement("select count(*) from label_values where dataset_id = ? and value is not null")){
+            statement.setLong(1, datasetId);
+            try (ResultSet rs = statement.executeQuery()){
+                while (rs.next()) {
+                    rtrn = rs.getInt(1);
+                }
+            }
+        }
+        return rtrn;
+    }
     private List<LoadLegacyTests.Label> fetchRunLabels(Connection connection, Long runId) throws SQLException {
         List<LoadLegacyTests.Label> labels = new ArrayList<>();
         List<LoadLegacyTests.LabelDef> labelDefs = new ArrayList<>();
-        try(PreparedStatement statement = connection.prepareStatement("select distinct l.id,l.name,l.function from label l where exists (select 1 from label_values v where v.label_id = l.id and v.dataset_id in (select runid from dataset where id = ?))")){
+        try(PreparedStatement statement = connection.prepareStatement("select distinct l.id,l.name,l.function from label l where exists (select 1 from label_values v where v.label_id = l.id and v.dataset_id in (select id from dataset where runid = ?))")){
             statement.setLong(1, runId);
             try (ResultSet rs = statement.executeQuery()){
                 while (rs.next()) {
@@ -284,6 +478,31 @@ public class Veritaserum implements Callable<Integer> {
         }
         return labels;
     }
+    private List<Long> fetchTestIds(Connection connection) throws SQLException {
+        List<Long> testIds = new ArrayList<>();
+        try(PreparedStatement statement = connection.prepareStatement("select id from test")){
+            try (ResultSet rs = statement.executeQuery()){
+                while (rs.next()) {
+                    testIds.add(rs.getLong(1));
+                }
+            }
+        }
+        return testIds;
+    }
+    private List<Long> fetchRunIds(Connection connection, Long testId,int limit, int offset) throws SQLException {
+        List<Long> runIds = new ArrayList<>();
+        try(PreparedStatement statement = connection.prepareStatement("select id from run where testid = ? and trashed = false order by id asc limit ? offset ?")){
+            statement.setLong(1, testId);
+            statement.setInt(2, limit);
+            statement.setInt(3, offset);
+            try (ResultSet rs = statement.executeQuery()){
+                while (rs.next()) {
+                    runIds.add(rs.getLong(1));
+                }
+            }
+        }
+        return runIds;
+    }
     private JqValue fetchRun(Connection legacyConn,long runId) throws SQLException{
         JqValue rtrn = null;
         try(PreparedStatement stmt = legacyConn.prepareStatement("select data from run where id=?")){
@@ -300,7 +519,7 @@ public class Veritaserum implements Callable<Integer> {
         }
         return rtrn;
     }
-    private int compareLabelValues(AgroalDataSource legacyDs) throws SQLException {
+    private int compareLabelValues(AgroalDataSource legacyDs,long testId,long runId) throws SQLException {
         JqValue runLabelValues = null;
         Folder folder = null;
         try (Connection legacyConn = legacyDs.getConnection()) {
@@ -316,7 +535,7 @@ public class Veritaserum implements Callable<Integer> {
             }
             System.out.println("Verifying test: " + testName + " (id=" + testId + ")");
 
-            runLabelValues = getRunLabelValues(legacyConn,runId);
+            runLabelValues = fetchRunLabelValues(legacyConn,runId);
         }
         if(runLabelValues == null){
             System.out.println("No labelValues found for "+runId);
@@ -398,7 +617,56 @@ public class Veritaserum implements Callable<Integer> {
         return b.build();
     }
 
-    private JqArray getRunLabelValues(Connection conn, long runId){
+    private JqObject fetchDatasetLabelValues(Connection conn, long datasetId) throws SQLException {
+        JqObject value = null;
+        try(PreparedStatement ps = conn.prepareStatement(
+            """
+                WITH
+                combined as (
+                    SELECT
+                        label.name AS labelName,
+                        lv.value AS value, runId,
+                        dataset.id AS datasetId,
+                        dataset.start AS start,
+                        dataset.stop AS stop
+                    FROM
+                        dataset
+                        LEFT JOIN label_values lv ON dataset.id = lv.dataset_id
+                        LEFT JOIN label ON label.id = lv.label_id
+                    WHERE dataset.id = ?
+                ), entry as (
+                    SELECT
+                        runId,
+                        datasetId,
+                        jsonb_object_agg(labelName,value) as data
+                    from
+                        combined
+                    group by runId,datasetId
+                )
+                select
+                    jsonb_agg(
+                        data -- jsonb_build_object('runId',runId,'datasetId',datasetId,'data',data)
+                    ) from entry
+            """
+        )) {
+            ps.setLong(1, datasetId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    if (value != null) {
+                        //This should not happen
+                    }
+                    JqArray array = (JqArray) JqValues.parse(rs.getString(1));
+                    if(array.isEmpty()){
+                        //log this error?
+                    }else {
+                        value = (JqObject) array.get(0);
+                    }
+                }
+            }
+        }
+        return value;
+    }
+    private JqArray fetchRunLabelValues(Connection conn, long runId){
         JqValue value = null;
         try(PreparedStatement ps = conn.prepareStatement(
                 """
