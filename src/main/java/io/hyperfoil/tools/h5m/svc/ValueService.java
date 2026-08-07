@@ -694,6 +694,7 @@ public class ValueService implements ValueServiceInterface {
      * @param nodeId
      * @return
      */
+    @Transactional
     public List<Value> getDescendantValues(long rootValueId,List<Long> nodeId) {
         if(nodeId.isEmpty()){
             return getAllDescendants(rootValueId);
