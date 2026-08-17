@@ -12,9 +12,12 @@ import io.hyperfoil.tools.yaup.Sets;
 import io.hyperfoil.tools.yaup.json.Json;
 import io.hyperfoil.tools.yaup.json.JsonComparison;
 import jakarta.inject.Inject;
+import org.aesh.command.Command;
+import org.aesh.command.CommandDefinition;
+import org.aesh.command.CommandResult;
+import org.aesh.command.option.Option;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import picocli.CommandLine;
 
 import java.sql.*;
 import java.util.*;
@@ -23,8 +26,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-@CommandLine.Command(name = "veritaserum", description = "find the truth")
-public class Veritaserum implements Callable<Integer> {
+@CommandDefinition(name="veritaserum",description = "find the truth", generateHelp = true)
+public class Veritaserum implements Command<H5mCommandInvocation> {
 
     private static final Logger log = LoggerFactory.getLogger(Veritaserum.class);
     @Inject
@@ -39,171 +42,171 @@ public class Veritaserum implements Callable<Integer> {
     @Inject
     NodeGroupService nodeGroupService;
 
-    @CommandLine.Option(names = {"username"}, description = "legacy db username", defaultValue = "quarkus")
+    @Option(name = "username", description = "legacy db username", defaultValue = "quarkus")
     String username;
-    @CommandLine.Option(names = {"password"}, description = "legacy db password", defaultValue = "quarkus")
+    @Option(name = "password", description = "legacy db password", defaultValue = "quarkus")
     String password;
-    @CommandLine.Option(names = {"url"}, description = "legacy connection url", defaultValue = "jdbc:postgresql://0.0.0.0:6000/horreum")
+    @Option(name = "url", description = "legacy connection url", defaultValue = "jdbc:postgresql://0.0.0.0:6000/horreum")
     String url;
-    @CommandLine.Option(names = {"testId"}, description = "Horreum test ID")
+    @Option(name = "testId", description = "Horreum test ID")
     List<Long> testIds;
-    @CommandLine.Option(names = {"runId"}, description = "verify a specific run (optional)")
+    @Option(name = "runId", description = "verify a specific run (optional)")
     List<Long> runIds;
-    @CommandLine.Option(names = {"limit"}, description = "max runs to verify", defaultValue = "5")
+    @Option(name = "limit", description = "max runs to verify", defaultValue = "5")
     int limit;
-    @CommandLine.Option(names = {"offset"}, description = "max runs to verify", defaultValue = "0")
+    @Option(name = "offset", description = "max runs to verify", defaultValue = "0")
     int offset;
 
     @Inject
     LoadLegacyTests loadLegacyTests;
 
     @Override
-    public Integer call() throws Exception {
-        int exitCode = 0;
-        List<Delta> deltas = new ArrayList<>();
+    public CommandResult execute(H5mCommandInvocation invocation) throws InterruptedException {
+        CommandResult exitCode = CommandResult.SUCCESS;
+        System.out.println("VERITASERUM");
+        try {
+            List<Delta> deltas = new ArrayList<>();
 
 
-        Map<String, String> props = new HashMap<>();
-        props.put(AgroalPropertiesReader.MAX_SIZE, "1");
-        props.put(AgroalPropertiesReader.MIN_SIZE, "1");
-        props.put(AgroalPropertiesReader.INITIAL_SIZE, "1");
-        props.put(AgroalPropertiesReader.MAX_LIFETIME_S, "57");
-        props.put(AgroalPropertiesReader.ACQUISITION_TIMEOUT_S, "54");
-        props.put(AgroalPropertiesReader.PRINCIPAL, username);
-        props.put(AgroalPropertiesReader.CREDENTIAL, password);
-        props.put(AgroalPropertiesReader.PROVIDER_CLASS_NAME, "org.postgresql.Driver");
-        props.put(AgroalPropertiesReader.JDBC_URL, url);
-        AgroalDataSource legacyDs = AgroalDataSource.from(new AgroalPropertiesReader()
-                .readProperties(props).get());
-        Folder folder = null;
+            Map<String, String> props = new HashMap<>();
+            props.put(AgroalPropertiesReader.MAX_SIZE, "1");
+            props.put(AgroalPropertiesReader.MIN_SIZE, "1");
+            props.put(AgroalPropertiesReader.INITIAL_SIZE, "1");
+            props.put(AgroalPropertiesReader.MAX_LIFETIME_S, "57");
+            props.put(AgroalPropertiesReader.ACQUISITION_TIMEOUT_S, "54");
+            props.put(AgroalPropertiesReader.PRINCIPAL, username);
+            props.put(AgroalPropertiesReader.CREDENTIAL, password);
+            props.put(AgroalPropertiesReader.PROVIDER_CLASS_NAME, "org.postgresql.Driver");
+            props.put(AgroalPropertiesReader.JDBC_URL, url);
+            AgroalDataSource legacyDs = AgroalDataSource.from(new AgroalPropertiesReader()
+                    .readProperties(props).get());
+            Folder folder = null;
 
 
+            try (Connection legacyConn = legacyDs.getConnection()) {
 
-        try (Connection legacyConn = legacyDs.getConnection()) {
-
-            if(testIds == null || testIds.isEmpty()){
-                //fetch all the tests
-                testIds = fetchTestIds(legacyConn);
-            }
-            //for each test
-            for(Long testId : testIds){
-
-
-                String testName = getTestName(legacyConn,testId);
-                if (testName == null) {
-                    System.err.println("Test not found: " + testId);
-                    exitCode = 1;
-                    continue;
+                if (testIds == null || testIds.isEmpty()) {
+                    //fetch all the tests
+                    testIds = fetchTestIds(legacyConn);
                 }
-                folder = folderService.find(testName);
-                if(folder == null){
-                    System.out.println("loading test "+testName+" id="+testId);
-                    loadLegacyTests.username = username;
-                    loadLegacyTests.password = password;
-                    loadLegacyTests.url      = url;
-                    loadLegacyTests.testId   = testId;
-                    loadLegacyTests.keepAll  = true;
-                    int ec = loadLegacyTests.call();
-                    if(ec != 0){
-                        System.out.println("Error loading test "+testName+" id="+testId);
-                        exitCode = 1;
+                //for each test
+                for (Long testId : testIds) {
+
+
+                    String testName = getTestName(legacyConn, testId);
+                    if (testName == null) {
+                        System.err.println("Test not found: " + testId);
+                        exitCode = CommandResult.USAGE_ERROR;
                         continue;
                     }
                     folder = folderService.find(testName);
-                }
-                if (folder == null) {
-                    System.out.println("failed to find folder "+testName);
-                    exitCode = 1;
-                    continue;
-                }
-                NodeGroup nodeGroup = nodeGroupService.byId(folder.groupId());
-
-
-
-                //for each run
-                if(runIds == null || runIds.isEmpty()){
-                    runIds = fetchRunIds(legacyConn,testId,limit,offset);
-                }
-                System.out.println(runIds.size()+" runs");
-                for(Long runId : runIds){
-                    JqValue runData = fetchRun(legacyConn,runId);
-                    if (runData == null) {
-                        System.out.println("failed to find run "+runId);
-                        exitCode = 1;
+                    if (folder == null) {
+                        System.out.println("loading test " + testName + " id=" + testId);
+                        loadLegacyTests.username = username;
+                        loadLegacyTests.password = password;
+                        loadLegacyTests.url = url;
+                        loadLegacyTests.testId = testId;
+                        loadLegacyTests.keepAll = true;
+                        //int ec = loadLegacyTests.call();
+                        CommandResult result = loadLegacyTests.execute(null);
+                        if (result.getExitCode() != 0) {
+                            System.out.println("Error loading test " + testName + " id=" + testId);
+                            exitCode = CommandResult.FAILURE;
+                            continue;
+                        }
+                        folder = folderService.find(testName);
+                    }
+                    if (folder == null) {
+                        System.out.println("failed to find folder " + testName);
+                        exitCode = CommandResult.USAGE_ERROR;
                         continue;
                     }
-                    System.out.println("Uploading run "+runId);
-                    Upload upload = folderService.upload(folder.id(),runData);
-                    upload.future.orTimeout(3, TimeUnit.MINUTES);
-                    upload.future.join();
-                    if(upload.future.isCompletedExceptionally()){
-                        System.out.println("upload failed");
-                        exitCode = 1;
-                        continue;
-                    }
+                    NodeGroup nodeGroup = nodeGroupService.byId(folder.groupId());
 
-                    List<LoadLegacyTests.Transformer> transformers = loadTransformers(legacyConn,testId);
-                    if(!transformers.isEmpty()){
-                        for (LoadLegacyTests.Transformer transformer : transformers) {
-                            System.out.println("\nTransformer: " + transformer.name());
-                            List<Node> transformerMatches = nodeService.findNodeByFqdn(transformer.name(), folder.groupId());
-                            if (transformerMatches.isEmpty()) {
-                                String name = LoadLegacyTests.getRename(transformer, transformers.size());
-                                transformerMatches = nodeService.findNodeByFqdn(name, folder.groupId());
-                            }
-                            if (transformerMatches.isEmpty()) {
-                                System.out.println("failed to find match for transformer " + transformer.name());
-                                exitCode = 1;
-                                continue;
-                            }
-                            Node transformerMatch = transformerMatches.get(0);
-                            for (Node extractorNode : transformerMatch.sources()) {
-                                var matchingExtractor = transformer.extractors().stream().filter(e -> e.name().equals(extractorNode.name())).findFirst().orElse(null);
-                                if (matchingExtractor == null) {
-                                    System.out.println("failed to find match for transformer extractor " + extractorNode.name());
-                                    exitCode = 1;
+
+                    //for each run
+                    if (runIds == null || runIds.isEmpty()) {
+                        runIds = fetchRunIds(legacyConn, testId, limit, offset);
+                    }
+                    System.out.println(runIds.size() + " runs");
+                    for (Long runId : runIds) {
+                        JqValue runData = fetchRun(legacyConn, runId);
+                        if (runData == null) {
+                            System.out.println("failed to find run " + runId);
+                            exitCode = CommandResult.USAGE_ERROR;
+                            continue;
+                        }
+                        System.out.println("Uploading run " + runId);
+                        Upload upload = folderService.upload(folder.id(), runData);
+                        upload.future.orTimeout(3, TimeUnit.MINUTES);
+                        upload.future.join();
+                        if (upload.future.isCompletedExceptionally()) {
+                            System.out.println("upload failed");
+                            continue;
+                        }
+
+                        List<LoadLegacyTests.Transformer> transformers = loadTransformers(legacyConn, testId);
+                        if (!transformers.isEmpty()) {
+                            for (LoadLegacyTests.Transformer transformer : transformers) {
+                                System.out.println("\nTransformer: " + transformer.name());
+                                List<Node> transformerMatches = nodeService.findNodeByFqdn(transformer.name(), folder.groupId());
+                                if (transformerMatches.isEmpty()) {
+                                    String name = LoadLegacyTests.getRename(transformer, transformers.size());
+                                    transformerMatches = nodeService.findNodeByFqdn(name, folder.groupId());
+                                }
+                                if (transformerMatches.isEmpty()) {
+                                    System.out.println("failed to find match for transformer " + transformer.name());
+                                    exitCode = CommandResult.FAILURE;
                                     continue;
                                 }
-                                JqValue fromExtractor = extractRun(legacyConn, runId, matchingExtractor.jsonpath(), matchingExtractor.isArray());
-                                List<Value> h5mValues = valueService.getDescendantValues(upload.uploadId,List.of(extractorNode.id()));
-                                JqValue fromH5m = h5mValues.isEmpty() ? null : h5mValues.getFirst().data();
-                                boolean eq = equalish(fromExtractor, fromH5m);
-                                if(!eq){
-                                    Delta d = new Delta(
-                                            folder.name(),
-                                            extractorNode.id(),
-                                            extractorNode.name(),
-                                            "transformer_extractors",
-                                            matchingExtractor.name(),
-                                            transformer.id(),
-                                            "run",
-                                            runId,
-                                            upload.uploadId,
-                                            matchingExtractor.jsonpath(),
-                                            fromExtractor,
-                                            extractorNode.operation(),
-                                            fromH5m
-                                    );
-                                    deltas.add(d);
+                                Node transformerMatch = transformerMatches.get(0);
+                                for (Node extractorNode : transformerMatch.sources()) {
+                                    var matchingExtractor = transformer.extractors().stream().filter(e -> e.name().equals(extractorNode.name())).findFirst().orElse(null);
+                                    if (matchingExtractor == null) {
+                                        System.out.println("failed to find match for transformer extractor " + extractorNode.name());
+                                        exitCode = CommandResult.FAILURE;
+                                        continue;
+                                    }
+                                    JqValue fromExtractor = extractRun(legacyConn, runId, matchingExtractor.jsonpath(), matchingExtractor.isArray());
+                                    List<Value> h5mValues = valueService.getDescendantValues(upload.uploadId, List.of(extractorNode.id()));
+                                    JqValue fromH5m = h5mValues.isEmpty() ? null : h5mValues.getFirst().data();
+                                    boolean eq = equalish(fromExtractor, fromH5m);
+                                    if (!eq) {
+                                        Delta d = new Delta(
+                                                folder.name(),
+                                                extractorNode.id(),
+                                                extractorNode.name(),
+                                                "transformer_extractors",
+                                                matchingExtractor.name(),
+                                                transformer.id(),
+                                                "run",
+                                                runId,
+                                                upload.uploadId,
+                                                matchingExtractor.jsonpath(),
+                                                fromExtractor,
+                                                extractorNode.operation(),
+                                                fromH5m
+                                        );
+                                        deltas.add(d);
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    List<LoadLegacyTests.Label> usedLabels = fetchRunLabels(legacyConn,runId);
+                        List<LoadLegacyTests.Label> usedLabels = fetchRunLabels(legacyConn, runId);
 
-                    List<Long> datasetIds = getDatasetIds(legacyConn, runId);
-                    List<Node> datasetNodes = !transformers.isEmpty() ? nodeService.findNodeByFqdn("dataset", folder.groupId()) : List.of(nodeGroup.root());
-                    if (datasetNodes.isEmpty()) {
-                        System.out.println("Cannot find dataset node for " + folder.name() + " groupId=" + folder.groupId());
-                        exitCode = 1;
-                        continue;
-                    }
-                    Node datasetNode = datasetNodes.get(0);
-                    List<Value> datasetValues = valueService.getNodeValues(datasetNode.id());
-                    if (datasetIds.size() != datasetValues.size()) {
-                        System.out.println("INCORRECT NUMBER OF DATASETS h5m=" + datasetValues.size() + " horreum=" + datasetIds.size());
-                        //TODO do we stop doing this because now we have comparison?
+                        List<Long> datasetIds = getDatasetIds(legacyConn, runId);
+                        List<Node> datasetNodes = !transformers.isEmpty() ? nodeService.findNodeByFqdn("dataset", folder.groupId()) : List.of(nodeGroup.root());
+                        if (datasetNodes.isEmpty()) {
+                            System.out.println("Cannot find dataset node for " + folder.name() + " groupId=" + folder.groupId());
+                            exitCode = CommandResult.FAILURE;
+                            continue;
+                        }
+                        Node datasetNode = datasetNodes.get(0);
+                        List<Value> datasetValues = valueService.getNodeValues(datasetNode.id());
+                        if (datasetIds.size() != datasetValues.size()) {
+                            System.out.println("INCORRECT NUMBER OF DATASETS h5m=" + datasetValues.size() + " horreum=" + datasetIds.size());
+                            //TODO do we stop doing this because now we have comparison?
 //                        Delta d = new Delta(
 //                                folder.name(),
 //                                datasetNode.id(),
@@ -220,88 +223,91 @@ public class Veritaserum implements Callable<Integer> {
 //                                JqNumber.of(datasetValues.size())
 //                        );
 //                        deltas.add(d);
-                    }
-                    //find the best match between datasets
-                    List<DatasetValuePair> pairs = matchDatasetToValue(legacyConn,datasetIds,datasetValues);
-
-                    //compare datasets
-                    for (int i = 0; i < pairs.size(); i++) {
-                        DatasetValuePair pair = pairs.get(i);
-                        long horreumDatasetId = pair.datasetId;
-                        long h5mDatasetId = pair.valueId;
-                        if(horreumDatasetId == -1 || h5mDatasetId == -1){
-                            Delta d = new Delta(
-                                    testName,
-                                    datasetNode.id(),
-                                    datasetNode.name(),
-                                    "-",
-                                    transformers.stream().map(t->t.name()+"="+t.id()).collect(Collectors.joining(",")),
-                                    -1,
-                                    "run",
-                                    horreumDatasetId,
-                                    h5mDatasetId,
-                                    "",
-                                    horreumDatasetId == -1 ? JqNull.NULL : JqObject.EMPTY,
-                                    datasetNode.operation(),
-                                    h5mDatasetId == -1 ? JqNull.NULL : JqObject.EMPTY
-                            );
-                            deltas.add(d);
-                            continue;
                         }
-                        System.out.println("Dataset: " + horreumDatasetId + " value: " + h5mDatasetId + " label_values "+getLabelValueCount(legacyConn,horreumDatasetId)+"\n");
+                        //find the best match between datasets
+                        List<DatasetValuePair> pairs = matchDatasetToValue(legacyConn, datasetIds, datasetValues);
 
-                        for(LoadLegacyTests.Label label : usedLabels){
-                            List<Node> matchingNodes = nodeService.findNodeByFqdn(label.name(),folder.groupId());
-                            if(matchingNodes.isEmpty()){
-                                System.out.println("failed to find match for label "+label.name());
-                                exitCode = 1;
+                        //compare datasets
+                        for (int i = 0; i < pairs.size(); i++) {
+                            DatasetValuePair pair = pairs.get(i);
+                            long horreumDatasetId = pair.datasetId;
+                            long h5mDatasetId = pair.valueId;
+                            if (horreumDatasetId == -1 || h5mDatasetId == -1) {
+                                Delta d = new Delta(
+                                        testName,
+                                        datasetNode.id(),
+                                        datasetNode.name(),
+                                        "-",
+                                        transformers.stream().map(t -> t.name() + "=" + t.id()).collect(Collectors.joining(",")),
+                                        -1,
+                                        "run",
+                                        horreumDatasetId,
+                                        h5mDatasetId,
+                                        "",
+                                        horreumDatasetId == -1 ? JqNull.NULL : JqObject.EMPTY,
+                                        datasetNode.operation(),
+                                        h5mDatasetId == -1 ? JqNull.NULL : JqObject.EMPTY
+                                );
+                                deltas.add(d);
                                 continue;
                             }
-                            for(Node matchingNode : matchingNodes){
-                                List<Node> toCompare = matchingNode.type().equals(NodeType.JQ) ? List.of(matchingNode) : matchingNode.sources();
-                                for(Node node : toCompare){
-                                    var matchingExtractor = label.extractors().stream().filter(e->equalish(e.name(),node.name())).findFirst().orElse(null);
-                                    if(matchingExtractor == null) {
-                                        if (label.extractors().size() == 1) {
-                                            matchingExtractor = label.extractors().iterator().next();
-                                        } else {
-                                            System.out.println("failed to find match for label extractor \"" + node.name() + "\" (" + nameSanitize(node.name()) + ") from: " + label.extractors().stream().map(e -> e.name() + "=(" + nameSanitize(e.name()) + ")").collect(Collectors.joining(", ")));
-                                            exitCode = 1;
-                                            continue;
+                            System.out.println("Dataset: " + horreumDatasetId + " value: " + h5mDatasetId + " label_values " + getLabelValueCount(legacyConn, horreumDatasetId) + "\n");
+
+                            for (LoadLegacyTests.Label label : usedLabels) {
+                                List<Node> matchingNodes = nodeService.findNodeByFqdn(label.name(), folder.groupId());
+                                if (matchingNodes.isEmpty()) {
+                                    System.out.println("failed to find match for label " + label.name());
+                                    exitCode = CommandResult.FAILURE;
+                                    continue;
+                                }
+                                for (Node matchingNode : matchingNodes) {
+                                    List<Node> toCompare = matchingNode.type().equals(NodeType.JQ) ? List.of(matchingNode) : matchingNode.sources();
+                                    for (Node node : toCompare) {
+                                        var matchingExtractor = label.extractors().stream().filter(e -> equalish(e.name(), node.name())).findFirst().orElse(null);
+                                        if (matchingExtractor == null) {
+                                            if (label.extractors().size() == 1) {
+                                                matchingExtractor = label.extractors().iterator().next();
+                                            } else {
+                                                System.out.println("failed to find match for label extractor \"" + node.name() + "\" (" + nameSanitize(node.name()) + ") from: " + label.extractors().stream().map(e -> e.name() + "=(" + nameSanitize(e.name()) + ")").collect(Collectors.joining(", ")));
+                                                exitCode = CommandResult.FAILURE;
+                                                continue;
+                                            }
                                         }
-                                    }
-                                    JqValue fromExtractor = extractDataset(legacyConn,horreumDatasetId,matchingExtractor.jsonpath(),matchingExtractor.isArray());
-                                    List<Value> h5mValues = valueService.getDescendantValues(h5mDatasetId,List.of(node.id()));
-                                    JqValue fromH5m = h5mValues.isEmpty() ? null : h5mValues.getFirst().data();
-                                    boolean eq = equalish(fromExtractor,fromH5m);
-                                    if(!eq){
-                                        Delta d = new Delta(
-                                                folder.name(),
-                                                node.id(),
-                                                node.name(),
-                                                "label_extractors",
-                                                matchingExtractor.name(),
-                                                label.id(),
-                                                "dataset",
-                                                horreumDatasetId,
-                                                h5mDatasetId,
-                                                matchingExtractor.jsonpath(),
-                                                fromExtractor,
-                                                node.operation(),
-                                                fromH5m
-                                        );
-                                        deltas.add(d);
+                                        JqValue fromExtractor = extractDataset(legacyConn, horreumDatasetId, matchingExtractor.jsonpath(), matchingExtractor.isArray());
+                                        List<Value> h5mValues = valueService.getDescendantValues(h5mDatasetId, List.of(node.id()));
+                                        JqValue fromH5m = h5mValues.isEmpty() ? null : h5mValues.getFirst().data();
+                                        boolean eq = equalish(fromExtractor, fromH5m);
+                                        if (!eq) {
+                                            Delta d = new Delta(
+                                                    folder.name(),
+                                                    node.id(),
+                                                    node.name(),
+                                                    "label_extractors",
+                                                    matchingExtractor.name(),
+                                                    label.id(),
+                                                    "dataset",
+                                                    horreumDatasetId,
+                                                    h5mDatasetId,
+                                                    matchingExtractor.jsonpath(),
+                                                    fromExtractor,
+                                                    node.operation(),
+                                                    fromH5m
+                                            );
+                                            deltas.add(d);
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                }// for runId
-            }// for testid
-        }
-        System.out.println(deltas.size()+" DELTAS");
-        for(Delta d : deltas){
-            System.out.println(d);
+                    }// for runId
+                }// for testid
+            }
+            System.out.println(deltas.size() + " DELTAS");
+            for (Delta d : deltas) {
+                System.out.println(d);
+            }
+        }catch(SQLException e){
+            exitCode = CommandResult.FAILURE;
         }
         return exitCode;
     }

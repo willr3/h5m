@@ -38,6 +38,7 @@ public class H5mCommandRegistryFactory implements CliCommandRegistryFactory {
             StatusCmd.class,
             ChangesCmd.class,
             ViewCmd.class,
+            Veritaserum.class,
             RunCmd.class
     );
 

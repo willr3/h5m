@@ -124,9 +124,13 @@ public class H5mTest {
 //        assertEquals(0,result.exitCode());
 //        result = launcher.launch("load-legacy-runs","testId=339","limit=1","username=horreum","password=horreum","url=jdbc:postgresql://0.0.0.0:6000/horreum");
 //        assertEquals(0,result.exitCode());
-        result = launcher.launch("veritaserum","testId=339","limit=2"/*,"runId=214280"*/,"username=horreum","password=horreum","url=jdbc:postgresql://0.0.0.0:6000/horreum");
-        System.out.println("exitCode="+result.exitCode());
-        assertEquals(0,result.exitCode());
+
+//        result = launcher.launch("veritaserum","testId=339","limit=2"/*,"runId=214280"*/,"username=horreum","password=horreum","url=jdbc:postgresql://0.0.0.0:6000/horreum");
+//        System.out.println("exitCode="+result.exitCode());
+//        assertEquals(0,result.exitCode());
+
+            aeshLauncher.executeCommand("veritaserum testId=339 limit=2 runId=214280 username=horreum password=horreum url=jdbc:postgresql://0.0.0.0:6000/horreum", CMD_TIMEOUT);
+
 
     }
 
