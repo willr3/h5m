@@ -16,6 +16,7 @@ import org.aesh.command.Command;
 import org.aesh.command.CommandDefinition;
 import org.aesh.command.CommandResult;
 import org.aesh.command.option.Option;
+import org.aesh.command.option.OptionList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,19 +43,19 @@ public class Veritaserum implements Command<H5mCommandInvocation> {
     @Inject
     NodeGroupService nodeGroupService;
 
-    @Option(name = "username", description = "legacy db username", defaultValue = "quarkus")
+    @Option(name = "username", description = "legacy db username", defaultValue = "quarkus", acceptNameWithoutDashes = true)
     String username;
-    @Option(name = "password", description = "legacy db password", defaultValue = "quarkus")
+    @Option(name = "password", description = "legacy db password", defaultValue = "quarkus", acceptNameWithoutDashes = true)
     String password;
-    @Option(name = "url", description = "legacy connection url", defaultValue = "jdbc:postgresql://0.0.0.0:6000/horreum")
+    @Option(name = "url", description = "legacy connection url", defaultValue = "jdbc:postgresql://0.0.0.0:6000/horreum", acceptNameWithoutDashes = true)
     String url;
-    @Option(name = "testId", description = "Horreum test ID")
+    @OptionList(name = "testId", description = "Horreum test ID")
     List<Long> testIds;
-    @Option(name = "runId", description = "verify a specific run (optional)")
+    @OptionList(name = "runId", description = "verify a specific run (optional)")
     List<Long> runIds;
-    @Option(name = "limit", description = "max runs to verify", defaultValue = "5")
+    @Option(name = "limit", description = "max runs to verify", defaultValue = "5", acceptNameWithoutDashes = true)
     int limit;
-    @Option(name = "offset", description = "max runs to verify", defaultValue = "0")
+    @Option(name = "offset", description = "max runs to verify", defaultValue = "0", acceptNameWithoutDashes = true)
     int offset;
 
     @Inject
@@ -64,6 +65,7 @@ public class Veritaserum implements Command<H5mCommandInvocation> {
     public CommandResult execute(H5mCommandInvocation invocation) throws InterruptedException {
         CommandResult exitCode = CommandResult.SUCCESS;
         System.out.println("VERITASERUM");
+        System.out.println("testId="+testIds);
         try {
             List<Delta> deltas = new ArrayList<>();
 
