@@ -1,12 +1,11 @@
 package io.hyperfoil.tools.h5m.cli;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agroal.api.AgroalDataSource;
 import io.agroal.api.configuration.supplier.AgroalPropertiesReader;
 import io.hyperfoil.tools.h5m.api.*;
-import io.hyperfoil.tools.h5m.svc.FolderService;
-import io.hyperfoil.tools.h5m.svc.NodeGroupService;
-import io.hyperfoil.tools.h5m.svc.NodeService;
-import io.hyperfoil.tools.h5m.svc.ValueService;
+import io.hyperfoil.tools.h5m.svc.*;
 import io.hyperfoil.tools.jjq.value.*;
 import io.hyperfoil.tools.yaup.Sets;
 import io.hyperfoil.tools.yaup.json.Json;
@@ -20,6 +19,7 @@ import org.aesh.command.option.OptionList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.Callable;
@@ -43,6 +43,9 @@ public class Veritaserum implements Command<H5mCommandInvocation> {
     @Inject
     NodeGroupService nodeGroupService;
 
+    @Inject
+    ProcessingService processingService;
+
     @Option(name = "username", description = "legacy db username", defaultValue = "quarkus", acceptNameWithoutDashes = true)
     String username;
     @Option(name = "password", description = "legacy db password", defaultValue = "quarkus", acceptNameWithoutDashes = true)
@@ -58,14 +61,41 @@ public class Veritaserum implements Command<H5mCommandInvocation> {
     @Option(name = "offset", description = "max runs to verify", defaultValue = "0", acceptNameWithoutDashes = true)
     int offset;
 
+    //controls for equality
+    @Option(name = "ignore-nulls", description = "remove nulls from h5m arrays before comparing to Horreum",defaultValue = "false", acceptNameWithoutDashes = true)
+    boolean ignoreNulls;
+
     @Inject
     LoadLegacyTests loadLegacyTests;
+
+    private JqValue purgeNulls(JqValue input){
+        if(ignoreNulls){
+            if(input.isObject()) {
+                JqObject.Builder builder = JqObject.builder();
+                JqObject obj = (JqObject) input;
+                obj.forEach((k,v)->{
+                    if(v!=null && !v.isNull()){
+                        builder.put(k,v);
+                    }
+                });
+                input = builder.build();
+            }else if (input.isArray()){
+                JqArray.ArrayBuilder builder = JqArray.arrayBuilder();
+                JqArray ary = (JqArray)  input;
+                ary.forEach(v->{
+                    if(v!=null && !v.isNull()){
+                        builder.add(v);
+                    }
+                });
+                input = builder.build();
+            }
+        }
+        return input;
+    }
 
     @Override
     public CommandResult execute(H5mCommandInvocation invocation) throws InterruptedException {
         CommandResult exitCode = CommandResult.SUCCESS;
-        System.out.println("VERITASERUM");
-        System.out.println("testId="+testIds);
         try {
             List<Delta> deltas = new ArrayList<>();
 
@@ -125,7 +155,6 @@ public class Veritaserum implements Command<H5mCommandInvocation> {
                     }
                     NodeGroup nodeGroup = nodeGroupService.byId(folder.groupId());
 
-
                     //for each run
                     if (runIds == null || runIds.isEmpty()) {
                         runIds = fetchRunIds(legacyConn, testId, limit, offset);
@@ -133,16 +162,17 @@ public class Veritaserum implements Command<H5mCommandInvocation> {
                     System.out.println(runIds.size() + " runs");
                     for (Long runId : runIds) {
                         JqValue runData = fetchRun(legacyConn, runId);
+
+
                         if (runData == null) {
                             System.out.println("failed to find run " + runId);
                             exitCode = CommandResult.USAGE_ERROR;
                             continue;
                         }
                         System.out.println("Uploading run " + runId);
-                        Upload upload = folderService.upload(folder.id(), runData);
-                        upload.future.orTimeout(3, TimeUnit.MINUTES);
-                        upload.future.join();
-                        if (upload.future.isCompletedExceptionally()) {
+                        long uploadId = valueService.createRootValue(folder.id(),runData);
+                        boolean ok = processingService.awaitIngestion(uploadId,3,TimeUnit.MINUTES);
+                        if (!ok) {
                             System.out.println("upload failed");
                             continue;
                         }
@@ -170,8 +200,8 @@ public class Veritaserum implements Command<H5mCommandInvocation> {
                                         continue;
                                     }
                                     JqValue fromExtractor = extractRun(legacyConn, runId, matchingExtractor.jsonpath(), matchingExtractor.isArray());
-                                    List<Value> h5mValues = valueService.getDescendantValues(upload.uploadId, List.of(extractorNode.id()));
-                                    JqValue fromH5m = h5mValues.isEmpty() ? null : h5mValues.getFirst().data();
+                                    List<Value> h5mValues = valueService.getDescendantValues(uploadId, List.of(extractorNode.id()));
+                                    JqValue fromH5m = h5mValues.isEmpty() ? null : purgeNulls(h5mValues.getFirst().data());
                                     boolean eq = equalish(fromExtractor, fromH5m);
                                     if (!eq) {
                                         Delta d = new Delta(
@@ -183,7 +213,7 @@ public class Veritaserum implements Command<H5mCommandInvocation> {
                                                 transformer.id(),
                                                 "run",
                                                 runId,
-                                                upload.uploadId,
+                                                uploadId,
                                                 matchingExtractor.jsonpath(),
                                                 fromExtractor,
                                                 extractorNode.operation(),
@@ -277,7 +307,7 @@ public class Veritaserum implements Command<H5mCommandInvocation> {
                                         }
                                         JqValue fromExtractor = extractDataset(legacyConn, horreumDatasetId, matchingExtractor.jsonpath(), matchingExtractor.isArray());
                                         List<Value> h5mValues = valueService.getDescendantValues(h5mDatasetId, List.of(node.id()));
-                                        JqValue fromH5m = h5mValues.isEmpty() ? null : h5mValues.getFirst().data();
+                                        JqValue fromH5m = h5mValues.isEmpty() ? null : purgeNulls( h5mValues.getFirst().data() );
                                         boolean eq = equalish(fromExtractor, fromH5m);
                                         if (!eq) {
                                             Delta d = new Delta(
@@ -395,12 +425,12 @@ public class Veritaserum implements Command<H5mCommandInvocation> {
             if(bestIndex != -1){
                 remainingValueIndexes.remove(bestIndex);
             }
-            DatasetValuePair dpv = new DatasetValuePair(d,bestIndex);
+            DatasetValuePair dpv = new DatasetValuePair(datasetIds.get( d ),values.get( bestIndex ).id());
             pairs.add(dpv);
         }
         if(!remainingValueIndexes.isEmpty()){
             for(int remainingIndex : remainingValueIndexes){
-                DatasetValuePair dvp = new DatasetValuePair(-1,remainingIndex);
+                DatasetValuePair dvp = new DatasetValuePair(-1,values.get( remainingIndex).id());
                 pairs.add(dvp);
             }
         }
@@ -408,23 +438,6 @@ public class Veritaserum implements Command<H5mCommandInvocation> {
     }
     private boolean equalish(JqValue horreum, JqValue h5m){
         return horreum.equals(h5m) || (horreum.isNull() && (h5m == null || h5m.isNull()));
-    }
-    private void compare(JqValue fromHorreum,JqValue fromH5m,Node node,LoadLegacyTests.Extractor extractor,String target,long id,long valueId){
-        boolean eq = fromHorreum.equals(fromH5m);
-        if(!eq){
-            if(fromHorreum.isNull() && (fromH5m == null || fromH5m.isNull())){
-                eq = true;
-            }
-        }
-        System.out.println(node.name()+" eq="+eq+(!eq?(" "+target+" "+id+" valueId="+valueId):""));
-        if(!eq) {
-            System.out.println("  H: " + extractor.name());
-            System.out.println("    filter: " + extractor.jsonpath() + " array=" + extractor.isArray());
-            System.out.println("    value:  " + s(fromHorreum));
-            System.out.println("  5: " + node.name());
-            System.out.println("    filter: " + node.operation());
-            System.out.println("    value:  " + s(fromH5m));
-        }
     }
     private static boolean equalish(String a,String b){
         return nameSanitize(a).equalsIgnoreCase(nameSanitize(b));
@@ -764,7 +777,7 @@ public class Veritaserum implements Command<H5mCommandInvocation> {
                     }
                     String response = rs.getString(1);
                     if(response==null){
-                        System.out.println("NULL for "+jsonpath+" id="+id+" target="+target+" array="+array);
+                        //
                     }else {
                         value = JqValues.parse(response);
                     }

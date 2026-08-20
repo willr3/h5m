@@ -106,7 +106,7 @@ public class H5mTest {
     //This test requires a running Horreum backup on port 6000 with username / password = horreum / horreum
     @Test @Disabled
     public void loadLegacyTests(){
-        String output = aeshLauncher.executeCommand("legacy load-tests username=horreum password=horreum url=jdbc:postgresql://0.0.0.0:6000/horreum", CMD_TIMEOUT);
+        String output = aeshLauncher.executeCommand("legacy load-tests testId=12 username=horreum password=horreum url=jdbc:postgresql://0.0.0.0:6000/horreum", CMD_TIMEOUT);
         System.out.println("output="+output);
         assertNotNull(output);
     }
@@ -129,8 +129,9 @@ public class H5mTest {
 //        System.out.println("exitCode="+result.exitCode());
 //        assertEquals(0,result.exitCode());
 
-        String output = aeshLauncher.executeCommand("veritaserum --testId=339 limit=2 --runId=214280 username=horreum password=horreum url=jdbc:postgresql://0.0.0.0:6000/horreum", CMD_TIMEOUT);
-
+        //String output = aeshLauncher.executeCommand("veritaserum --testId=339 limit=2 ignore-nulls=true --runId=214280 username=horreum password=horreum url=jdbc:postgresql://0.0.0.0:6000/horreum", Duration.ofHours(1));
+        String output = aeshLauncher.executeCommand("veritaserum --testId=12 limit=2 ignore-nulls=true username=horreum password=horreum url=jdbc:postgresql://0.0.0.0:6000/horreum", Duration.ofHours(1));
+        System.out.println("output="+output);
     }
 
     @Test
