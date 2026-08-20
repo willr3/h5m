@@ -352,6 +352,7 @@ public class Veritaserum implements Command<H5mCommandInvocation> {
                         invocation.getShell().readLine(new Prompt("Press Enter to continue..."));
                         deltas.clear();
                     }
+                    runIds.clear(); //clear for next loop
                 }// for testid
             }
             System.out.println(deltas.size() + " DELTAS");
