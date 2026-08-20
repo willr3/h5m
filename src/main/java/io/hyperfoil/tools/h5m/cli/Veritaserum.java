@@ -228,14 +228,22 @@ public class Veritaserum implements Command<H5mCommandInvocation> {
                         List<LoadLegacyTests.Label> usedLabels = fetchRunLabels(legacyConn, runId);
 
                         List<Long> datasetIds = getDatasetIds(legacyConn, runId);
-                        List<Node> datasetNodes = !transformers.isEmpty() ? nodeService.findNodeByFqdn("dataset", folder.groupId()) : List.of(nodeGroup.root());
-                        if (datasetNodes.isEmpty()) {
-                            System.out.println("Cannot find dataset node for " + folder.name() + " groupId=" + folder.groupId());
-                            exitCode = CommandResult.FAILURE;
-                            continue;
+                        Node datasetNode = null;
+                        List<Value> datasetValues = new ArrayList<>();
+                        if(!transformers.isEmpty()){
+                            List<Node> datasetNodes = nodeService.findNodeByFqdn("dataset", folder.groupId());
+                            if (datasetNodes.isEmpty()) {
+                                System.out.println("Cannot find dataset node for " + folder.name() + " groupId=" + folder.groupId());
+                                exitCode = CommandResult.FAILURE;
+                                continue;
+                            }
+                            datasetNode = datasetNodes.get(0);
+                            datasetValues.addAll(valueService.getDescendantValues(uploadId,List.of(datasetNode.id())));
+                        }else{
+                            datasetNode = nodeGroup.root();
+                            datasetValues.add(valueService.get(uploadId));
                         }
-                        Node datasetNode = datasetNodes.get(0);
-                        List<Value> datasetValues = valueService.getNodeValues(datasetNode.id());
+
                         if (datasetIds.size() != datasetValues.size()) {
                             System.out.println("INCORRECT NUMBER OF DATASETS h5m=" + datasetValues.size() + " horreum=" + datasetIds.size());
                             //TODO do we stop doing this because now we have comparison?
@@ -424,9 +432,9 @@ public class Veritaserum implements Command<H5mCommandInvocation> {
             }
             if(bestIndex != -1){
                 remainingValueIndexes.remove(bestIndex);
+                DatasetValuePair dpv = new DatasetValuePair(datasetIds.get( d ),values.get( bestIndex ).id());
+                pairs.add(dpv);
             }
-            DatasetValuePair dpv = new DatasetValuePair(datasetIds.get( d ),values.get( bestIndex ).id());
-            pairs.add(dpv);
         }
         if(!remainingValueIndexes.isEmpty()){
             for(int remainingIndex : remainingValueIndexes){

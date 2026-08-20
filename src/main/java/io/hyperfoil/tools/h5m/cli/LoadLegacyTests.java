@@ -804,6 +804,7 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
                             if(!schemaLabels.containsKey(schemaUri)){
                                 List<Label> loadedLabels = loadUriLabels(connection,schemaUri);
                                 loadedLabels.forEach(l->{
+                                    test.schemaPaths.put(path,l);
                                     schemaLabels.put(schemaUri,l);
                                     schemaLabelsByName.put(l.name,l);
                                 });

@@ -211,6 +211,11 @@ public class ValueService implements ValueServiceInterface {
     public ValueEntity byId(Long id){
         return ValueEntity.findById(id);
     }
+    @Transactional
+    public Value get(Long id){
+        CycleAvoidingContext ctx = new CycleAvoidingContext();
+        return apiMapper.toValue(byId(id), ctx);
+    }
 
     /**
      * Returns the JSON data for a value, eagerly loaded within a transaction.
