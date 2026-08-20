@@ -345,7 +345,12 @@ public class Veritaserum implements Command<H5mCommandInvocation> {
                         }
                     }// for runId
                     if (pause) {
+                        System.out.println(deltas.size() + " DELTAS");
+                        for (Delta d : deltas) {
+                            System.out.println(d);
+                        }
                         invocation.getShell().readLine(new Prompt("Press Enter to continue..."));
+                        deltas.clear();
                     }
                 }// for testid
             }
@@ -516,7 +521,7 @@ public class Veritaserum implements Command<H5mCommandInvocation> {
     }
     private List<Long> fetchTestIds(Connection connection) throws SQLException {
         List<Long> testIds = new ArrayList<>();
-        try(PreparedStatement statement = connection.prepareStatement("select id from test")){
+        try(PreparedStatement statement = connection.prepareStatement("select id from test order by id")){
             try (ResultSet rs = statement.executeQuery()){
                 while (rs.next()) {
                     testIds.add(rs.getLong(1));
