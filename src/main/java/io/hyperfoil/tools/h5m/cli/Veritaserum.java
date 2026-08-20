@@ -16,6 +16,7 @@ import org.aesh.command.CommandDefinition;
 import org.aesh.command.CommandResult;
 import org.aesh.command.option.Option;
 import org.aesh.command.option.OptionList;
+import org.aesh.readline.prompt.Prompt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,6 +61,9 @@ public class Veritaserum implements Command<H5mCommandInvocation> {
     int limit;
     @Option(name = "offset", description = "max runs to verify", defaultValue = "0", acceptNameWithoutDashes = true)
     int offset;
+
+    @Option(name = "pause", acceptNameWithoutDashes = true, description = "pause for user input after every batch", hasValue = false, defaultValue = "false")
+    boolean pause;
 
     //controls for equality
     @Option(name = "ignore-nulls", description = "remove nulls from h5m arrays before comparing to Horreum",defaultValue = "false", acceptNameWithoutDashes = true)
@@ -340,6 +344,9 @@ public class Veritaserum implements Command<H5mCommandInvocation> {
                             }
                         }
                     }// for runId
+                    if (pause) {
+                        invocation.getShell().readLine(new Prompt("Press Enter to continue..."));
+                    }
                 }// for testid
             }
             System.out.println(deltas.size() + " DELTAS");
