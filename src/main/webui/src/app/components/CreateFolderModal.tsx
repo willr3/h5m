@@ -1,10 +1,11 @@
 import { extractErrorMessage } from '@app/context/NotificationProvider.tsx';
 import { fieldError } from '@app/validation.ts';
-import { Button, ComposedModal, Form, InlineNotification, ModalBody, ModalFooter, ModalHeader, Stack, TextInput } from '@carbon/react';
+import { Button, ComposedModal, Form, InlineNotification, ModalBody, ModalFooter, ModalHeader, Select, SelectItem, Stack, TextInput } from '@carbon/react';
 import { createFolderMutation } from '@client/@tanstack/react-query.gen.ts';
 import { zCreateFolderBody } from '@client/zod.gen.ts';
 import { useForm } from '@tanstack/react-form';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+ import { useTeams } from '@app/context/useTeams.tsx';
+import {  useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 interface CreateFolderModalProps {
@@ -15,6 +16,7 @@ interface CreateFolderModalProps {
 export const CreateFolderModal = ({ open, onClose }: CreateFolderModalProps) => {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const teams = useTeams();
 
   const createFolder = useMutation({
     ...createFolderMutation(),
@@ -28,10 +30,11 @@ export const CreateFolderModal = ({ open, onClose }: CreateFolderModalProps) => 
   });
 
   const form = useForm({
-    defaultValues: { name: '' },
+    defaultValues: { name: '', teams: '' },
     onSubmit: ({ value }) => {
       setSubmitError(null);
-      createFolder.mutate({ body: { name: value.name.trim() } });
+      const teamId = value.teams ? Number(value.teams) : undefined;
+      createFolder.mutate({ body: { name: value.name.trim(), teamId } });
     },
   });
 
@@ -71,6 +74,21 @@ export const CreateFolderModal = ({ open, onClose }: CreateFolderModalProps) => 
                   invalid={field.state.meta.errors.length > 0}
                   invalidText={fieldError(field.state.meta.errors)}
                 />
+              )}
+            </form.Field>
+            <form.Field name= "teams" >
+            {(field)=>(
+              <Select
+                  id="folder-team"
+                  labelText = "Team"
+                  value ={field.state.value}
+                  onChange={(e)=>field.handleChange(e.target.value)}
+              >
+                <SelectItem value="" text="Select a team" />
+                 {teams.map((t) => (
+                   <SelectItem key={t.id} value={String(t.id)} text={t.name ?? '?'} />
+                 ))}
+              </Select>
               )}
             </form.Field>
 

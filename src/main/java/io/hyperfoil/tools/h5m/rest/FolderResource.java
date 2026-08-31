@@ -8,6 +8,7 @@ import io.hyperfoil.tools.h5m.api.Processing;
 import io.hyperfoil.tools.h5m.api.svc.FolderServiceInterface;
 import io.hyperfoil.tools.h5m.api.svc.ValueServiceInterface;
 import io.hyperfoil.tools.h5m.api.svc.ProcessingServiceInterface;
+import io.hyperfoil.tools.h5m.api.svc.UserServiceInterface;
 import io.quarkus.runtime.configuration.MemorySize;
 import io.quarkus.security.Authenticated;
 import jakarta.annotation.security.PermitAll;
@@ -53,6 +54,9 @@ public class FolderResource {
     @Inject
     ProcessingServiceInterface processingService;
 
+    @Inject
+    UserServiceInterface userService;
+
     @GET
     @PermitAll
     @Operation(description = "Retrieve the list of all the folders")
@@ -89,6 +93,12 @@ public class FolderResource {
     @Authenticated
     @Operation(description = "Create a new folder")
     public Folder createFolder(@Valid @NotNull Folder folder) {
+        if (folder.teamId() != null) {
+            if (!userService.isMemberOf(folder.teamId())) {
+                throw new ForbiddenException("You are not allowed to perform this action");
+            }
+            return folderService.create(folder.name(), folder.teamId());
+        }
         return folderService.create(folder.name());
     }
 

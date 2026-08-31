@@ -11,29 +11,54 @@ import {
   HeaderName,
   InlineLoading,
   SideNav,
+  SideNavDivider,
   SideNavItems,
+  SideNavMenu,
+  SideNavMenuItem,
   SideNavLink,
   SkeletonText,
   SkipToContent,
   Theme,
 } from '@carbon/react';
-import { listFoldersOptions } from '@client/@tanstack/react-query.gen.ts';
-import { useSuspenseQuery } from '@tanstack/react-query';
+import { listFoldersOptions, listTeamsOptions } from '@client/@tanstack/react-query.gen.ts';
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { ReactNode, Suspense, useCallback, useState } from 'react';
 import { Link, Outlet, useParams } from 'react-router-dom';
 
 const NavFolders = () => {
   const { data: folders } = useSuspenseQuery(listFoldersOptions());
+  const { data: teams = [] } = useQuery(listTeamsOptions());
   const { folderId } = useParams<{ folderId: string }>();
+  const activeId = Number(folderId);
+
+  const teamsWithFolders = teams
+      .map((team) => ({
+        ...team,
+        folders: folders.filter((folder) => folder.teamId === team.id),
+      }))
+      .filter((team) => team.folders.length > 0);
+
+    const ungroupedFolders = folders.filter((folder) => !folder.teamId);
+
   return (
-    <SideNavItems>
-      {folders.map((folder) => (
-        <SideNavLink key={folder.id} as={Link} to={`/folder/${String(folder.id)}`} isActive={folder.id === Number(folderId)}>
-          {folder.name}
-        </SideNavLink>
-      ))}
-    </SideNavItems>
-  );
+      <SideNavItems>
+        {teamsWithFolders.map((team) => (
+          <SideNavMenu key={team.id} title={team.name ?? '?'}>
+            {team.folders.map((folder) => (
+              <SideNavMenuItem key={folder.id} as={Link} to={`/folder/${String(folder.id)}`} isActive={folder.id === activeId}>
+                {folder.name}
+              </SideNavMenuItem>
+            ))}
+          </SideNavMenu>
+        ))}
+        {ungroupedFolders.length > 0 && <SideNavDivider />}
+        {ungroupedFolders.map((folder) => (
+          <SideNavLink key={folder.id} as={Link} to={`/folder/${String(folder.id)}`} isActive={folder.id === activeId}>
+            {folder.name}
+          </SideNavLink>
+        ))}
+      </SideNavItems>
+    );
 };
 
 export const AppHeader = ({ children }: { children?: ReactNode }) => {

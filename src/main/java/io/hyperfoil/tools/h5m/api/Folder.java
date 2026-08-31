@@ -10,5 +10,7 @@ public record Folder(
         @Schema(description = "Folder name") @NotEmpty
         // Input hint only: the backend may still send reserved 'h5m.' names.
         @Pattern(regexp = ReservedNamespace.ALLOWED_NAME_PATTERN, message = "names starting with 'h5m.' are reserved for internal use") String name,
-        @Schema(description = "Node group ID") Long groupId) {
+        @Schema(description = "Node group ID") Long groupId,
+        @Schema(description = "Team Id") Long teamId,
+        @Schema(description = "Team Name") String teamName){
 }

@@ -92,15 +92,15 @@ public class FolderService implements FolderServiceInterface {
     }
 
     @Transactional
-    public Folder create(String name, String teamName) {
-        TeamEntity team = TeamEntity.find("name", teamName).firstResult();
+    public Folder create(String name, Long teamId) {
+        TeamEntity team = TeamEntity.findById(teamId);
         if (team == null) {
-            throw new IllegalArgumentException("Team not found: " + teamName);
+            throw new NotFoundException("Team not found: " + teamId);
         }
         Folder folder = create(name);
         FolderEntity entity = FolderEntity.findById(folder.id());
         entity.team = team;
-        return folder;
+        return apiMapper.toFolder(entity);
     }
 
     @Transactional

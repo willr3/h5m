@@ -44,6 +44,15 @@ public interface FolderServiceInterface {
     Folder create(String name);
 
     /**
+     * Creates a new folder with the given name, assigned to a team.
+     *
+     * @param name The name of the folder to create.
+     * @param teamId The Id of the team to assign.
+     * @return The created folder.
+     */
+    Folder create(String name, Long teamId);
+
+    /**
      * Deletes a folder by its ID.
      *
      * @param id The ID of the folder to delete.

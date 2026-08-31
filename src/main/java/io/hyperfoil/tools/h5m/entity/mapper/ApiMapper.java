@@ -21,6 +21,8 @@ import org.mapstruct.MappingConstants;
 public interface ApiMapper {
 
     @Mapping(target = "groupId", source = "group.id")
+    @Mapping(target = "teamId" ,  source = "team.id")
+    @Mapping(target = "teamName", source = "team.name")
     Folder toFolder(FolderEntity folder);
 
     @Mapping(target = "type", expression = "java(node.type())")

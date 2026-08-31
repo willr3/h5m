@@ -9,14 +9,17 @@ import io.hyperfoil.tools.h5m.entity.NodeGroupEntity;
 import io.hyperfoil.tools.h5m.entity.NotificationConfig;
 import io.hyperfoil.tools.h5m.entity.NotificationLog;
 import io.hyperfoil.tools.h5m.entity.ProcessingEntity;
+import io.hyperfoil.tools.h5m.entity.TeamEntity;
 
 import io.hyperfoil.tools.h5m.entity.ValueEntity;
 import io.hyperfoil.tools.h5m.entity.node.JqNode;
+import io.hyperfoil.tools.h5m.api.Folder;
 import io.hyperfoil.tools.h5m.notification.NotificationMethod;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.TransactionManager;
+import jakarta.ws.rs.NotFoundException;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -488,5 +491,36 @@ public class FolderServiceTest extends FreshDb {
         assertNull(NotificationLog.findById(logId), "Notification log should be deleted");
         assertNotNull(NodeEntity.findById(nodeId), "Node should not be deleted");
         tm.commit();
+    }
+
+    // -- Team association --
+
+    @Test
+    public void create_folder_with_team() throws Exception {
+        tm.begin();
+        TeamEntity team = new TeamEntity("team-alpha");
+        team.persist();
+        long teamId = team.id;
+        tm.commit();
+
+        Folder folder = folderService.create("folder-with-team", teamId);
+
+        assertEquals(teamId, folder.teamId(), "teamId should match the associated team");
+        assertEquals("team-alpha", folder.teamName(), "teamName should match the associated team");
+    }
+
+    @Test
+    public void create_folder_without_team() throws Exception {
+        Folder folder = folderService.create("folder-without-team");
+
+        assertNull(folder.teamId(), "teamId should be null when no team is associated");
+        assertNull(folder.teamName(), "teamName should be null when no team is associated");
+    }
+
+    @Test
+    public void create_folder_with_nonexistent_team() throws Exception {
+        assertThrows(NotFoundException.class,
+                () -> folderService.create("folder-bad-team", 999999L),
+                "Creating a folder with a non-existent team should throw NotFoundException");
     }
 }
