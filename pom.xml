@@ -59,7 +59,7 @@
         <!-- dependencies -->
         <lib.jdbi>3.41.3</lib.jdbi>
         <lib.jhunter>0.1.0</lib.jhunter>
-        <lib.jjq>0.1.9</lib.jjq>
+        <lib.jjq>0.1.11</lib.jjq>
         <lib.jmh>1.37</lib.jmh>
         <lib.mapstruct>1.6.3</lib.mapstruct>
         <lib.math3>3.6.1</lib.math3>

@@ -2456,7 +2456,7 @@ public class NodeServiceTest extends FreshDb {
 
     @Test
     public void jsonpathToJq_keyvalue_function(){
-        assertEquals(                ".results[]? | to_entries[].key",
+        assertEquals(                ".results | to_entries[].key",
                 NodeService.jsonpathToJq("$.results[*].keyvalue().key"));
     }
 
