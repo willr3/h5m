@@ -38,6 +38,8 @@ import java.util.stream.Collectors;
 @CommandDefinition(name = "load-tests", description = "Import test definitions (folder + node graph) from a legacy Horreum PostgreSQL database", generateHelp = true)
 public class LoadLegacyTests implements Command<H5mCommandInvocation> {
 
+    public static final String DEFAULT_PREFIX = "_";
+
     @Option(name = "username", acceptNameWithoutDashes = true, description = "legacy db username", defaultValue = "quarkus")
     String username;
 
@@ -309,7 +311,7 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
         for(Extractor extractor : label.extractors) {
             String extractorName = getExtractorRename(extractor.name);
             if(usedNames.contains(extractorName)){
-                extractorName = "_"+extractorName;
+                extractorName = DEFAULT_PREFIX+extractorName;
                 //if this extractor conflicts with a label name
             }
 
@@ -541,20 +543,13 @@ public class LoadLegacyTests implements Command<H5mCommandInvocation> {
                 }
                 Counters<Extractor> extractorCounts = new Counters<>();
                 labelsForJsonpath.stream().flatMap(l->l.extractors().stream()).forEach(extractorCounts::add);
-                extractorCounts.forEach((e,c)->{
-                    System.out.println(e+" = "+c);
-                });
                 for(Label label : labelsForJsonpath){
                     log(6,"label="+label.name);
                     Collection<Label> labels = labelsByName.get(label.name);
                     boolean multiSchema = labels.size() > 1;
                     //are any of the current label's extractors used by another label?
                     long maxCount = label.extractors.stream().mapToLong(e->extractorCounts.count(e)).max().orElse(0);
-                    System.out.println(label.name+" -> "+maxCount);
                     multiSchema = maxCount > 1;
-                    if(multiSchema){
-                        System.out.println("multiSchema "+label.name+" -> "+maxCount);
-                    }
                     NodeEntity labelNode = createNodesFromLabel(label,sourceNode,folder.group,nodeTracking,labelNames, multiSchema);
                     if(labelNode!=null){
                         if(keepAll){

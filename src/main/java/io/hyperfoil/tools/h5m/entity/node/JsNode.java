@@ -271,6 +271,9 @@ public class JsNode extends NodeEntity {
                             if(s.contains("=")){
                                 s = s.substring(0,s.indexOf("=")).trim();
                             }
+                            if(s.contains(":")){
+                                s = s.substring(0,s.indexOf(":")).trim();
+                            }
                             return s;
                         }
                 )

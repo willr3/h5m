@@ -1224,7 +1224,8 @@ public class NodeService implements NodeServiceInterface {
                     }
                 }
             }catch(PolyglotException e){
-                System.err.println("exception jsNode "+node.name+" sourceValues="+sourceValues+"\n"+e.getMessage());
+                //TODO should the error be surfaced to the user?
+                Log.error("exception jsNode "+node.name+" sourceValues="+sourceValues+"\n"+e.getMessage()+"\n"+e.getSourceLocation());
             } finally {
                 context.leave();
             }

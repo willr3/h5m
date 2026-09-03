@@ -208,7 +208,7 @@ public class Veritaserum implements Command<H5mCommandInvocation> {
                                 Node transformerMatch = transformerMatches.get(0);
                                 for (Node extractorNode : transformerMatch.sources()) {
 
-                                    var matchingExtractor = transformer.extractors().stream().filter(e -> extractorNode.name().equals(loadLegacyTests.getExtractorRename( e.name() ))).findFirst().orElse(null);
+                                    var matchingExtractor = transformer.extractors().stream().filter(e -> extractorNode.name().equals(loadLegacyTests.getExtractorRename( e.name() )) || extractorNode.name().equals(LoadLegacyTests.DEFAULT_PREFIX+loadLegacyTests.getExtractorRename( e.name() ))).findFirst().orElse(null);
                                     if (matchingExtractor == null) {
                                         System.out.println("failed to find match for transformer extractor " + extractorNode.name());
                                         exitCode = CommandResult.FAILURE;

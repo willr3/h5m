@@ -81,6 +81,14 @@ public class JsNodeTest {
         assertEquals("value",params.get(0));
     }
     @Test
+    public void getParameterNames_arrow_with_renames(){
+        List<String> params = JsNode.getParameterNames("({_one : one, _two : two})=>one + two");
+        assertNotNull(params);
+        assertEquals(2, params.size(),"expect 2 params:"+params);
+        assertEquals("_one",params.get(0));
+        assertEquals("_two",params.get(1));
+    }
+    @Test
     public void getParameterNames_named_star_function_no_space(){
         List<String> params = JsNode.getParameterNames("function* dataset({foo,  bar, biz}){\nyield foo;\nyield bar;\nyield biz;}");
         assertNotNull(params);
